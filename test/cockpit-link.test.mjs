@@ -31,13 +31,14 @@ import { argsHashOf, openAudit } from '../server/fleet/audit.mjs';
 const PORT = 7801;
 const CFG = { port: PORT };
 
-function req({ headers = {}, auth } = {}) {
+function req({ headers = {}, auth, remoteAddress = '127.0.0.1' } = {}) {
   const h = { host: `127.0.0.1:${PORT}`, origin: `http://127.0.0.1:${PORT}`, ...headers };
   for (const k of Object.keys(h)) if (h[k] === undefined) delete h[k];
   const r = {
     method: 'GET', url: '/api/cockpit/ws', headers: h,
     rawHeaders: Object.entries(h).flatMap(([k, v]) => [k, v]),
-    socket: { localPort: PORT, remoteAddress: '127.0.0.1' },
+    // remoteAddress null: a socket that reports none.
+    socket: { localPort: PORT, ...(remoteAddress === null ? {} : { remoteAddress }) },
   };
   r.auth = auth === undefined ? classify(r, CFG, {}) : auth;
   return r;
@@ -64,8 +65,20 @@ test('link checks: a plain-HTTP Origin off loopback is 4403 insecure-origin unle
   assert.deepEqual(linkRefusal(r, { config: cfg }), { code: 4403, reason: 'insecure-origin' });
   assert.deepEqual(linkRefusal(r, { config: cfg, allowInsecure: 'true' }), { code: 4403, reason: 'insecure-origin' }, 'only exactly true');
   assert.equal(linkRefusal(r, { config: cfg, allowInsecure: true }), null);
-  for (const o of ['https://hub.example.invalid', 'http://127.0.0.1:7777', 'http://localhost:7777', 'http://[::1]:7777', 'http://127.1.2.3']) assert.equal(secureOrigin(o), true, o);
-  for (const o of ['http://hub.example.invalid', 'ws://127.0.0.1', 'file:///x', 'nonsense', '']) assert.equal(secureOrigin(o), false, o);
+  for (const o of ['https://hub.example.invalid', 'http://127.0.0.1:7777', 'http://localhost:7777', 'http://[::1]:7777', 'http://127.1.2.3']) assert.equal(secureOrigin(o, '127.0.0.1'), true, o);
+  for (const o of ['http://hub.example.invalid', 'ws://127.0.0.1', 'file:///x', 'nonsense', '']) assert.equal(secureOrigin(o, '127.0.0.1'), false, o);
+  // The loopback of plain http is the TCP peer's, not the Origin text's.
+  assert.equal(secureOrigin('https://hub.example.invalid', '192.0.2.5'), true, 'https needs no loopback peer');
+  for (const a of ['192.0.2.5', '::ffff:192.0.2.5', undefined, '', 'nonsense']) assert.equal(secureOrigin('http://127.0.0.1:7777', a), false, String(a));
+  for (const a of ['127.0.0.1', '127.9.8.7', '::1', '::ffff:127.0.0.1']) assert.equal(secureOrigin('http://127.0.0.1:7777', a), true, a);
+});
+
+test('link checks: an http loopback Origin from a LAN peer is 4403 insecure-origin, before the credential (D182, B-T52)', () => {
+  const r = req({ remoteAddress: '192.0.2.5' });
+  assert.equal(r.auth?.kind, 'local', 'the board classifies it local (no fleet block)');
+  assert.deepEqual(linkRefusal(r, { config: CFG }), { code: 4403, reason: 'insecure-origin' });
+  // With allowInsecure the scheme check passes, and the loopback-peer rule of `local` still refuses.
+  assert.deepEqual(linkRefusal(r, { config: CFG, allowInsecure: true }), { code: 4401, reason: 'unpaired' });
 });
 
 test('link checks: the 33rd link is 4503 too-many-links (§8)', () => {
@@ -78,6 +91,24 @@ test('link checks: without a board classification of local or direct the link is
   // A look-alike object the auth module did not issue is no credential.
   assert.deepEqual(linkRefusal(req({ auth: { kind: 'local', user: 'local' } }), { config: CFG }), { code: 4401, reason: 'unpaired' });
   assert.deepEqual(linkRefusal(req({ auth: { kind: 'hub', user: null } }), { config: CFG }), { code: 4401, reason: 'unpaired' });
+});
+
+test('link checks: an issued local auth needs a loopback TCP peer (security.md §2.3 point 2, D212)', () => {
+  const https = { origin: `https://127.0.0.1:${PORT}` };
+  const cfg = { port: PORT, fleet: { allowedOrigins: [`https://127.0.0.1:${PORT}`] } };
+  for (const a of ['127.0.0.1', '127.0.0.2', '::1', '::ffff:127.0.0.1']) {
+    const r = req({ headers: https, remoteAddress: a });
+    assert.equal(r.auth?.kind, 'local', a);
+    assert.equal(linkRefusal(r, { config: cfg }), null, a);
+  }
+  for (const a of ['192.0.2.5', '::ffff:192.0.2.5', '2001:db8::5', null, 'nonsense']) {
+    const r = req({ headers: https, remoteAddress: a });
+    // Classify on a loopback request, then swap the peer: the issued object stays a `local` auth.
+    const issued = req({ headers: https }).auth;
+    r.auth = issued;
+    assert.equal(r.auth.kind, 'local');
+    assert.deepEqual(linkRefusal(r, { config: cfg }), { code: 4401, reason: 'unpaired' }, String(a));
+  }
 });
 
 // --- the prompt's audit line (audit-lines.mjs) ------------------------------

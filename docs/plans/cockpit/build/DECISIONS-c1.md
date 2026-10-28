@@ -1393,3 +1393,14 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   streams on real time); after `{"up":true}` the test moves the page's clock 15 s so the next try of
   §7.1's series is due, then waits for `live` — spec: S-C1-34 "clock `page`", `screens.md` §7.1 —
   overrule: the test only.
+- B249 (T52) An http loopback `Origin` from a LAN peer (remoteAddress `192.0.2.5`, `allowInsecure`
+  false) closes **4403 `insecure-origin`**: D182's scheme check is step 2 of `linkRefusal` and runs
+  before step 4's credential, so the scheme is refused first; with `allowInsecure` true the same
+  upgrade then meets step 4's loopback-peer rule for `local` and closes 4401 `unpaired`. Plain http
+  needs both a loopback `Origin` host and a loopback TCP peer (the `Origin` text alone is not
+  enough). The peer check is the room's own `loopbackPeer` in `link-checks.mjs` (127.0.0.0/8,
+  `::1`, `::ffff:127.*`, unknown refused), the same rule as `server/fleet/auth.mjs`'s private
+  `isLoopbackPeer`, which is fenced and not exported — because security.md §2.3 point 2 says "a
+  loopback peer" and §2.3's checks run in their written order — spec: `security.md` §2.3,
+  `screens.md` §6.2.1, D182, D212 — overrule: swap steps 2 and 4 to report 4401 first, or export
+  `isLoopbackPeer` from auth.mjs (a fenced change) and import it here.

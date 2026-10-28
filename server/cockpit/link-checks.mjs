@@ -15,15 +15,21 @@
 //      `bad-origin`; no `Origin` at all: 4403 `no-origin` (screens.md §6.2: a
 //      browser always sends one, so an upgrade without it is not a page);
 //      `Sec-Fetch-Site` other than `same-origin`/`none`: 4403 `sec-fetch-site`.
-//   2. The `Origin`'s scheme (D182): `https:`, or `http:` on a loopback host,
-//      unless `cockpit.allowInsecure` is exactly `true`: 4403 `insecure-origin`.
+//   2. The `Origin`'s scheme (D182): `https:`, or `http:` on a loopback host
+//      from a loopback TCP peer (the `Origin` is text any script sets, the peer
+//      address is not), unless `cockpit.allowInsecure` is exactly `true`:
+//      4403 `insecure-origin`.
 //   3. The link count (§8): 32 open links, the 33rd is 4503 `too-many-links`.
 //   4. The credential (D212, Q-O21 b, no pairing in C1): the board's own
-//      classification of the upgrade. Only `local` (the main port, a loopback
-//      peer) or `direct` (the ingress listener with `fleet.allowedUsers`
-//      applied by the board) gets the link; anything else (a `hub` kind, an
-//      unauthenticated or missing classification) is 4401 `unpaired`, the
-//      code for "no credential the room takes" (B92).
+//      classification of the upgrade. Only `local` (the main port, from a
+//      loopback peer the room checks itself, security.md §2.3 point 2) or
+//      `direct` (the ingress listener with `fleet.allowedUsers` applied by
+//      the board) gets the link; anything else (a `hub` kind, a `local` from
+//      a non-loopback or unknown peer, an unauthenticated or missing
+//      classification) is 4401 `unpaired`, the code for "no credential the
+//      room takes" (B92).
+import net from 'node:net';
+
 import { checkUpgrade } from '../security.mjs';
 import { isAuthenticated } from '../http.mjs';
 import { isIngress } from '../fleet/auth.mjs';
@@ -33,12 +39,33 @@ export const MAX_LINKS = 32;
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]', 'localhost']);
 
-/** D182: an `Origin` the room links: https, or http on a loopback host (screens.md §6.2.1). */
-export function secureOrigin(origin) {
+/**
+ * Is the TCP peer a loopback address (127.0.0.0/8, ::1, ::ffff:127.*)? An
+ * unknown or non-IP address is false: fail closed, as server/fleet/auth.mjs's
+ * own peer check (security.md §2.3 point 2, D212).
+ */
+export function loopbackPeer(remoteAddress) {
+  if (typeof remoteAddress !== 'string') return false;
+  let a = remoteAddress.trim().toLowerCase();
+  if (a.startsWith('[') && a.endsWith(']')) a = a.slice(1, -1);
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a);
+  if (mapped) a = mapped[1];
+  if (net.isIPv4(a)) return a.startsWith('127.');
+  return net.isIPv6(a) && a === '::1';
+}
+
+/**
+ * D182: an `Origin` the room links (screens.md §6.2.1): https, or http on a
+ * loopback host when the TCP peer (`remoteAddress`) is loopback too. The
+ * `Origin` text alone never proves plain HTTP stayed on the machine.
+ */
+export function secureOrigin(origin, remoteAddress) {
   let u;
   try { u = new URL(origin); } catch { return false; }
   if (u.protocol === 'https:') return true;
-  return u.protocol === 'http:' && (LOOPBACK_HOSTS.has(u.hostname) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(u.hostname));
+  if (u.protocol !== 'http:') return false;
+  const loopbackHost = LOOPBACK_HOSTS.has(u.hostname) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(u.hostname);
+  return loopbackHost && loopbackPeer(remoteAddress);
 }
 
 /**
@@ -58,12 +85,17 @@ export function linkRefusal(req, { config, links = 0, allowInsecure = false, ctx
   const sfs = headers['sec-fetch-site'];
   if (sfs !== undefined && sfs !== 'same-origin' && sfs !== 'none') return refusal(4403, 'sec-fetch-site');
   // 2. D182: never a token or a conversation over plain HTTP off loopback.
-  if (allowInsecure !== true && !secureOrigin(headers.origin)) return refusal(4403, 'insecure-origin');
+  const peer = req?.socket?.remoteAddress;
+  if (allowInsecure !== true && !secureOrigin(headers.origin, peer)) return refusal(4403, 'insecure-origin');
   // 3. §8: the 33rd link is refused and never counted.
   if (links >= MAX_LINKS) return refusal(4503, 'too-many-links');
   // 4. D212: the board's own people only, as the board classified them.
   const kind = isAuthenticated(req?.auth) ? req.auth.kind : null;
   if (kind !== 'local' && kind !== 'direct') return refusal(4401, 'unpaired');
+  // security.md §2.3 point 2, D212: `local` is "the main port, a loopback
+  // peer". The board can classify a request on a non-loopback bind as `local`
+  // (no fleet block), so the room asks the socket itself; unknown is refused.
+  if (kind === 'local' && !loopbackPeer(peer)) return refusal(4401, 'unpaired');
   return null;
 }
 
