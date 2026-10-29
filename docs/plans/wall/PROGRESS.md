@@ -644,7 +644,7 @@ Notes for every builder round (planner, round 7):
   scale (about 1.0 / 0.42 / 0.28), facts in `--text-1` with only the mark and label coloured — done when: a test with a long
   fact finds no ellipsis cut and the plate inside the frame, a still of a crit plate (large demo, `HV1` down) shows three
   clear sizes. Also (r40-stranger #5): no plate line is clipped through its glyphs (`r40-fx-warp` frame 6, VM-C's third
-  line): the plate cuts at whole lines (`+N MORE`), never mid-glyph. (commit SHA)
+  line): the plate cuts at whole lines (`+N MORE`), never mid-glyph. (commit a795344)
   Notes (builder, round 49): the plate is the Wall's shared caption (`js/wall/caption.js`, `wall.css`), so `wall.html`
   gets it too (looked at, same plate). **Three levels:** `STEPS.subject` 5.6 (the why and, under a word, the site's name:
   `.wall-caption[data-hero] { --cap-name }`) and `STEPS.fact` 3.6 (the count and the named problems), against the word's
