@@ -11,8 +11,7 @@ import path from 'node:path';
 
 import { FLEET_FAR, fleetSize } from '../public/js/wall/frame.js';
 import { HERO_PLATE, STEPS, heroEms, heroPlateVw, heroSize } from '../public/js/wall/caption.js';
-import { BACK, TAP } from '../public/js/wall/galaxy/touch.js';
-import { FAN, fanLayout } from '../public/js/wall/galaxy/fan.js';
+import { BACK, TAP, hitRadius } from '../public/js/wall/galaxy/touch.js';
 
 const PUBLIC = path.resolve(import.meta.dirname, '..', 'public');
 const css = fs.readFileSync(path.join(PUBLIC, 'css', 'wall.css'), 'utf8');
@@ -57,12 +56,11 @@ test('half a screen: the far word stays at a 3 m step at 684 px and in the cockp
 
 test('half a screen: every touch target is sized in px, at night 2\'s 48 px floor or above', () => {
   assert.ok(TAP.radiusPx * 2 >= FLOOR, 'the finger\'s disc');
+  assert.ok(hitRadius('touch') >= FLOOR && hitRadius('pen') >= FLOOR, 'a finger\'s reach (night 5 T11), in px whatever the stage');
   assert.ok(BACK.hitPx >= FLOOR);
   const back = rule('.galaxy-back');
   assert.match(back, new RegExp(`min-width: ${BACK.hitPx}px;`));
   assert.match(back, new RegExp(`min-height: ${BACK.hitPx}px;`));
-  assert.match(rule('.galaxy-fan-row'), /height: 48px;/);
-  assert.ok(FAN.rowPx >= FLOOR);
   // A pin's ✕ (cockpit c4 §3.4): 48x48 px, its header row 48 px.
   const x = rule('.galaxy-pin-remove');
   assert.match(x, /width: 48px;/);
@@ -71,26 +69,6 @@ test('half a screen: every touch target is sized in px, at night 2\'s 48 px floo
   // Their words have a px floor too, so a small vmin does not shrink them under what a finger reads.
   assert.match(back, /font-size: max\(2\.7vmin, 20px\);/);
   assert.match(x, /font-size: 24px;/);
-});
-
-test('half a screen: a full fan at 684 px stays on the stage, rows 48 px and apart', () => {
-  const [W, H] = STAGES[0];
-  for (const fx of [40, 342, 644]) {
-    const hits = Array.from({ length: FAN.max }, (_, i) => ({ id: `planet-${i}`, x: fx + (i % 4) * 6 - 9, y: 456 + i * 3, tone: 'ok' }));
-    const fan = fanLayout(hits, fx, 456, { W, H });
-    assert.equal(fan.items.length, FAN.max);
-    for (const it of fan.items) {
-      assert.ok(it.box.left >= 0 && it.box.right <= W && it.box.top >= 0 && it.box.bottom <= H, `${fx}: ${it.id} on the stage`);
-      assert.ok(it.box.bottom - it.box.top >= FLOOR, `${it.id} a 48 px row`);
-    }
-    for (const a of fan.items) {
-      for (const b of fan.items) {
-        if (a === b) continue;
-        const on = a.box.left < b.box.right && b.box.left < a.box.right && a.box.top < b.box.bottom && b.box.top < a.box.bottom;
-        assert.ok(!on, `${fx}: ${a.id} on ${b.id}`);
-      }
-    }
-  }
 });
 
 test('half a screen: a narrow stage widens the trouble plate to the far band, so an 11-letter name is not cut', () => {

@@ -21,8 +21,8 @@ import { ARM, hash } from './layout.js';
  * No lobe reaches past `reach` of the size from its star; most of a lobe's
  * light lies inside 0.6 of its half-extent (scene.js cloudTexture's mask),
  * only a faint rim goes further. Two crit nebulae's rims touch only when
- * their stars are under 2 x reach x 680 = 952 apart (MIN_SITE_GAP allows
- * 700; the large demo's closest pair is 1116).
+ * their stars are under 2 x reach x 435 = 609 apart (night 5's 0.64x
+ * nebulae; MIN_SITE_GAP allows 448; the large demo's closest pair is 978).
  */
 export const LOBES = Object.freeze({
   main: Object.freeze({ len: 1.3, wid: [0.8, 0.92], share: 0.9 }),

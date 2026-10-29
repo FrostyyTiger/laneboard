@@ -175,3 +175,40 @@ test('the camera frames a held system in the free box and eases when the box cha
   const c = freeCentre(freeRect(W, H, COVERS));
   assert.ok(Math.abs(settled.x - (c.x + 1) / 2 * W) < 2 && Math.abs(settled.y - (1 - c.y) / 2 * H) < 2, JSON.stringify(settled));
 });
+
+test('night 5 T1b: the sun stays off a held system\'s frame (or at least off the words) for every site of the large demo', () => {
+  // The snug galaxy (T1) brings `lab` 733 from the sun; shot from outside looking
+  // in, the sun's disc stood on the tag. It is shot from the side now.
+  const lay = galaxyLayout(FLEET);
+  const lab = lay.sites.find((s) => s.id === 'lab');
+  assert.ok(lab.reach > FRAMING.inward * Math.hypot(lab.home.x, lab.home.z), 'lab is the side-shot case');
+  // The widest plate (a trouble site) and a short one (a calm site's two lines).
+  const CALM_PLATE = { left: 82, top: 73, right: 600, bottom: 300 };
+  const off = (p, r) => p == null || p.x + r < 0 || p.x - r > W || p.y + r < 0 || p.y - r > H;
+  for (const covers of [COVERS, [CALM_PLATE, FLEET_BLOCK, TAG]]) {
+    const view = { fov: FOV, aspect: W / H, free: freeRect(W, H, covers) };
+    for (const s of lay.sites) {
+      for (let t = 0; t <= 6 * 60_000; t += 7_500) {
+        for (const zoom of [2.3, 3.5]) {
+          const shot = zoomedSiteShot(s, t, zoom, view);
+          const at = projector(shot);
+          // The disc and the halo's bright middle, a quarter of its width.
+          const sun = at({ x: 0, y: 0, z: 0 }, Math.max(SIZE.sun, SIZE.sunHalo / 4));
+          const where = sun ? `${sun.x.toFixed(0)},${sun.y.toFixed(0)} r ${sun.r.toFixed(0)}` : 'behind';
+          if (s === lab) assert.ok(off(sun, sun?.r ?? 0), `${s.id} t=${t} zoom ${zoom}: the sun off the frame (${where})`);
+          else assert.ok(off(sun, sun?.r ?? 0) || !covers.some((c) => meets(sun, c, sun.r)), `${s.id} t=${t} zoom ${zoom}: the sun clear of the words (${where})`);
+        }
+      }
+    }
+  }
+});
+
+test('night 5 T1b: the side shot keeps its own bearing, no per-site jitter, the sway still moving it', () => {
+  const lab = galaxyLayout(FLEET).sites.find((s) => s.id === 'lab');
+  const view = { fov: FOV, aspect: W / H, free: { x0: 0, y0: 0, x1: 1, y1: 1 } };
+  const bearing = (shot) => Math.atan2(shot.pos.x - lab.home.x, shot.pos.z - lab.home.z);
+  const sunward = Math.atan2(-lab.home.x, -lab.home.z);
+  const turn = (a) => Math.atan2(Math.sin(a - sunward), Math.cos(a - sunward));
+  assert.ok(Math.abs(turn(bearing(siteShot(lab, 0, view))) - FRAMING.aside) < 1e-9);
+  assert.ok(Math.abs(turn(bearing(siteShot(lab, 40_000, view))) - FRAMING.aside) > 0.05, 'the hold still drifts');
+});

@@ -23,6 +23,10 @@ answered one again, and number new questions after the highest one there.
   `nights/night-3/PROGRESS.md`) become tasks here, renumbered from T1, each naming its night-3 number;
   the rest of night 3's `## Later` stays under `## Later`. This night may plan up to 18 tasks: it is the
   Wall's last before the merge.
+- Order for night 5: README §7 Night 5's own `Order:` line. Plan every part A-E as tasks (up to 22),
+  none parked in `## Later`. Night 4's open tasks (`nights/night-4/PROGRESS.md`) stay under `## Later`,
+  each naming its night-4 number; close only those this night makes moot, with the reason. Never plan a
+  change to a path in `loop/fenced.txt`: such a need becomes a patch under `docs/plans/wall/patches/`.
 - Each task line: `- [ ] T<n> (<plan part, e.g. §7.2>) <what> — done when: <a check a test, a
   screenshot or a filmstrip can show>`. Mark UI tasks with `[ui]`, direction tasks with `[variant:<name>]`.
 - Read the code first (`public/js/views/map/`, `test/tools/demo-fleet.mjs`, `test/helpers/demo-hub.mjs`,

@@ -15,9 +15,9 @@
 // `update(model)`, `setOpen(id, k)`, `frame(now)`.
 
 import * as THREE from '../../../vendor/three/three.module.js';
-import { armBand, armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } from './layout.js';
+import { armBand, armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, smoother, CLOSED, OPEN_MS } from './layout.js';
 import { tourOrder, tourSites } from '../tour.js';
-import { TONES, nebulaFor, toneOf } from './palette.js';
+import { TONES, dustTintWeight, grainRatio, nebulaFor, nebulaTint, tintGrain, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS, pixelRatioFor } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
@@ -33,9 +33,11 @@ import {
 /**
  * World sizes: the sun, a site's star, a planet (named kind), a dot (the
  * rest). The sun is 70 % of the sketch's 60 and its halo narrower than a
- * crit nebula (r8-film-ui 2: the sun outshouted the trouble).
+ * crit nebula (r8-film-ui 2: the sun outshouted the trouble); night 5 A1
+ * scales the halo with the nebulae (layout.js TIGHT.neb, 0.64; a literal,
+ * as nothing imported is read at evaluation time; the layout test pins it).
  */
-export const SIZE = Object.freeze({ sun: 42, sunHalo: 640, star: 24, planet: 15, dot: 4, landing: 7 });
+export const SIZE = Object.freeze({ sun: 42, sunHalo: 640 * 0.64, star: 24, planet: 15, dot: 4, landing: 7 });
 
 /**
  * The sun's halo strength: at most half the crit nebula's 0.85 (README
@@ -60,6 +62,93 @@ const troubled = (t) => t === 'warn' || t === 'crit';
  * thing in the frame); the rest are dots.
  */
 export const memberRadius = (planet, tone) => (planet || troubled(tone) ? SIZE.planet : SIZE.dot);
+
+/**
+ * A member's drawn radius with what it carries (night 5 A3, layout.js
+ * carryScale): a planet's size times its `carry`; the rest are not carried.
+ * The tone only decides planet size or dot, never the carry. Pure.
+ */
+export const bodyRadius = (m, tone) => (m.moon && !troubled(tone)
+  ? MOON.calm * MOON.foldK
+  : memberRadius(m.planet, tone) * (m.planet ? m.carry ?? 1 : 1));
+
+/**
+ * Moons (night 5 B2, T7; the owner's sketch pick `sk_moons=1`; layout.js
+ * moonHosts says whose): `calm` is a moon's radius opened out (T8); folded on
+ * its planet it is drawn at `foldK` of that, on a tight inclined orbit `tight`
+ * times the planet's drawn radius plus `pad` plus its own radius from the
+ * planet's centre, unnamed and not tappable. It comes in from `from` to `to`
+ * of its system's opening, so the overview never draws it (the nebula and the
+ * site's name carry a folded cluster). A moon in trouble is the exception
+ * (README §2: readable trouble wins; r8-film-ui 3: a problem is never the
+ * smallest thing in the frame): always drawn, at the planet size as a dot in
+ * trouble was, its halo and shape with it, named and tappable, only its place
+ * is the moon's.
+ */
+export const MOON = Object.freeze({ calm: 5.5, foldK: 0.5, tight: 1.45, pad: 3, from: 0.35, to: 0.9 });
+
+/**
+ * A planet's moons opened (night 5 B2 open, T8): tapping the planet (or one
+ * of its moons) eases them out of their tight orbit onto one ring round it,
+ * over the site's open time (layout.js OPEN_MS) on `smoother`. The ring faces
+ * the camera, its top tilted `tilt` rad toward it, so it reads as an orbit
+ * and never as a flat badge; it is measured on screen, not in the world: its
+ * neighbours `gapPx` apart (along the circle; the tilt keeps at least
+ * cos(tilt) of it), never nearer the planet's centre than `minPx`, nor than
+ * `clearPx` past the planet's own disc and theirs (a camera that comes close,
+ * T9). Opened, a calm moon is drawn at MOON.calm, named and a target; it holds
+ * still on the ring (a finger aims at it). A faint orbit line of `segs`
+ * segments and thin tethers from the planet's rim to each moon, both at
+ * `alpha` of the line colour. One planet's ring is open at a time.
+ */
+export const MOON_RING = Object.freeze({ gapPx: 110, minPx: 80, clearPx: 28, tilt: 0.42, segs: 48, alpha: 0.9 });
+
+/**
+ * The ring's radius in css px for `n` moons round a planet `planetPx` in
+ * radius whose moons are `moonPx` (MOON_RING). Pure.
+ */
+export function moonRingPx(n, planetPx = 0, moonPx = 0) {
+  const R = MOON_RING;
+  const apart = n > 1 ? R.gapPx / (2 * Math.sin(Math.PI / n)) : 0;
+  return Math.max(R.minPx, planetPx + moonPx + R.clearPx, apart) / Math.cos(R.tilt);
+}
+
+/** Where moon `i` of `n` stands on its open ring: from the top, clockwise on screen (radians from the right, up positive). Pure. */
+export const ringAngle = (i, n) => Math.PI / 2 - (2 * Math.PI * i) / Math.max(1, n);
+
+/**
+ * A planet's folded moon orbit (by its id), the same on every load: a period
+ * of 40-90 s (slow enough never to pull the eye from the camera), inclined up
+ * to ±40°, its node and phase from its id. Pure.
+ */
+export function moonOrbit(id) {
+  return {
+    period: 40000 + 50000 * hash(`${id}~mp`),
+    inc: (hash(`${id}~mi`) - 0.5) * 1.4,
+    node: hash(`${id}~mn`) * Math.PI * 2,
+    phase: hash(`${id}~mf`) * Math.PI * 2,
+  };
+}
+
+/**
+ * A moon's place on its planet's one ring (`moon`: layout.js's `{ host, i,
+ * n }`): every moon of a planet shares the planet's orbit (moonOrbit of its
+ * id), spaced evenly round it, so they turn together and never meet. Pure.
+ */
+export function moonRing(moon) {
+  const o = moonOrbit(moon.host);
+  return { ...o, phase: o.phase + (2 * Math.PI * moon.i) / Math.max(1, moon.n) };
+}
+
+/**
+ * Where a folded moon sits from its planet's centre at `now` (ms; 0 and
+ * still mode: its phase), on its orbit of radius `r`. Pure.
+ */
+export function moonAt(orbit, r, now = 0) {
+  const th = orbit.phase + (now / orbit.period) * Math.PI * 2;
+  const c = Math.cos(th), sn = Math.sin(th), cn = Math.cos(orbit.node), sN = Math.sin(orbit.node), ci = Math.cos(orbit.inc);
+  return { x: r * (c * cn - sn * sN * ci), y: r * sn * Math.sin(orbit.inc), z: r * (c * sN + sn * cn * ci) };
+}
 
 /** The shape a trouble member carries on its sphere (docs/design.md: ▲ wants you, ■ broken), null when calm. */
 export const MARK_SHAPE = Object.freeze({ warn: 'tri', crit: 'square' });
@@ -113,11 +202,52 @@ export function dustFade(dist, reach, open = 1) {
   return 1 - (1 - DUST_FADE.floor) * inside * Math.max(0, Math.min(1, open));
 }
 
+/**
+ * Depth haze (night 5 A5, the owner's `sk_haze=1`): a linear fog from `near`
+ * to `far` times the distance to what the camera looks at, so the far side of
+ * an open system or of the galaxy sinks into the ground. Only calm things fog:
+ * a status hue is as loud far away as near (README §2.1). `min` keeps a close
+ * look from fogging the planet in front of it.
+ */
+export const HAZE = Object.freeze({ near: 0.6, far: 2.6, min: 200 });
+
+/** Whether a material in `tone` takes the haze: calm only, never a status hue. */
+export const hazed = (tone) => tone === 'calm';
+
+/**
+ * The haze's range for a camera at `pos` looking along the unit `dir`: the
+ * look-at distance is where the sight line meets the galaxy's plane (every
+ * site is level, so that is the held star or the overview's middle), or the
+ * distance to the sun when the camera looks up or along the plane.
+ */
+export function hazeRange(pos, dir) {
+  const plane = dir.y < -0.05 && pos.y > 0 ? -pos.y / dir.y : Math.hypot(pos.x, pos.y, pos.z);
+  const d = Math.max(HAZE.min, plane);
+  return { d, near: d * HAZE.near, far: d * HAZE.far };
+}
+
 /** Trouble breathes: one slow period (ms), crit deep, warn shallow. */
 export const PULSE = Object.freeze({ periodMs: 2600, crit: 0.4, warn: 0.15, nebula: 0.08 });
 
-/** Sphere segments (width, height) at the best level; budget.js's levels scale them. */
-const SEGS = Object.freeze({ sun: [32, 20], star: [20, 14], planet: [32, 22], dot: [10, 8] });
+/**
+ * Sphere segments (width, height) at the best level; budget.js's levels
+ * scale them. `bigStar` (night 5 A3): a star that carries more than
+ * BIG_STAR is drawn up to 2.2x, and a 20-gon that size shows its corners;
+ * 26x18 keeps a star of up to 1.65x as round at its edge as a 1x star at
+ * 20x14 (test/wall-galaxy-carry.test.mjs) for 364 more triangles a star.
+ * Stars are flat-shaded, so only the edge can look faceted; planets are
+ * already 32x22, round enough at 2.2x.
+ */
+const SEGS = Object.freeze({ sun: [32, 20], star: [20, 14], bigStar: [26, 18], planet: [32, 22], dot: [10, 8] });
+
+/** Each sphere geometry's radius: a big star is the star's sphere, scaled by its carry like any star. */
+const SPHERE_R = Object.freeze({ sun: SIZE.sun, star: SIZE.star, bigStar: SIZE.star, planet: SIZE.planet, dot: SIZE.dot });
+
+/** A star's radius factor above which it takes the `bigStar` sphere. */
+export const BIG_STAR = 1.2;
+
+/** Which sphere a star carrying `carry` is drawn with. Pure. */
+export const starSphere = (carry) => (carry > BIG_STAR ? 'bigStar' : 'star');
 
 /**
  * A member dot's segments never exceed 8x6 (night 4 T12, r56-performance 3a):
@@ -236,17 +366,21 @@ const LANE_SEGS = 40;
 /** The camera's field of view (degrees) and the far plane. */
 export const FOV = 42;
 
+/** The overview's margin past the farthest site's star (world units): 400 at nights 1-4's scale. */
+export const OVERVIEW_MARGIN = 400 * 0.5 * 1.24; // layout.js TIGHT.arm and ROOM.arms, pinned by the layout test
+
 /**
  * Where the camera sits for the whole galaxy: above, at an angle, and always
  * the same pose (T24, reviews/r26-skeptic.md 7). It used to turn once in about
  * 7 minutes, so every name stood somewhere else at each overview and the
  * hallway had to find HOME again; depth comes from the drift round a held
- * system (`siteShot`), the overview holds still.
+ * system (`siteShot`), the overview holds still. Snug (night 5 A1): the
+ * margin past the farthest star is OVERVIEW_MARGIN, at the arms' scale.
  */
 export function overviewShot(sites, fov = FOV) {
   let r = 0;
   for (const s of sites) r = Math.max(r, Math.hypot(s.home.x, s.home.z));
-  const d = ((r + 400) / Math.tan((fov * Math.PI) / 360)) * 0.9;
+  const d = ((r + OVERVIEW_MARGIN) / Math.tan((fov * Math.PI) / 360)) * 0.9;
   return {
     pos: { x: 0, y: d * 0.78, z: d * 0.62 },
     look: { x: 0, y: 0, z: 0 },
@@ -257,10 +391,11 @@ export function overviewShot(sites, fov = FOV) {
  * Where the camera sits for one open system: on the sun's side of it, up,
  * looking out across it, so the sun is behind and below the camera and
  * never in the frame (r8-film-ui 2), and the sun lights the faces we see.
- * The drift sways round that side (±SWAY rad, about 2.6 min a swing)
+ * The drift sways round that side (±SWAY rad, about 4.4 min a swing: night 5 A6
+ * slowed it to 0.6x)
  * rather than circling, so a long hold never brings the sun round.
  */
-export const SITE_SHOT = Object.freeze({ jitter: 0.7, sway: 0.5, speed: 0.00002 });
+export const SITE_SHOT = Object.freeze({ jitter: 0.7, sway: 0.5, speed: 0.000012 });
 /**
  * With a `view` (`{ fov, aspect, free, scale }`, T18) the star sits at the
  * middle of the `free` box (framing.js `freeRect`: the frame minus the
@@ -272,10 +407,14 @@ export const SITE_SHOT = Object.freeze({ jitter: 0.7, sway: 0.5, speed: 0.00002 
 export function siteShot(site, now = 0, view = null) {
   const { jitter, sway, speed } = SITE_SHOT;
   // Framed, a big system close to the hub needs the camera farther back than
-  // the hub is: from the sun's side it would hang over the sun, so it looks
-  // in from outside, the hub far beyond the system and small (framing.js FRAMING.inward).
-  const inward = view?.free && site.reach > FRAMING.inward * Math.hypot(site.home.x, site.home.z) ? Math.PI : 0;
-  const out = Math.atan2(-site.home.x, -site.home.z) + inward + (hash(site.id) - 0.5) * jitter + sway * Math.sin((now * speed) / sway);
+  // the hub is: from the sun's side it would hang over the sun, and looking in
+  // from outside (nights 2-4) puts the sun at the frame's top, on the tag, once
+  // the galaxy is snug (night 5 T1b). So it looks across from the side, the
+  // sun off the frame's right edge past the free box (framing.js FRAMING.aside),
+  // with no per-site jitter, which would bring the sun back in.
+  const aside = view?.free && site.reach > FRAMING.inward * Math.hypot(site.home.x, site.home.z);
+  const turn = aside ? FRAMING.aside : (hash(site.id) - 0.5) * jitter;
+  const out = Math.atan2(-site.home.x, -site.home.z) + turn + sway * Math.sin((now * speed) / sway);
   // `d` is the camera's offset along the plane; it stands 0.75 d up, so 1.25 d from the star.
   let d = Math.max(560, site.reach * 1.9);
   if (view?.free) d = Math.max(560, fitDistance(site.reach, view.free, view.fov ?? FOV, view.aspect) / 1.25);
@@ -284,12 +423,6 @@ export function siteShot(site, now = 0, view = null) {
     pos: { x: site.home.x + Math.sin(out) * d, y: site.home.y + d * 0.75, z: site.home.z + Math.cos(out) * d },
     look: { ...site.home },
   };
-  // Looking in, the camera stands steeper at the same distance, so the hub
-  // beyond the system rises to the frame's top edge.
-  if (inward) {
-    const back = (d * 1.25) / Math.hypot(1, FRAMING.inwardRise);
-    shot.pos = { x: site.home.x + Math.sin(out) * back, y: site.home.y + back * FRAMING.inwardRise, z: site.home.z + Math.cos(out) * back };
-  }
   return view?.free ? panShot(shot, site.home, freeCentre(view.free), view.fov ?? FOV, view.aspect) : shot;
 }
 
@@ -301,14 +434,23 @@ export function sceneKey(nodes) {
     .join('|');
 }
 
-/** A soft round sprite: white falling off to nothing, tinted by the material. */
-function glowTexture(doc) {
+/**
+ * A soft round sprite: white falling off to nothing, tinted by the material.
+ * `soft` (the sun's halo, night 5 A4): a brighter heart that falls off sooner,
+ * so the sun reads softer at the same size.
+ */
+function glowTexture(doc, soft = false) {
   const c = doc.createElement('canvas');
   c.width = c.height = 128;
   const x = c.getContext('2d');
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
   g.addColorStop(0, 'rgb(255 255 255 / 1)');
-  g.addColorStop(0.2, 'rgb(255 255 255 / 0.5)');
+  if (soft) {
+    g.addColorStop(0.12, 'rgb(255 255 255 / 0.6)');
+    g.addColorStop(0.45, 'rgb(255 255 255 / 0.18)');
+  } else {
+    g.addColorStop(0.2, 'rgb(255 255 255 / 0.5)');
+  }
   g.addColorStop(1, 'rgb(255 255 255 / 0)');
   x.fillStyle = g;
   x.fillRect(0, 0, 128, 128);
@@ -464,7 +606,7 @@ export function sweepShape(R, timing = null, steps = 16) {
  * `warp` streaks the sky while `setWarp` says the camera flies,
  * `afterglow` rings a cluster whose trouble cleared (it remembers the tones from one `update` to the next),
  * `sweep` turns a faint line round the plane and rings the clusters `setSweep` says pinged (none in still mode).
- * Returns `{ update, setOpen, setSun, setActivity, setJobs, setCritAges, setWarp, setSweep, drawn, planets, beams, frame, resize,
+ * Returns `{ update, setOpen, openMoons, moonsOpen, setSun, setActivity, setJobs, setCritAges, setWarp, setSweep, drawn, planets, beams, frame, resize,
  * setQuality, size, camera, world, quality, pixelRatio, activity, jobs, beacons, afterglows, sweep, warp, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
@@ -485,13 +627,15 @@ export function createGalaxyScene(canvas, {
   renderer.setPixelRatio(pixelRatio);
   renderer.setClearColor(bg, 1);
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(bg, 0.00008);
+  // The haze's range follows the camera each frame (hazeRange); these are placeholders.
+  scene.fog = new THREE.Fog(bg, HAZE.min * HAZE.near, HAZE.min * HAZE.far);
   const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 30000);
 
   // One light from the sun, a soft fill, and a key from above so the
   // planets read as spheres from any side.
   const white = col(palette.sun);
-  scene.add(new THREE.PointLight(white, 2.2, 0, 0));
+  // The sun's own light is a warm off-white (night 5 A4); the key stays white.
+  scene.add(new THREE.PointLight(col(palette.sunLight ?? palette.sun), 2.2, 0, 0));
   scene.add(new THREE.AmbientLight(col(palette.calm), 0.55));
   const key = new THREE.DirectionalLight(white, 0.9);
   key.position.set(0.3, 1, 0.2);
@@ -502,7 +646,7 @@ export function createGalaxyScene(canvas, {
   const dotTex = dotTexture(doc);
   const cloudTex = cloudTexture(doc);
   const spheres = (seg) => Object.fromEntries(Object.keys(SEGS).map((k) => [
-    k, new THREE.SphereGeometry(SIZE[k], ...sphereSegs(k, seg)),
+    k, new THREE.SphereGeometry(SPHERE_R[k], ...sphereSegs(k, seg)),
   ]));
   const geo = spheres(1);
   // A nebula lobe: a flat square in the galaxy's plane, stretched by its scale (nebula.js).
@@ -510,22 +654,22 @@ export function createGalaxyScene(canvas, {
   lobeGeo.rotateX(-Math.PI / 2);
   const shared = [glowTex, dotTex, cloudTex, lobeGeo];
   const keep = (m) => { shared.push(m); return m; };
-  const flatMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.MeshBasicMaterial({ color: tone[t] }))]));
+  const flatMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.MeshBasicMaterial({ color: tone[t], fog: hazed(t) }))]));
   // Calm planets are matte grey with a faint glow of their own; trouble
   // glows from inside in its hue.
   const planetMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.MeshStandardMaterial({
     color: tone[t], roughness: 0.75, metalness: 0.05,
-    emissive: t === 'calm' ? bg : tone[t], emissiveIntensity: t === 'calm' ? 1 : 0.45,
+    emissive: t === 'calm' ? bg : tone[t], emissiveIntensity: t === 'calm' ? 1 : 0.45, fog: hazed(t),
   }))]));
   const haloMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.SpriteMaterial({
     map: glowTex, color: tone[t], transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, opacity: HALO[t].opacity,
+    blending: THREE.AdditiveBlending, opacity: HALO[t].opacity, fog: hazed(t),
   }))]));
 
   // A trouble member's shape: dark on its lit sphere, facing the camera, over it.
   const markMat = Object.fromEntries(Object.entries(MARK_SHAPE).map(([t, shape]) => {
     const tex = keep(markTexture(doc, shape));
-    return [t, keep(new THREE.SpriteMaterial({ map: tex, color: bg.clone(), transparent: true, depthTest: false, depthWrite: false }))];
+    return [t, keep(new THREE.SpriteMaterial({ map: tex, color: bg.clone(), transparent: true, depthTest: false, depthWrite: false, fog: false }))];
   }));
 
   // --- the sky: far stars and the dust band, never rebuilt ------------------
@@ -615,12 +759,14 @@ export function createGalaxyScene(canvas, {
 
   // The sun: the hub, at the origin. Its halo is a soft grey, quieter
   // than any nebula in trouble (README §2.1: trouble is the loudest thing).
-  // The core is the text-2 grey, not white (r8-film-ui 2); the light stays white.
+  // The core is a step under the light, not white (r8-film-ui 2); since night 5 A4 a
+  // warm stone with a softer halo of the same size.
   // The dust is depth-tested (PointsMaterial's default), so no grain is drawn over the core.
   const sunCore = col(palette.sunCore);
-  const sun = new THREE.Mesh(geo.sun, keep(new THREE.MeshBasicMaterial({ color: sunCore })));
+  // The sun is never hazed: its look says how fresh the data is (night 3 T6).
+  const sun = new THREE.Mesh(geo.sun, keep(new THREE.MeshBasicMaterial({ color: sunCore, fog: false })));
   const sunHalo = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-    map: glowTex, color: sunCore, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: SUN_HALO,
+    map: keep(glowTexture(doc, true)), color: sunCore, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: SUN_HALO, fog: false,
   })));
   sunHalo.scale.setScalar(SIZE.sunHalo);
   scene.add(sun, sunHalo);
@@ -654,14 +800,17 @@ export function createGalaxyScene(canvas, {
   scene.add(group);
   // Running eases, by `<site>:<what>`: a new one for the same thing takes over from where the old one is.
   const tweens = new Map();
+  // Open moon rings (T8): planet id → `{ site, k }`, k its opening eased 0..1; one opening, others folding.
+  const moonRings = new Map();
+  let ringHost = null;
   let dirty = true;
   const tween = (key, ms, apply, done = null) => {
     tweens.set(key, { t0: clock(), ms, apply, done });
     dirty = true;
   };
 
-  const haloSize = (m, t) => (m.planet || troubled(t) ? memberRadius(m.planet, t) * HALO[t].k : t === 'calm' ? 0 : SIZE.dot * 2 * HALO[t].k);
-  const sphereOf = (m) => (m.radius === SIZE.planet ? geo.planet : geo.dot);
+  const haloSize = (m, t) => (m.planet || troubled(t) ? bodyRadius(m, t) * HALO[t].k : t === 'calm' ? 0 : SIZE.dot * 2 * HALO[t].k);
+  const sphereOf = (m) => (m.radius > SIZE.dot ? geo.planet : geo.dot);
   const laneLook = (t) => (t === 'calm'
     ? { color: col(palette.line.rgb), opacity: palette.line.alpha * 0.6 }
     : { color: tone[t].clone(), opacity: 0.5 });
@@ -669,8 +818,8 @@ export function createGalaxyScene(canvas, {
   /** A member's tone: its mesh swaps to the shared material; its halo eases to its new size. */
   const paintMember = (s, m, t, ms) => {
     m.tone = t;
-    const r0 = m.size ?? memberRadius(m.planet, t);
-    m.radius = memberRadius(m.planet, t);
+    const r0 = m.size ?? bodyRadius(m, t);
+    m.radius = bodyRadius(m, t);
     // The sphere for the larger of the two sizes, so one growing in is never a coarse dot blown up.
     m.mesh.geometry = sphereOf({ radius: Math.max(r0, m.radius) });
     m.mesh.material = m.planet || troubled(t) ? planetMat[t] : flatMat[t];
@@ -688,6 +837,9 @@ export function createGalaxyScene(canvas, {
     });
   };
 
+  /** A site's nebula colour in `t`: its own quiet tint when calm (night 5 A4), else the status hue. */
+  const nebColour = (s, t) => (t === 'calm' ? s.tint : tone[t]);
+
   /** A site's star, nebula and hyperlane to its tone and status, eased over `ms` (0: at once). */
   const paintSite = (s, ms) => {
     const t = toneOf(s.node);
@@ -696,9 +848,14 @@ export function createGalaxyScene(canvas, {
     const neb = nebulaFor(s.status);
     if (neb.tone !== s.nebula?.tone) s.since = clock(); // how old its trouble is (nebulaPeaks)
     s.nebula = neb;
-    const nebTo = { color: tone[neb.tone].clone(), opacity: neb.opacity, size: neb.size };
-    const starTo = SIZE.star * HALO[t].k;
+    const nebTo = { color: nebColour(s, neb.tone).clone(), opacity: neb.opacity, size: neb.size };
+    const starTo = SIZE.star * s.carryTo * HALO[t].k;
     const laneEnd = laneLook(neb.tone);
+    // Haze by the nebula's tone (HAZE): a trouble nebula and its lane are never fogged.
+    // A program change, so only when the tone changes.
+    for (const mat of [...s.lobes.map((l) => l.mesh.material), s.lane.material]) {
+      if (mat.fog !== hazed(neb.tone)) { mat.fog = hazed(neb.tone); mat.needsUpdate = true; }
+    }
     const set = (k) => {
       const nf = s.nebFrom, lf = s.laneFrom;
       s.neb.color.lerpColors(nf.color, nebTo.color, ease(k));
@@ -716,12 +873,25 @@ export function createGalaxyScene(canvas, {
     tween(`${s.id}:paint`, ms, set);
   };
 
-  /** A site's members from its layout: the old ones go, the new ones come at their tones. */
-  const setMembers = (s, list) => {
+  /**
+   * A site's members from its layout (`lay`: one of galaxyLayout's sites):
+   * the old ones go, the new ones come at their tones; its star takes the
+   * size its planets give it, eased over `ms` when it had one (0: at once).
+   */
+  const setMembers = (s, lay, ms = 0) => {
+    const list = lay.members;
     for (const m of s.members) group.remove(m.mesh, m.halo, m.mark);
     for (const key of tweens.keys()) if (key.startsWith(`${s.id}:halo:`)) tweens.delete(key);
+    const carry = lay.carry ?? 1, from = s.carry;
+    s.carryTo = carry;
+    s.star.geometry = geo[starSphere(carry)];
+    // starRadius: what labels.js stands a site's name beside.
+    if (!ms || from == null || from === carry) { s.carry = carry; s.starRadius = SIZE.star * carry; }
+    else tween(`${s.id}:carry`, ms, (k) => { s.carry = glide(from, carry, k); s.starRadius = SIZE.star * s.carry; });
     s.members = list.map((lm) => {
-      const m = { id: lm.id, node: lm.node, off: { ...lm.off }, planet: lm.planet, tone: 'calm', haloSize: 0 };
+      const m = { id: lm.id, node: lm.node, off: { ...lm.off }, planet: lm.planet, carry: lm.carry ?? 1, tone: 'calm', haloSize: 0 };
+      // A moon (T7): its planet is found below, once every member is made.
+      if (lm.moon) m.moon = { host: lm.moon.host, i: lm.moon.i, n: lm.moon.n, ...moonRing(lm.moon) };
       m.mesh = new THREE.Mesh(m.planet ? geo.planet : geo.dot, flatMat.calm);
       m.halo = new THREE.Sprite(haloMat.calm);
       m.mark = new THREE.Sprite(markMat.crit);
@@ -731,12 +901,28 @@ export function createGalaxyScene(canvas, {
       paintMember(s, m, toneOf(lm.node), 0);
       return m;
     });
+    const hostOf = new Map(s.members.filter((m) => m.planet).map((m) => [m.id, m]));
+    for (const m of s.members) {
+      if (!m.moon) continue;
+      m.moon.host = hostOf.get(m.moon.host) ?? null;
+      m.tappable = troubled(m.tone);
+      // A moon whose planet is not drawn is a dot again, where the layout put it.
+      if (!m.moon.host) { delete m.moon; paintMember(s, m, m.tone, 0); }
+    }
     // Orbit spokes, stems and landing rings: one line set per system, sized for its planets.
     const planets = s.members.filter((m) => m.planet).length;
     const old = s.lines.geometry;
     s.lines.geometry = new THREE.BufferGeometry();
     s.lines.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(planets * (4 + RING_SEGS * 2) * 3), 3));
     old.dispose();
+    // Room for two rings (T8: one opening while the last folds), each with the tethers of the planet with the most moons.
+    const most = Math.max(0, ...s.members.map((m) => (m.moon ? m.moon.n : 0)));
+    const oldRing = s.moonLines.geometry;
+    s.moonLines.geometry = new THREE.BufferGeometry();
+    s.moonLines.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(most ? 2 * (MOON_RING.segs + most) * 2 * 3 : 3), 3));
+    s.moonLines.geometry.setDrawRange(0, 0);
+    s.moonLines.visible = false;
+    oldRing.dispose();
     s.reach = Math.max(0, ...s.members.map((m) => Math.hypot(m.off.x, m.off.y, m.off.z)));
     dirty = true;
   };
@@ -756,6 +942,9 @@ export function createGalaxyScene(canvas, {
   /** A site's objects (lay: one of galaxyLayout's sites), added to the galaxy. */
   const makeSite = (lay, status) => {
     const neb = nebulaFor(status);
+    // Its tint for life, from its place when it came (a later site does not repaint it).
+    const tint = col(nebulaTint(lay.index));
+    const nebCol = neb.tone === 'calm' ? tint : tone[neb.tone];
     const star = new THREE.Mesh(geo.star, flatMat.calm);
     const starHalo = new THREE.Sprite(haloMat.calm);
     // The nebula round the cluster (T17): two or three lobes flat in the plane, each its own
@@ -765,7 +954,7 @@ export function createGalaxyScene(canvas, {
     // sort of its own faces, so one pass draws the same thing.
     const lobes = nebulaLobes(lay.id).map((shape) => {
       const mesh = new THREE.Mesh(lobeGeo, new THREE.MeshBasicMaterial({
-        map: cloudTex, color: tone[neb.tone], transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true,
+        map: cloudTex, color: nebCol, transparent: true, fog: hazed(neb.tone), depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true,
         blending: THREE.AdditiveBlending, opacity: neb.opacity * shape.share,
       }));
       mesh.name = 'nebula';
@@ -781,15 +970,21 @@ export function createGalaxyScene(canvas, {
     }));
     plane.rotation.x = -Math.PI / 2;
     const lane = new THREE.Line(new THREE.BufferGeometry(), lineMat(palette.line.rgb, 0));
-    group.add(star, starHalo, ...lobes.map((l) => l.mesh), lines, plane, lane);
+    // An open moon ring's orbit line and tethers (T8), drawn only while one is open.
+    const moonLines = new THREE.LineSegments(new THREE.BufferGeometry(), lineMat(palette.line.rgb, 0));
+    moonLines.frustumCulled = false;
+    moonLines.visible = false;
+    moonLines.name = 'moon-ring';
+    group.add(star, starHalo, ...lobes.map((l) => l.mesh), lines, plane, lane, moonLines);
     const s = {
       id: lay.id, node: lay.node, home: { ...lay.home }, reach: lay.reach, status, nebula: null, since: clock(), peak: 1,
-      star, starHalo, members: [], nebulaSprite, lobes, lines, plane, lane,
+      star, starHalo, members: [], nebulaSprite, lobes, lines, plane, lane, moonLines,
       open: 0, squeeze: 1, alive: 1, unfold: 0, relay: null, gone: false,
-      neb: { color: tone[neb.tone].clone(), opacity: neb.opacity, size: neb.size }, starHaloSize: 0,
+      neb: { color: nebCol.clone(), opacity: neb.opacity, size: neb.size }, starHaloSize: 0,
+      index: lay.index, tint,
     };
     drawLane(s);
-    setMembers(s, lay.members);
+    setMembers(s, lay);
     paintSite(s, 0);
     return s;
   };
@@ -797,11 +992,40 @@ export function createGalaxyScene(canvas, {
   const dropSite = (s) => {
     for (const key of tweens.keys()) if (key.startsWith(`${s.id}:`)) tweens.delete(key);
     for (const m of s.members) group.remove(m.mesh, m.halo, m.mark);
-    group.remove(s.star, s.starHalo, ...s.lobes.map((l) => l.mesh), s.lines, s.plane, s.lane);
-    for (const o of [...s.lobes.map((l) => l.mesh.material), s.lines.geometry, s.lines.material, s.plane.geometry, s.plane.material, s.lane.geometry, s.lane.material]) o.dispose();
+    group.remove(s.star, s.starHalo, ...s.lobes.map((l) => l.mesh), s.lines, s.plane, s.lane, s.moonLines);
+    for (const o of [...s.lobes.map((l) => l.mesh.material), s.lines.geometry, s.lines.material, s.plane.geometry, s.plane.material, s.lane.geometry, s.lane.material, s.moonLines.geometry, s.moonLines.material]) o.dispose();
+    for (const [id, r] of moonRings) if (r.site === s.id) moonRings.delete(id);
+    if (ringHost != null && !moonRings.has(ringHost)) ringHost = null;
+  };
+
+  // The dust near each site takes its tint, its brightness kept (night 5 A4);
+  // redone only when the sites or their places change.
+  let dustTintKey = null;
+  const tintDust = (sites) => {
+    const live = sites.filter((x) => !x.gone);
+    const key = live.map((x) => `${x.id}@${x.index}:${x.home.x},${x.home.z}`).join('|');
+    if (key === dustTintKey) return;
+    dustTintKey = key;
+    const attr = dust.geometry.attributes.color, pos = dust.geometry.attributes.position.array;
+    dust.userData.base ??= attr.array.slice();
+    const base = dust.userData.base, out = attr.array, grain = [0, 0, 0];
+    const ratio = new Map(live.map((x) => [x, grainRatio(x.index)]));
+    for (let i = 0; i < out.length / 3; i++) {
+      const px = pos[i * 3], pz = pos[i * 3 + 2];
+      let near = null, d2 = Infinity;
+      for (const x of live) {
+        const d = (x.home.x - px) ** 2 + (x.home.z - pz) ** 2;
+        if (d < d2) { d2 = d; near = x; }
+      }
+      for (let c = 0; c < 3; c++) grain[c] = base[i * 3 + c];
+      const got = near ? tintGrain(grain, near.index, dustTintWeight(d2), ratio.get(near)) : grain;
+      for (let c = 0; c < 3; c++) out[i * 3 + c] = got[c];
+    }
+    attr.needsUpdate = true;
   };
 
   const index = (sites, core) => {
+    tintDust(sites);
     world = { sites, core, byId: new Map(sites.map((s) => [s.id, s])), version: (world?.version ?? 0) + 1, sunRadius: SIZE.sun };
     dirty = true;
   };
@@ -857,9 +1081,10 @@ export function createGalaxyScene(canvas, {
       const arr = s.lines.geometry.attributes.position.array;
       let j = 0;
       const push = (x, y, z) => { arr[j++] = x; arr[j++] = y; arr[j++] = z; };
-      const e = ease(k);
+      const e = smoother(k);
       const spread = CLOSED + (1 - CLOSED) * e;
       for (const m of s.members) {
+        if (m.moon) continue; // placeMoons, once their planets stand
         const o = foldAt(k, m.off);
         const x = s.home.x + o.x * a, y = s.home.y + o.y * a, z = s.home.z + o.z * a;
         m.mesh.position.set(x, y, z);
@@ -882,6 +1107,7 @@ export function createGalaxyScene(canvas, {
           push(x + Math.cos(a1) * r, s.home.y, z + Math.sin(a1) * r);
         }
       }
+      placeMoons(s, clock());
       s.lines.geometry.setDrawRange(0, j / 3);
       s.lines.geometry.attributes.position.needsUpdate = true;
       s.lines.material.opacity = palette.line.alpha * (0.3 + 1.2 * e) * a;
@@ -890,6 +1116,158 @@ export function createGalaxyScene(canvas, {
       fadeNear(s);
     }
     dirty = false;
+  };
+
+  /**
+   * A site's moons (T7), folded: each on its tight orbit round its planet as
+   * drawn now, at its size (bodyRadius); a calm one grows in with the opening
+   * (MOON.from-to), one in trouble is always there and is a target. A planet
+   * whose ring is open (T8, `moonRings`) eases its moons from there onto the ring
+   * (ringPose), a calm one growing to MOON.calm, named and a target from half
+   * open; its orbit line and tethers go in `s.moonLines`. `s.moonsTurn` says
+   * whether any is shown and turning, `s.ringLive` whether a ring is open or
+   * easing, so frame() moves them on (a ring follows the camera, in still
+   * mode too).
+   */
+  const placeMoons = (s, now) => {
+    const k = s.unfold ?? 0, a = s.alive;
+    const shown = smoothstep(MOON.from, MOON.to, k);
+    const markIn = smoothstep(MARK.from, MARK.to, k);
+    let any = false, live = false;
+    const poses = new Map();
+    for (const m of s.members) {
+      if (!m.moon) continue;
+      const out = troubled(m.tone);
+      const h = m.moon.host;
+      const e = (moonRings.get(h.id)?.k ?? 0) * shown * a;
+      if (moonRings.has(h.id)) live = true;
+      const f = (out ? 1 : shown) * a;
+      m.ringOpen = e >= 0.5;
+      m.tappable = out || m.ringOpen;
+      m.mesh.visible = f > 0.005;
+      if (!m.mesh.visible) { m.halo.visible = false; m.mark.visible = false; m.markShown = 0; continue; }
+      any = true;
+      const hp = h.mesh.position;
+      const hostR = h.mesh.scale.x * h.mesh.geometry.parameters.radius;
+      // Opened, a calm moon is drawn at MOON.calm (folded it is foldK of that); trouble keeps its size.
+      const grown = out ? m.size : m.size + (MOON.calm - m.size) * e;
+      const r = grown * f;
+      const o = moonAt(m.moon, (hostR * MOON.tight + (MOON.pad + m.size) * a) * (0.5 + 0.5 * f), still ? 0 : now);
+      let x = hp.x + o.x, y = hp.y + o.y, z = hp.z + o.z;
+      if (e > 0) {
+        let pose = poses.get(h);
+        if (!pose) { pose = ringPose(h, hostR, m.moon.n, out ? m.size : MOON.calm, e); poses.set(h, pose); }
+        const th = ringAngle(m.moon.i, m.moon.n), c = Math.cos(th), sn = Math.sin(th);
+        const rx = hp.x + pose.R * (c * pose.u.x + sn * pose.v.x);
+        const ry = hp.y + pose.R * (c * pose.u.y + sn * pose.v.y);
+        const rz = hp.z + pose.R * (c * pose.u.z + sn * pose.v.z);
+        x += (rx - x) * e; y += (ry - y) * e; z += (rz - z) * e;
+        pose.moons.push({ x, y, z, r });
+      }
+      m.mesh.position.set(x, y, z);
+      m.mesh.scale.setScalar(Math.max(1e-3, r / m.mesh.geometry.parameters.radius));
+      m.halo.position.set(x, y, z);
+      m.halo.visible = m.haloSize * f > 0.5;
+      m.halo.scale.setScalar(Math.max(1e-3, m.haloSize * f));
+      m.mark.position.set(x, y, z);
+      m.markShown = MARK_SHAPE[m.tone] ? markIn * f : 0;
+      m.mark.scale.setScalar(Math.max(1e-3, m.size * 2 * MARK.k * m.markShown));
+      m.mark.visible = m.markShown > 0.02;
+    }
+    drawRings(s, poses);
+    s.moonsTurn = any && !still;
+    s.ringLive = live;
+  };
+
+  // The camera's right, up and back axes (its matrixWorld's columns), for ringPose.
+  const camX = new THREE.Vector3(), camY = new THREE.Vector3(), camZ = new THREE.Vector3(), toHost = new THREE.Vector3();
+  /**
+   * An open ring round planet `h` (drawn `hostR` in radius) for `n` moons of
+   * radius `moonR`, at its opening `e`: its radius `R` in world units from
+   * moonRingPx at the planet's depth, and the two axes of its plane, the
+   * camera's right `u` and its up tilted MOON_RING.tilt toward it `v`.
+   */
+  const ringPose = (h, hostR, n, moonR, e) => {
+    camera.matrixWorld.extractBasis(camX, camY, camZ);
+    const depth = Math.max(camera.near, toHost.copy(h.mesh.position).sub(camera.position).dot(camZ) * -1);
+    const unit = (sized.get().H || 1) / (2 * Math.tan((camera.fov * Math.PI) / 360) * depth); // css px per world unit
+    const t = MOON_RING.tilt;
+    return {
+      R: moonRingPx(n, hostR * unit, moonR * unit) / unit,
+      u: camX.clone(),
+      v: camY.clone().multiplyScalar(Math.cos(t)).addScaledVector(camZ, Math.sin(t)),
+      hp: h.mesh.position, hostR, e, moons: [],
+    };
+  };
+
+  /** The open rings' faint orbit lines and their tethers, planet rim to moon (T8), as placeMoons left them. */
+  const drawRings = (s, poses) => {
+    const attr = s.moonLines.geometry.attributes.position;
+    if (!attr || attr.count < 2) return;
+    const arr = attr.array;
+    let j = 0, e = 0;
+    const push = (x, y, z) => { if (j + 3 <= arr.length) { arr[j++] = x; arr[j++] = y; arr[j++] = z; } };
+    const N = MOON_RING.segs;
+    for (const p of [...poses.values()].sort((A, B) => B.e - A.e).slice(0, 2)) {
+      e = Math.max(e, p.e);
+      const R = p.R * p.e; // the ring grows out with its moons
+      const at = (i) => {
+        const th = (i / N) * Math.PI * 2, c = Math.cos(th) * R, sn = Math.sin(th) * R;
+        return [p.hp.x + c * p.u.x + sn * p.v.x, p.hp.y + c * p.u.y + sn * p.v.y, p.hp.z + c * p.u.z + sn * p.v.z];
+      };
+      for (let i = 0; i < N; i++) { push(...at(i)); push(...at(i + 1)); }
+      for (const m of p.moons) {
+        const dx = m.x - p.hp.x, dy = m.y - p.hp.y, dz = m.z - p.hp.z;
+        const d = Math.hypot(dx, dy, dz);
+        if (d <= p.hostR + m.r + 1) continue;
+        const a0 = p.hostR * 1.15 / d, a1 = 1 - (m.r * 1.6) / d;
+        push(p.hp.x + dx * a0, p.hp.y + dy * a0, p.hp.z + dz * a0);
+        push(p.hp.x + dx * a1, p.hp.y + dy * a1, p.hp.z + dz * a1);
+      }
+    }
+    s.moonLines.visible = j > 0;
+    s.moonLines.geometry.setDrawRange(0, j / 3);
+    if (j > 0) attr.needsUpdate = true;
+    s.moonLines.material.opacity = palette.line.alpha * MOON_RING.alpha * e;
+  };
+
+  /**
+   * Opens planet `id`'s moons onto their ring (T8), or the ring of the planet
+   * moon `id` orbits; any other open ring folds. A planet with no moons, or
+   * null, folds them all. Over `ms` (OPEN_MS; 0 at once, as in still mode),
+   * from where each ring is. Returns the planet whose ring opens, or null.
+   */
+  const openMoons = (id, ms = still ? 0 : OPEN_MS) => {
+    let host = null, site = null;
+    for (const s of world?.sites ?? []) {
+      if (id == null) break;
+      const m = s.members.find((x) => x.id === id);
+      if (!m) continue;
+      const h = m.moon ? m.moon.host : m.planet ? m : null;
+      if (h && s.members.some((x) => x.moon?.host === h)) { host = h.id; site = s.id; }
+      break;
+    }
+    const glideRing = (hid, r, to) => {
+      const key = `${r.site}:ring:${hid}`, from = r.k;
+      const s = world?.byId.get(r.site);
+      if (s) s.ringLive = true;
+      if (!ms || from === to) {
+        tweens.delete(key);
+        r.k = to;
+        if (!to) moonRings.delete(hid);
+        dirty = true;
+        return;
+      }
+      tween(key, ms, (t) => { r.k = from + (to - from) * smoother(t); }, () => { if (!to) moonRings.delete(hid); });
+    };
+    for (const [hid, r] of moonRings) if (hid !== host) glideRing(hid, r, 0);
+    if (host != null) {
+      const r = moonRings.get(host) ?? { site, k: 0 };
+      moonRings.set(host, r);
+      glideRing(host, r, 1);
+    }
+    ringHost = host;
+    return host;
   };
 
   /** The first model: every site at once, folded. */
@@ -942,7 +1320,7 @@ export function createGalaxyScene(canvas, {
       // A star whose place moved glides there; the camera reads `home` as it goes.
       const from = { ...s.home }, to = ls.home;
       if (from.x !== to.x || from.y !== to.y || from.z !== to.z) {
-        tween(`${s.id}:home`, LIVE.glideMs, (k) => { Object.assign(s.home, glide(from, to, k)); drawLane(s); });
+        tween(`${s.id}:home`, LIVE.glideMs, (k) => { Object.assign(s.home, glide(from, to, k)); drawLane(s); }, () => tintDust(world.sites));
       }
       if (plan.changed.includes(ls.id)) {
         const r = s.relay;
@@ -993,7 +1371,8 @@ export function createGalaxyScene(canvas, {
       const ph = relayPhase(now - r.t0, r.from);
       if (ph.swap && !r.swapped) {
         r.swapped = true;
-        setMembers(s, r.lay.members);
+        setMembers(s, r.lay, LIVE.recolourMs);
+        paintSite(s, LIVE.recolourMs);
         world.version += 1;
       }
       s.squeeze = ph.squeeze;
@@ -1027,7 +1406,8 @@ export function createGalaxyScene(canvas, {
     lastKey = k;
     const shown = new Map(tourSites(nodes).map((s) => [s.id, s.status]));
     const tree = treeKey(nodes, shown.keys());
-    const lay = galaxyLayout(nodes);
+    // Only the shown sites take the rosette's slots (layout.js), so a hidden one leaves no gap.
+    const lay = galaxyLayout(nodes, undefined, shown.keys());
     if (!world) build(lay, shown);
     else if (tree === lastTree) recolour(lay, shown);
     else relive(lay, shown);
@@ -1153,7 +1533,7 @@ export function createGalaxyScene(canvas, {
       const t = at.member ? at.member.tone : toneOf(at.site.node);
       if (t !== 'calm') continue;
       const look = activityLook(w.count);
-      const r = (at.member ? at.member.size * (at.member.lift ?? 1) : SIZE.star) * at.site.alive;
+      const r = (at.member ? at.member.size * (at.member.lift ?? 1) : SIZE.star * (at.site.carry ?? 1)) * at.site.alive;
       const glow = glows[i], ring = loops[i];
       i += 1;
       const far = tall * camera.position.distanceTo(at.pos) * at.site.alive;
@@ -1219,7 +1599,7 @@ export function createGalaxyScene(canvas, {
     const coreTex = keep(beamTexture(doc, coreProfile, 1));
     const beamGeo = keep(new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0));
     const beamMat = (map, color) => keep(new THREE.MeshBasicMaterial({
-      map, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+      map, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, fog: false,
     }));
     for (let i = 0; i < BEACON.max; i++) {
       const pillar = new THREE.Mesh(beamGeo, beamMat(sheathTex, tone.crit));
@@ -1229,7 +1609,7 @@ export function createGalaxyScene(canvas, {
       core.name = 'fx-beacon-core';
       core.renderOrder = 1;
       const tip = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-        map: glowTex, color: tone.crit, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+        map: glowTex, color: tone.crit, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, fog: false,
       })));
       tip.name = 'fx-beacon-tip';
       pillar.visible = core.visible = tip.visible = false;
@@ -1280,7 +1660,7 @@ export function createGalaxyScene(canvas, {
       // Close by, it looks wider than at the overview: fade it (beaconNear).
       const seen = Math.hypot(camera.position.x - s.home.x, camera.position.y - s.home.y - h / 2, camera.position.z - s.home.z);
       const ratio = w / Math.max(1, 2 * seen * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1e-6, at.width);
-      const k = Math.min(1, at.rise * 2) * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold)) * beaconNear(ratio);
+      const k = Math.min(1, at.rise * 2) * s.alive * (1 - (1 - BEACON.held) * smoother(s.unfold)) * beaconNear(ratio);
       slot.id = id;
       const { pillar, core, tip } = slot;
       const turn = Math.atan2(camera.position.x - s.home.x, camera.position.z - s.home.z);
@@ -1323,7 +1703,7 @@ export function createGalaxyScene(canvas, {
   if (fx?.has('afterglow')) {
     for (let i = 0; i < AFTERGLOW.max; i++) {
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.99, 1, 128), keep(new THREE.MeshBasicMaterial({
-        color: tone.calm.clone(), side: THREE.DoubleSide, forceSinglePass: true, transparent: true, opacity: 0, depthWrite: false,
+        color: tone.calm.clone(), side: THREE.DoubleSide, forceSinglePass: true, transparent: true, opacity: 0, depthWrite: false, fog: false,
       })));
       ring.rotation.x = -Math.PI / 2;
       ring.name = 'fx-afterglow';
@@ -1361,7 +1741,7 @@ export function createGalaxyScene(canvas, {
       ring.material.color.lerpColors(ringHue[at.from], ringHue[at.to], at.mix);
       const seen = Math.hypot(camera.position.x - s.home.x, camera.position.y - s.home.y, camera.position.z - s.home.z);
       const ratio = width / Math.max(1, 2 * seen * Math.tan((camera.fov * Math.PI) / 360)) / AFTERGLOW.line;
-      ring.material.opacity = at.alpha * at.k * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold)) * beaconNear(ratio);
+      ring.material.opacity = at.alpha * at.k * s.alive * (1 - (1 - BEACON.held) * smoother(s.unfold)) * beaconNear(ratio);
       ring.visible = ring.material.opacity > 0.005;
     }
     for (; i < rings.length; i++) { rings[i].ring.visible = false; rings[i].id = null; }
@@ -1444,7 +1824,7 @@ export function createGalaxyScene(canvas, {
       slot.id = p.id;
       ring.position.set(s.home.x, s.home.y, s.home.z);
       ring.scale.setScalar(SWEEP.pingRadius * p.r * s.alive);
-      ring.material.opacity = SWEEP.pingOpacity * p.k * s.alive * (1 - ease(s.unfold));
+      ring.material.opacity = SWEEP.pingOpacity * p.k * s.alive * (1 - smoother(s.unfold));
       ring.visible = ring.material.opacity > 0.005;
     }
     for (; i < pingRings.length; i++) { pingRings[i].ring.visible = false; pingRings[i].id = null; }
@@ -1566,7 +1946,7 @@ export function createGalaxyScene(canvas, {
     warpView.value.copy(warpBuf);
     const out = [];
     for (const s of world?.sites ?? []) {
-      if (s.gone || s.nebula?.tone !== 'crit' || ease(s.unfold) >= 0.5) continue;
+      if (s.gone || s.nebula?.tone !== 'crit' || smoother(s.unfold) >= 0.5) continue;
       toView(warpNdc, s.home);
       const depth = -warpNdc.z;
       if (depth <= camera.near) continue;
@@ -1614,7 +1994,7 @@ export function createGalaxyScene(canvas, {
     let best = null;
     for (const s of world?.sites ?? []) if (!s.gone && s.unfold > (best?.unfold ?? 0)) best = s;
     if (!best) return { x: 0, y: 0, z: 0, r: 1, k: 0 };
-    return { ...best.home, r: dustFadeRadius(best.reach), k: ease(best.unfold) * best.alive };
+    return { ...best.home, r: dustFadeRadius(best.reach), k: smoother(best.unfold) * best.alive };
   };
   const holdDust = () => {
     const h = heldDust();
@@ -1664,7 +2044,7 @@ export function createGalaxyScene(canvas, {
     };
   };
   const fadeNear = (s) => {
-    const e = ease(s.unfold), a = s.alive;
+    const e = smoother(s.unfold), a = s.alive;
     const w = s.id === held ? 0 : 1 - e;
     const near = (size, p) => 1 - (1 - nearOf(size, p)) * w;
     // You are inside the nebula now: it thins as the system opens.
@@ -1675,10 +2055,19 @@ export function createGalaxyScene(canvas, {
       l.mesh.material.opacity = s.neb.opacity * l.shape.share * s.peak * (1 - 0.7 * e) * a * near(l.shape.len * size, l.mesh.position) * leash(l.mesh.position);
     }
     const star = near(s.starHaloSize * a, s.home);
-    s.star.scale.setScalar(Math.max(1e-3, a * star));
+    s.star.scale.setScalar(Math.max(1e-3, a * star * s.carry));
     s.starHalo.scale.setScalar(Math.max(1e-3, s.starHaloSize * a * star));
   };
   const fadeSun = () => { sunHalo.material.opacity = SUN_HALO * sunShown.glow * nearOf(SIZE.sunHalo * sunShown.scale, sun.position); };
+
+  /** The haze's range for this frame's camera (hazeRange): one plane test, read by three as uniforms. */
+  const sight = new THREE.Vector3();
+  const haze = () => {
+    camera.getWorldDirection(sight);
+    const r = hazeRange(camera.position, sight);
+    scene.fog.near = r.near;
+    scene.fog.far = r.far;
+  };
 
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
@@ -1693,6 +2082,7 @@ export function createGalaxyScene(canvas, {
         s.breath = s.nebula.breathes ? 1 + PULSE.nebula * wave : 1;
         placeLobes(s);
         fadeNear(s);
+        if (s.moonsTurn || s.ringLive) placeMoons(s, now);
       }
     }
     easeSun(now);
@@ -1705,6 +2095,7 @@ export function createGalaxyScene(canvas, {
     if (rings.length) drawAfterglows(now);
     if (sweepLine) drawSweep();
     if (warpParts.length) drawWarp();
+    haze();
     renderer.render(scene, camera);
   };
 
@@ -1724,7 +2115,7 @@ export function createGalaxyScene(canvas, {
     const next = spheres(L.seg);
     sun.geometry = next.sun;
     for (const s of world?.sites ?? []) {
-      s.star.geometry = next.star;
+      s.star.geometry = next[starSphere(s.carryTo)];
       for (const m of s.members) m.mesh.geometry = m.mesh.geometry === geo.planet ? next.planet : next.dot;
     }
     for (const k of Object.keys(geo)) { geo[k].dispose(); geo[k] = next[k]; }
@@ -1750,7 +2141,9 @@ export function createGalaxyScene(canvas, {
   };
 
   return {
-    update, setOpen, setHeld: (id) => { held = id ?? null; },
+    update, setOpen, openMoons, setHeld: (id) => { held = id ?? null; },
+    /** The planet whose moons are open or opening (T8), else null. */
+    moonsOpen: () => ringHost,
     setSun: (look) => { if (look) sunWant = look; }, setActivity, setJobs, setCritAges, setWarp, setSweep, drawn, planets, beams, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,
@@ -1777,5 +2170,7 @@ export function createGalaxyScene(canvas, {
     get ribbon() { return ribbon; },
     /** The near-site bands' mesh (T19), for tests. */
     get band() { return band; },
+    /** The depth haze (HAZE): the scene's fog, its range as of the last frame. */
+    get haze() { return scene.fog; },
   };
 }

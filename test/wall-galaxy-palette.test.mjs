@@ -131,8 +131,8 @@ test('the nebula takes the site worst status; trouble is louder and bigger, only
     assert.ok(b.size >= a.size);
   }
   assert.deepEqual(TONES.filter((t) => NEBULA[t].breathes), ['crit']);
-  // Nebulae never meet: the layout keeps stars MIN_SITE_GAP (700) apart.
-  assert.ok(Math.max(...TONES.map((t) => NEBULA[t].size)) <= 700);
+  // Nebulae never meet: the layout keeps stars MIN_SITE_GAP (448 since night 5) apart.
+  assert.ok(Math.max(...TONES.map((t) => NEBULA[t].size)) <= 448);
 });
 
 test('a site nebula comes from its subtree: a crit room under a calm site makes it red', () => {

@@ -1,1435 +1,1208 @@
 # Wall: progress
 
-Night 4 (README §7 Night 4): the Wall's last night before its PRs merge. Night 3's open tasks (0a), one camera
-director (A), the owner's unbuilt effects (0b), then the show interface (B), countdowns (C), half a screen (D) and
-ready to merge (E). Night 3 is in `nights/night-3/` (its morning report says what stands), night 2 in `nights/night-2/`,
-night 1 in `nights/night-1/`.
+Night 5 (README §7 Night 5): make the galaxy feel right in the hand. The owner's picks from the live sketch become the
+defaults (A), systems get roomier and carry nested moons (B), touch and mouse let him turn an open system in 3D (C), a
+node card replaces the old sheet (D), docs and the cockpit handover come last (E). Night 4 is in `nights/night-4/` (its
+morning report says what stands), nights 1-3 in `nights/night-1/` to `nights/night-3/`.
 
-Notes for every builder round (planner, round 1):
-- **Order** (README §7 Night 4 `Order:`): 0a first, the touch fixes (T1-T4), then `MANUAL · TOUR IN 0:40` (T5), then
-  night 3's other open tasks in night 3's order (T6-T12); then A, the director (T13-T14), since it rewires touch and
-  tour; then 0b, the effects (T15-T18), interleaved with triage's panel fixes. B, C, D and E did not fit the first 18
-  tasks: they wait at the top of `## Later` **in that order**, and the replan takes them from there before anything
-  else in Later. E is the merge gate: a replan with little room left takes E before C and D.
-- **Read first** (README §7 Night 4): `docs/plans/product.md` and `docs/plans/cockpit/README.md` are on `main`, not on
-  this branch: `git show origin/main:docs/plans/product.md`, `git show origin/main:docs/plans/cockpit/README.md` (§3
-  C4 Show, C4b Canvas, §5 the demo). The Wall is the cockpit's first screen; product §3: every feature ships with
-  demo data and lands with its doc page.
-- **Not decided by the owner, so never a default**: a frame cap only behind `?cap=30` (off by default; Later); the r46
-  taste questions (kicker `TARGET 02 / 05`, the calm plate's line, sun or hub name) stay under For the owner.
-- **Effects are switches** (D9): `?fx=` names stay off by default. After T15 and T17 the list is `beacon`, `warp`,
-  `afterglow`, `activity`, `sweep` (`fx.js FX_NAMES`, the comment at the top of `galaxy/main.js`, `<html data-fx>`).
-- **Keep the palette and the speed** (owner, 2026-10-26, on the Surface Pro 7). Nothing added may make
-  `galaxy.html?demo=1&fx=beacon&perf=1` slower there: judge by script ms per frame (`?perf=1`, `budget.js`), not by
-  fps on this VM.
-- **No Wall module is fenced**; `wall.html` keeps working and its tests stay green (it is still the default page of
-  `wall.html`, radial). `loop/fenced.txt` is unchanged: the Map tests and `docs/plans/wall/loop/*` (so `film.mjs`)
-  are fenced.
-- **Guardrails** as before (`test/frontend.test.mjs`, `test/design-guardrails.test.mjs`): no `innerHTML`, no wholesale
-  `style` attribute, no new sheet in `public/css/` (rules go in `wall.css`), colours from tokens (WebGL colours via
-  `palette.js`), three.js by a relative path. DOM tests use `test/helpers/fakedom.mjs`; page tests drive pointer
-  events on a fake clock as `test/wall-galaxy-touch.test.mjs` and `test/wall-galaxy-resume.test.mjs` do.
-- **Filming**: `film.mjs` needs the SwiftShader wrapper (`nights/night-1/PROGRESS.md` lines 19-22):
-  `CHROME=$RUN_DIR/chrome-swiftshader.sh node docs/plans/wall/loop/film.mjs --url
-  'http://127.0.0.1:7795/galaxy.html?demo=1&quality=0' …` on `demo-fleet.mjs --size large` (`&pace=wall` for the
-  real tour speed). Touch films: a CDP script with `Input.dispatchTouchEvent`, touchStart and touchEnd sent back to
-  back (night 3 T14's note). Every film script closes its Chrome in a `finally` and writes its pid to `$RUN_DIR`
-  (night 3 left orphaned Chromes at 250 % CPU twice).
-- **Feed fields** (D3, product §3.3): `glow`, `ring` and from C `countdown` are generic node fields a feed sets; the
-  galaxy paints them, the app ignores them. Demo data for each lives in `test/helpers/demo-hub.mjs` (the large
-  fleet: `writeDemoMapLarge`, `createLargeLive`).
+Notes for every builder round (planner, round 7):
+- **Order** (README §7 Night 5 `Order:`): A (T1-T5, A1 and A2 together in T1), then B1 (T6), B2-B3 (T7-T10), then C
+  with C1-C3 and C5 before C4 (T11-T16), then D (T17-T20), interleaved with triage's panel fixes; E last (T21-T22).
+  Every part of A-E is a task here; nothing of tonight's list waits in `## Later`.
+- **The sketch is a reference, not code to paste**: `docs/plans/wall/sketch/night5/sketch5.diff` (against `main`
+  0c6b951). The owner's picks are its `sk_tight=2 sk_size=1 sk_tint=2 sk_sun=1 sk_soft=1 sk_haze=1 sk_arr=2 sk_sys=1
+  sk_moons=1 sk_pal=1 sk_card=1`; they land as **defaults with no switch**. Nothing reads `SK`, `?sk_*` or the DOM at
+  load time; `sketch.js`, `sketch-panel.js`, `sketch5.css` and the presets do not land. The diff broke 11 guardrail tests:
+  no new sheet in `public/css/` (card and tappable rules go in `wall.css`, added, existing rules unchanged), no
+  `innerHTML`, no wholesale `style`, no person's name in a label, tap wiring tested by behaviour, not by source.
+- **Fenced tonight** (`loop/fenced.txt`; the cockpit's night C1b works on them at the same time): `galaxy/tour.js`,
+  `galaxy/show.js`, `galaxy/transport.js`, `public/galaxy.html`, `test/wall-galaxy-handle.test.mjs`, the Map tests,
+  `server/*`, `e2e/*`, `test/cockpit*`, `package.json`. A change a task needs there is written as a patch under
+  `docs/plans/wall/patches/` (create it) with one paragraph of why, and the task does what it can without it.
+  The card needs no new element in `galaxy.html`: `main.js` creates it under the stage as `fan.js` does today.
+- **Shared, not fenced**: this night owns `galaxy/touch.js`, the zoom/flight timings and hand-over eases in
+  `galaxy/director.js`, the selection levels (site → planet → moon) and the card. In `galaxy/main.js` change only
+  selection, card and look parts; the tour hold and the pane hooks stay; C1b changes the stale/board-down caption and tag
+  parts (do not build stale looks). `window.__cockpitView` and `data-wall-state` keep every name and value (additive only).
+- **Keep B237 and B239** (cockpit C1a): the idle minute counts from the tap; the hand-back to the tour starts with the
+  overview. `test/wall-galaxy-resume.test.mjs` and `test/wall-galaxy-show.test.mjs` pin them and stay green unchanged in
+  those assertions. Playwright is not installed on this VM, so `e2e/cockpit` (S-C1-01, S-SCR-0x) runs on `ci` only:
+  before changing a selector, state or event in `main.js`/`touch.js`, grep `e2e/cockpit/*.mjs` and `test/cockpit*` for it.
+- **Every tappable added or resized**: ≥ 48 px, a visible pressed state, `touch-action: manipulation` (cockpit D224).
+- **Colours**: `tokens.css` may hold only the accent and status hues as chromatic values (`test/design-guardrails.test.mjs`,
+  chroma > 0.02), and other sheets hold no colour literals. So the site tints (chroma 0.04-0.05) and the lifted ground live
+  as one frozen, documented table in `galaxy/palette.js` (WebGL numbers), reaching CSS (the card's 2 px edge) through
+  `el.style.setProperty('--…')` from that table; never a literal in `wall.css`. See `## For the owner`.
+- **Speed on the Surface** (owner, night 3): nothing may make `galaxy.html?demo=1&fx=beacon&perf=1` slower; judge by script
+  ms per frame and draw calls/triangles (`?perf=1`, `budget.js`), before/after in the task's notes, not by fps on this VM.
+- **Filming**: `film.mjs` needs the SwiftShader wrapper (`nights/night-1/PROGRESS.md` lines 19-22) and the large demo
+  (`demo-fleet.mjs --size large`); if `--cpu 4` stalls (night 4 r21), film at `--cpu 1` and say so. Touch films: a CDP
+  script with `Input.dispatchTouchEvent` (night 3 T14's note); every film script closes Chrome in a `finally` and writes
+  its pid to `$RUN_DIR`.
+- **Tests**: DOM tests on `test/helpers/fakedom.mjs`; page tests drive pointer events on a fake clock as
+  `test/wall-galaxy-touch.test.mjs` and `test/wall-galaxy-resume.test.mjs` do. `wall.html` keeps working.
 
 ## Tasks
 
-- [x] T1 (§7 Night 4 0a; was night 3's T36, r51-touch galaxy 2) [ui] [variant:galaxy] The sheet is not transparent
-  to the finger: in `galaxy/main.js pick`, a point inside the plate's box (`hud.covers()`), the fleet line's box or the
-  clock is never a star nor empty sky; a tap on a sheet row whose subject is a member opens that member
-  (`openPlanet`), anywhere else on the plate does nothing — done when: a page test with a sheet up and a star under it
-  finds a tap inside the plate's box opens nothing (no flight, no back step), and a tap on a member row opens that
-  member. (commit 54e7f96) Builder r3: `touch.js coverHit` over `hud.covers()` and `hud.targets()` (caption.js
-  `targets()`: the hero word and each problem row with its node id); anything on the words but a member row is
-  `COVERED` (no flight, no back). CDP check on the large demo (`shots/r3-t1-taps`): plate corner and clock taps
-  change nothing, a tap on the `STORAGE` hero opens `ROOM · IN HV2` with the camera kept. Seen while filming, for
-  T9: the map's own `■ STORAGE` label still shows beside a planet sheet whose hero names it.
-- [x] T2 (§7 Night 4 0a; was night 3's T38, r51-touch galaxy 4, fx-beacon 1) [ui] [variant:galaxy] The loudest
-  thing is a target: a tap in the fleet line's box at the overview (and under a sheet, where T1 keeps it from being
-  empty sky) opens its subject (the site, then the planet); `+N MORE` opens nothing yet; with `fx=beacon` on, the
-  pillar's screen segment (foot to tip, 27 px wide) counts as its site's target in `touch.js tapPoints` — done when: a
-  page test taps inside the banner box and sees the subject's site opened, and a test with `fx=beacon` finds a point
-  on the pillar's top hits the site. (commit 20ec4f8) Builder r7: frame.js `data-subject`, hud.js `targets()` gives
-  the line as a `step` row (its `+N more` first, no subject), touch.js `coverHit(…, open)` opens a step row's site
-  first and its planet only while that site is `place.site`. The pillar: scene.js `beams()`, camera.js `screenAt`,
-  touch.js `beamSegments`; "27 px wide" read as the finger's reach (`TAP.radiusPx` 27) either side of the segment,
-  the same disc as everywhere else, swept foot to tip. CDP check on the large demo with `fx=beacon`
-  (`shots/r7-t2-taps`): `+3 more` changes nothing, a tap on `HV2 · STORAGE` flies to HV2 with its sheet, a tap 6 px
-  under the pillar's tip (278 px above the star) opens HV2. Seen: under HV2's own sheet the line echoes the plate and
-  drops out (T20), so there the planet is reached by the plate's hero (T1), not the line. Film `shots/r7-galaxy`
-  unchanged from r3/r4 (13 fps under SwiftShader as before; no per-frame work added, picks run on a finger's down).
-- [x] T3 (§7 Night 4 0a; was night 3's T37, r51-touch galaxy 3) [ui] [variant:galaxy] Every trouble planet can be
-  picked: in an open system (41 members in HV1 of the large fixture, all with a neighbour nearer than the 54 px disc)
-  a tap whose disc holds two or more members fans them out on a ring of 48 px targets round the finger for the next
-  tap (option (a) of the review; the builder may take (b), the sheet's trouble members as rows of at least 48 px, if
-  (a) proves worse; say which and why in the notes) — done when: a test on the large fixture finds every trouble
-  member of HV1 and HV2 reachable by some tap sequence of at most two taps, and fan targets are at least 48 px apart.
-  (commit a5e46b6) Builder r8: option (a), `galaxy/fan.js`. Why not (b): the sheet names the worst and two more
-  (caption.js MAX_LINES), so a fourth trouble planet would still need the scene, and (b) never reaches a calm planet;
-  the sheet's member rows stay targets (T1). In an open system a tap whose disc holds two or more members
-  (touch.js `hitAll`) opens none: they fan out as 48 px rows (60 px pitch) in two arcs round the finger, each row on
-  the side and in the order its planet is, a leader from its inner end to its planet (followed every frame), a
-  ring where the finger was; the next tap on a row opens that planet, a tap anywhere else, a drag/zoom, back or the
-  tour closes it. The rows keep off the words (plate, fleet line, back): the fewest rows on them, then the least
-  move (at most `FAN.shiftPx` 120), and when one arc is blocked every row takes the other arc. Test
-  (`test/wall-galaxy-fan.test.mjs`): on the large fixture every member of lab (HV1, 41) and HV2, the trouble ones
-  first, opens in at most two taps on the real camera; rows ≥ 48 px, ≥ 48 px apart, never on each other, on the
-  stage. CDP check (`shots/r8-t3-fan`): a tap on `fix-login` in HV1 fanned 6 rows, the first pass put `search api`
-  over the plate's `1 WARN` (fixed by the one-arc rule, `04-fan.png` now clear), a row opened `FIX-LOGIN`, a tap
-  off the rows closed it, no console errors. Film `shots/r8-galaxy` as r7 (13.1 fps under SwiftShader; the fan
-  draws nothing while closed). Open: in half a screen (D) long names may leave too little width for two arcs;
-  the scene's own names of fanned planets stay visible beside their rows.
-- [x] T4 (§7 Night 4 0a; was night 3's T29, r36-dreamer touch 3) [ui] [variant:galaxy] BACK returns to the pose you
-  left: `goBack()` to the overview flies to the last explore pose (`touch.js` orbit yaw, pitch, dist, look) the person
-  held before opening a site, not the default fit; only the first touch (wake) resets to the default — done when: a
-  page test with a fake clock drags to a yaw, taps a site, goes back twice and finds the camera's orbit equal to the
-  dragged one, and a wake still lands on the default fit. (commit fa7611b) Builder r10: `touch.js createReturn`
-  (`leave(place, cam)` as a site opens, only off the overview and only a steered pose, `cam.want().kind === 'free'`;
-  a fitted overview keeps nothing, so back without a drag is the fit as before), `camera.js fly(pose, { ms })` (a
-  flight to a free pose, held there; nothing without `steer` or in still mode), `main.js toOverview(left.pose())` on
-  the last step back (the back control and empty sky alike); `wake` and `resume` clear it. Tests
-  (`test/wall-galaxy-resume.test.mjs`): drag → site → planet → back twice lands on the dragged orbit, flown not cut;
-  no drag → the fit; a hand-back then a wake → the fit, and the pose forgotten. CDP check on the large demo
-  (`shots/r10-t4-back`): drag, tap HV2, the back control: home pose equal to the dragged one (gap 0), the flight
-  back mid-way reads, no console errors. Film `shots/r10-galaxy`: the tour as r8 (11.7 fps under SwiftShader vs
-  13.1, VM load: nothing per frame added, the return is read only on a tap and a back). For T13/T14: the director takes `createReturn` over (its back step).
-- [x] T5 (§7 Night 4 0a; night 3's Later r41-operator touch 1 = r36-dreamer touch 1 = r51-touch galaxy 5; research
-  Q13) [ui] [variant:galaxy] Explore looks like a person is driving: while `touch.js` is in `explore`, a mono line by
-  the tag reads `MANUAL · TOUR IN 0:40` (`--text-2`, the tag's face, counting down the time left of `IDLE.ms` from the
-  last touch, whole seconds, reset by any touch; gone in the tour and while easing); at the overview in explore the
-  back control reads `▶ TOUR` and hands back to the tour at once (`tour.resume()`, as the minute does) — done when: a
-  page test on a fake clock sees no line in the tour, `MANUAL · TOUR IN 1:00` after the wake, `0:40` 20 s later, `1:00`
-  again after a drag, the line gone at the hand-back, and a tap on `▶ TOUR` at the overview resuming the tour; a CDP
-  still in explore shows the line, the tour's still does not. (commit 7e9255e) Builder r13: touch.js
-  `idleLeft` + `manualLine` (whole seconds rounded up), `createTouch` `left()` and `handBack()` (a `'handback'` event:
-  in explore the tour at once, the same `resume` as the minute's), `backControl(mode, place)` → `'back' | 'tour' | null`
-  and `createBack` `show(kind)` with `BACK_WORDS` (`‹ Back`, `▶ Tour`, `data-kind`). One behaviour change, so the line
-  can honestly read `1:00` after the wake: the minute now counts from the end of the first touch's 1.5 s ease, not the
-  waking touch (Q13: a running flight is not idle); `test/wall-galaxy-resume.test.mjs` pins it. The line is its own
-  `#galaxy-manual` under the tag (not inside it: the tag's box feeds the held-system framing's widest-seen covers),
-  right-aligned at 6vw, the tag's mono face and tracking, `--text-2`, tabular digits; the back control moved down
-  2.1vmin to `8vh + 8.6vmin` to make room. Both boxes are words for taps, names and the fan (`main.js touchCovers`).
-  CDP check on the large demo (`shots/r13-t5-manual`): tour and easing no line, explore `MANUAL · TOUR IN 0:59`
-  (SwiftShader's first frame lands a second late) with `▶ TOUR`, a site `‹ BACK`, back out `▶ TOUR`, its press hands
-  back at once (camera to HV2, line and control gone), no console errors. Film `shots/r13-galaxy`: the tour as r10
-  (11.9 fps under SwiftShader). Open for the director (T13/T14): `handBack` is the touch source giving up; and r11's
-  "the tour's return as an event" (kicker types `TOUR`) is not built.
-- [x] T6 (§7 Night 4 0a; was night 3's T31, r41-operator galaxy 3) [ui] [variant:galaxy] A passing crit keeps its
-  shape colour: under `.galaxy-label[data-dim]` only the name text goes to `--text-3`; the status glyph (`■`/`▲`) keeps
-  its tone hue (night 3's T15 greyed the glyph in flights: `■ HV2` grey beside its red nebula) — done when: a test
-  pins in `wall.css` that a dimmed crit/warn label's glyph keeps the crit/warn colour while its name is `--text-3`,
-  and a film of `galaxy.html?demo=1&quality=0` shows a red `■` on HV2 during flights. (commit 9ec5cff) Builder r14:
-  the shape is the span's own mark, `data-glyph` drawn by `wall.css` `.galaxy-label[data-glyph]::before` with
-  per-tone `::before` colours; the span's text is the word only, so `[data-dim]` greys the word and never the shape
-  (`labels.js labelParts`; `shown()` still returns the whole `■ HV2`). Same rendered text and box as before. Tests in
-  `test/wall-galaxy-arrive.test.mjs`. CDP check on the large demo (`shots/r14-t6-glyph`): over 45 s, 42 dimmed crit
-  samples, every `::before` crit red while the word is grey, 0 grey marks, no console errors. Film `shots/r14-galaxy`:
-  red `■ HV2` and yellow `▲ HV1` beside grey words in the flights (22 s, 25 s); 15.1 fps under SwiftShader.
-- [x] T7 (§7 Night 4 0a; was night 3's T32, r41-operator galaxy 6) [ui] [variant:galaxy] No red without a name: in
-  flights a nebula lobe that leaves the frame faster than its star must not show as a nameless red smear at the frame
-  edge — `scene.js nearFade` also fades a crit/warn lobe whose projected centre is beyond ~1.5 reach of its star's
-  anchor on screen — done when: a test on the large fixture finds, over `flightPose` samples, no lobe drawn at more
-  than that distance from its label anchor, and a film of `galaxy.html?demo=1&quality=0&fx=warp` has no red blob at
-  the edge without a label near it. (commit eaae256) Builder r15:
-  the leash alone never bites in the large demo's flights (a lobe's centre swings out at most 0.54 of its nebula's
-  reach), so r41's smear was a nebula whose star, and with it the name (labels.js names only stars in frame), had
-  left the frame. `scene.js lobeLeash` (`LOBE_LEASH { from: 1, to: 1.5, edge: 0.25 }`) does both: a crit/warn lobe
-  fades past 1-1.5 nebula reach (`LOBES.reach` of its size, on screen at the star's depth) from its star, and the
-  whole nebula fades as its star comes within a quarter reach (at most a quarter of the frame's height) of the edge,
-  gone as it leaves. The system flown to is leashed too (folded, it is still a red blob); the leash lets go as a
-  system opens. Calm/low nebulae are untouched. Tests in `test/wall-galaxy-nebula.test.mjs`: over every flight of
-  the large demo (lab crit, a cloud warn), no hued lobe in frame is drawn with its star out of frame or past 1.5
-  reach, the overview unchanged. Film `shots/r15-galaxy-warp`: every red cloud has its `■` name beside it, no
-  console errors, 11.7 fps under SwiftShader.
-- [x] T8 (§7 Night 4 0a; was night 3's T33, r46-skeptic galaxy 1) [ui] [variant:galaxy] The banner does not change
-  subject with the camera: with more than one crit standing the banner (`hud.js bannerModel`, `frame.js`) names them
-  in a fixed order (oldest first, `■ 2 CRIT · HV2 · HV1`, the reason line for the oldest), never picking the subject
-  by where the camera is — done when: a test on a model with two crits gets the same banner text for every held
-  site/camera position and the oldest crit's reason, and a film of `galaxy.html?demo=1&quality=0` (`--size large`)
-  has no banner subject change while the fleet is the same. (commit 3dbe1c7) Builder r18:
-  `frame.js worstLine(model, { since })` names two or more crit/down problems as one far line (`problemsOf`,
-  `critsLine`): `word` `2 crit · hv2 · hv1` (places, at most `FAR_NAMES` 3, a site once), `why` the oldest's name
-  and reason (`storage · pool 97% full`), `id` the oldest, `crits` the count, `more` the milder problems; `2 down`
-  only when all are down, a tie puts a down first, then model order. `hud.js firstSeen` keeps when each crit
-  problem (by root id) was first seen and feeds it as `since`; `bannerModel` no longer steps past a held crit
-  while two stand (it still steps at the line step, and T30's never-down rule stands); `farNode` finds the node by
-  `w.id`. `wall.html` (no `since`) gets the same line in model order. Holding the oldest is still an echo (the
-  line drops out under its plate, T20); T9 decides what shows then. Tests in `test/wall-frame.test.mjs` and
-  `test/wall-galaxy-hud.test.mjs` (the old two-crit stepping tests now use two warns). Film `shots/r18-galaxy-b`:
-  HV1 VM-C went down at 29 s, the banner reads `■ 2 CRIT · HV2 · HV1 / STORAGE · POOL 97% FULL` and stays so on
-  the VM-C visit; 13 fps under SwiftShader, no console errors. Still `shots/r18-t8-two/two.png`: the line fits the
-  band beside the clock at 1368.
-- [x] T9 (§7 Night 4 0a; was night 3's T34, r46-skeptic galaxy 2; after T8) [ui] [variant:galaxy] One headline with
-  a second crit standing: the echo test (`hud.js bannerEcho`) is "the banner's line names the held problem", whatever
-  else stands (then the banner shows the next problem or drops out), and `hud.named()` hides the planet's own label on
-  every plate that names it, not only the first visit — done when: a test with two crits (HV2 STORAGE held, HV1 VM-C
-  also crit) finds no banner naming STORAGE and no shown label for the planet while the hero names it, and a film
-  frame at the second crit's target shows the hero once. (commit 2b7cca8) Builder r19:
-  a probe of the live page (`tools/r19-probe.mjs`, the names in sight every 0.5 s over 100 s) found `named()`
-  already right on every visit since T8/T20 (STORAGE's and VM-C's labels gone under each of their plates), and
-  the banner never naming STORAGE under its plate, but by dropping out whole: with two crits standing the other
-  one was then nowhere in sight. Decided: `hud.js bannerEcho` answers `'why'` when the line names two or more
-  crits and the held one is the oldest (the line's why is its reason, the words `2 crit · hv2 · hv1` no plate
-  says); `frame.js` sets `data-echo="why"` and wall.css hides only `.wall-fleet-sub-why` under a plate (its
-  place kept, nothing moves), so `■ 2 CRIT · HV2 · HV1 +4 MORE` stays in sight at the plate's name step and still
-  covers its box for the names; `hushed()` only for a whole echo (`data-echo=""`). Holding the newer crit (VM-C)
-  is no echo: the line keeps the oldest's reason. No subject change with the camera (T8 holds). Tests in
-  `test/wall-galaxy-hud.test.mjs` (night 4 T9: five visits alternating HV2/HV1, the shown rows, `named()`, the
-  cover; VM-C clearing makes it a whole echo again). Still `shots/r19-t9/hv2-two.png`: hero `■ STORAGE / POOL
-  97% FULL` once, no planet label, banner `■ 2 CRIT · HV2 · HV1` with no why. Film `shots/r19-galaxy` (12 frames
-  over 74 s): no errors, 12.4 fps under SwiftShader as before; its frames miss the HV2 visit during the two crits,
-  so the still is the evidence.
-- [x] T10 (§7 Night 4 0a; was night 3's T35, r46-skeptic galaxy 3 = r41-operator galaxy 8 = night 3 A4 feathered
-  plates) [ui] [variant:galaxy] No dark rectangle over the galaxy: the banner's ground (the far cover) and the caption
-  plate's ground are removed or become a feathered edge / text-shadow halo, so no star, nebula or label is cut flat by
-  a box; the corner brackets stay the only hard lines — done when: a `wall.css` test pins no hard-edged opaque ground
-  on `.wall-fleet` and the plate (halo or `mask-image` instead), `wall.html`'s caption tests stay green, and a still of
-  `galaxy.html?at=overview&quality=0` with a site under the banner shows no step in the ribbon at the banner's edge.
-  (commit c80e8a9) Builder r20: both grounds are now gradient layers that are opaque under the words and fall off to
-  nothing across the padding on a smoothstep (2.4vmin, the plate's `--cap-pad`). There is no `mask`, because a mask
-  would fade the corner brackets, which stay the only hard lines. The design guardrail allows gradients only in
-  `tokens.css`, so they are tokens there beside `--tex-vignette`, used only by wall.css (**reaches outside the
-  galaxy**, for the morning report's list): `--tex-plate` (a band with its side ramps, top and bottom ramps, four
-  round corners, at the plate's 96 %) and `--tex-plate-corner` (top and left only, opaque, for the far fleet block
-  that runs to the screen's corner; its top padding went from 1vmin to 2.4vmin so the words stand on the full
-  ground). Labels under either box stay hidden by `hud.covers()` as before. `wall.html` shares both rules.
-  Tests in `test/wall-covers.test.mjs`: the plate stays ≥ 95 % under its words; every layer of both tokens is a
-  gradient falling to `transparent`, no-repeat, no mask/shadow/border on the rules; the feather equals the padding.
-  Stills `shots/r20-t10/`: `overview-edge0.png` against `before-overview-edge0.png` at 3x (the old hard step across
-  the ribbon at the banner's top-left is gone; the ribbon fades into the ground), `hv2-edge1.png` (stars fade into
-  the plate, brackets crisp, no tile seams). Film `shots/r20-galaxy`: no console errors, 11.6 fps under
-  SwiftShader (12-13 in earlier rounds; the gradients are painted only when the plate repaints).
-- [x] T11 (§7 Night 4 0a; was night 3's T39, r56-performance galaxy 1 = night 1's T39) [ui] [variant:galaxy] The
-  stutter number moves: `budget.js createFrameWindow` keeps `worstMs` per window (reset each window, as `frameMs` is)
-  and `perf.js` reports in `worstGapMs` the worst gap of the last ~10 s, with the boot gap apart as `bootGapMs` (gaps
-  before the first model is drawn plus 2 s do not count); `wall.html` gets the same numbers (shared `perf.js`) —
-  done when: a test with a fake clock, a 400 ms first gap and 16 ms gaps after it reads `worstGapMs` under 20 ms
-  after 10 s and `bootGapMs` 400, and a film's `perf.json` (fenced `film.mjs` reads `worstGapMs` from
-  `__wallPerf`) shows the windowed number. (commit 2ca8017) Builder r23: `perf.js` keeps the worst gap in
-  one-second buckets over `PERF.spanMs` 10 s (so the window is 9-10 s); the boot starts at the first drawn frame,
-  which on both pages is the first model drawn (the galaxy's tick draws nothing before `galaxy.world`), and its gaps
-  up to 2 s later go to `bootGapMs` only. `createFrameWindow`'s closed window carries `worstMs`, reset with it (not
-  shown in `perfLine`, whose lines are pinned). Tests: `test/wall-variant.test.mjs` (400 ms first gap then 16 ms:
-  `worstGapMs` < 20 after 10 s, `bootGapMs` 400; a 120 ms hitch reads 8 s later and is gone 11 s later; the old
-  test runs with `bootMs: 0`), `test/wall-galaxy-budget.test.mjs` (a window's `worstMs` and its reset). Film
-  `shots/r23-galaxy` (SwiftShader, CPU x4): `worstGapMs` 270, the worst of the last 10 s, against 346-403 for the
-  whole-run number in r19-r21; 13.7 fps, no console errors, page unchanged. `film.mjs` is fenced and does not copy
-  `bootGapMs` into `perf.json`; it is on `__wallPerf`.
-- [x] T12 (§7 Night 4 0a; was night 3's T40 and T41, r56-performance galaxy 3a and across) [ui] [variant:galaxy] Two
-  small savings: member dots use a fixed 8x6 sphere segments at every quality level (`scene.js` `spheres`; 87k
-  triangles and 205 draw calls with HV1 open against 13k and 45 at the overview), planets unchanged; and
-  `galaxy/lock.js` writes the four bracket transforms and the opacity only when a rounded key (0.1 px, opacity to
-  0.01) changed, as `labels.js` does — done when: a test pins the dot geometry's segment counts at levels 0-2 and the
-  planets' unchanged, `?at=hv1&perf=1` reports fewer triangles than before (both numbers in the notes), and a test
-  with a counting fake DOM sees no style write in a frame where the brackets moved under 0.1 px and a write when
-  they moved more. (commit 9eac184) Builder r24: the dot is **capped** at 8x6, not fixed: `sphereSegs('dot')` gives 8x6 / 7x5 / 6x4 at
-  L0-L2 (decided, not asked): a fixed 8x6 measured *more* triangles at L1 and L2 (lab open: 24.7k → 26.0k, 12.2k →
-  13.9k), against the owner's "nothing added may make it slower". The large demo has no `hv1` id (its sites are
-  `lab`, `hv2`, `cloud`, `remote`, `home`; `lab` is labelled HV1), so measured with `?at=lab` and `?at=hv2`,
-  `renderer.info` after 12 s: lab L0 61.3k → 57.5k triangles, hv2 L0 15.0k → 14.1k; L1/L2 unchanged (hv2 6250 and
-  3186 both). The r56 review's "most of the 87k are dots" does not hold on this fleet: planets (32x22, about 1.3k
-  triangles each, 48 in the large demo) are most of it; dots are about 57 x 144 → 80. If triangles matter on the
-  Surface, the planets' L0 segments or night 3's (b) InstancedMesh are the next lever (Later). `?perf=1`'s second line
-  now prints triangles (`151 calls · 58.8k tri · 23 geo · 4 tex`). `galaxy/lock.js` writes each transform/opacity
-  only when its rounded string changed (corners 0.1 px, opacity now `toFixed(2)`, legs as before). Tests
-  `test/wall-galaxy-savings.test.mjs` (dot and planet segments at L0-L2; a calm lock with a counting style proxy:
-  no write when still or nudged 0.03 px on a 0.1 px step, writes after 0.3 px; a crit lock with its leader writes
-  nothing while still, follows a 2 px move) and `wall-galaxy-budget` (triangles in `perfLine`). Probe
-  `$RUN_DIR/tools/r24-tri.mjs`, stills `shots/r24-t12/`. Film `shots/r24-galaxy`: page unchanged, 12.7 fps under
-  SwiftShader, worst gap 313 ms, no console errors.
-- [x] T13 (§7 Night 4 A, D10) [ui] [variant:galaxy] One camera director, the state: a pure `galaxy/director.js`
-  (`directorStep(state, event, now)` on an injected clock, as `touch.js touchStep`) with three sources `tour`, `touch`
-  and `show`, precedence a finger first, then a show command, then the tour; every hand-over between two sources is an
-  eased move from the current pose (a `{ from, to, ms }` the camera plays, never a cut; a cut with a fade only in
-  reduced motion, as `still.js`); the tour takes the camera back a minute after the last touch or show (`IDLE.ms`
-  moves here from `touch.js`); show commands are display-only and never outrank a finger — done when: tests on a fake
-  clock cover a touch during a show (touch wins, the show waits or is dropped, the notes say which), a show during
-  touch (queued until idle or refused, decided and written down), a show while the tour flies (the show takes the
-  camera with an eased hand-over), and the tour back 60 s after the last touch and after the last show. (commit d28aeac)
-  Builder r25: `galaxy/director.js` `directorStep(state, event, now, { held, still })` → `{ state, move, wake,
-  resume, refused, dropped }`, `directorLeft` (for the MANUAL line), `SOURCES`, `HANDOVER` (fit 1500 ms, fly =
-  `TIMING.flyMs`), `IDLE` (touch.js now imports and re-exports it). Events `touch` (with or without `to`),
-  `handback`, `show` (`id`, `to`, `holdMs`), `clear` (`id?`), `tour` (`to`, `ms`), `tick`; each carries the camera's
-  `pose` as the move's `from`. Decided: **a touch during a show drops the show** (`dropped: id`; never flies back to
-  it a minute later); **a show during touch is refused `busy`**, not queued (Q16's code; its default ttl 60 s equals
-  the minute, so a queue would almost always expire); a show under the tour takes the camera eased, the newest show
-  wins; a show holds `min(holdMs, IDLE.ms)`, `clear` ends it at once; the tour's own legs are refused `busy` while
-  another source drives. The director never picks the tour's target: it says `resume`, the tour asks for its next
-  leg, which eases from the pose. The minute after a wake counts from the end of the ease out (as T5). Reduced
-  motion: every move is `{ ms: 0, cut: true, fadeMs: CUT.fadeMs }`. Tests `test/wall-galaxy-director.test.mjs` (13).
-  Not wired yet (T14), so the page is unchanged: film `shots/r25-galaxy` 13.1 fps under SwiftShader, worst gap
-  307 ms, no console errors (it checks that touch.js's new import loads in the browser).
-- [x] T14 (§7 Night 4 A, D10; after T13) [ui] [variant:galaxy] One camera director, wired: `galaxy/main.js` builds
-  the director and hands `createTour` an adapter (its `map` interface: `focus`, `fit`) that asks the director, so
-  `tour.js` is unchanged for `wall.html`; `touch.js` (wake, gestures, taps, back, `▶ TOUR`) asks the director instead
-  of calling `camera.js` directly; no other path moves the camera — done when: every touch and resume page test stays
-  green (`wall-galaxy-touch`, `wall-galaxy-resume`), a page test with a counting fake camera sees every camera call
-  come through the director with its source, and a CDP touch film (tour → wake → drag → tap a site → back → 60 s →
-  tour) matches night 3's `r56-touch` sequence with no cut. (commit 915dc43)
-  Builder r28: `director.js createDirector(cam, { clock, still, held, resume })` → `{ as(source), show, clear,
-  handBack, tick, driver, left, onMove }`. `as('tour')` / `as('touch')` are camera.js look-alikes whose `focus`,
-  `fit`, `cut`, `fly`, `steer` are director requests (reads pass through). `main.js` calls no `cam.<move>` (a
-  test pins it); `touch.js` is unchanged (gestures get the finger's camera). Decided: **touch.js keeps the
-  minute** (it hears every pointer; the director's `held` is "touch mode is not tour", and touch.js's resume
-  calls `director.handBack()` before `tour.resume()`); `directorStep` touch events take an `ms` (back to the
-  overview in fitMs); the tour's legs are played as `focus`/`fit()` exactly as before, and in reduced motion only a
-  finger's or a show's site is a `cut`. `show(cmd)` (on `__galaxyDirector`, no sender until B) stops the tour and
-  releases its plate (the first film showed the tour's HV2 plate over a show of HV1); the hold's end resumes the tour.
-  Tests: 3 in `wall-galaxy-director`, 3 in `wall-galaxy-resume` (its `page()` now runs through the director, with a
-  counting camera). Films: `shots/r28-touch` (CDP: tour → wake → drag → tap → back to the dragged pose → 60 s →
-  tour; a show under the finger refused `busy`, under the tour it takes the camera and gives it back; largest
-  frame-to-frame camera step ≤ 0.22 of its distance, as in plain tour legs: no cut; no console errors) and
-  `shots/r28-galaxy` 12.5 fps under SwiftShader ×4 (r25 13.1), worst gap 321 ms, 0 errors.
-- [x] T15 (§7 Night 4 0b; r46-skeptic fx-warp 1) [ui] [variant:galaxy] `lanes` removed and calm flights quiet: the
-  `lanes` code in `galaxy/fx.js` (`siteRoutes` and the pulse), `scene.js`, `main.js`, its tests and the `?fx=` list
-  and every mention in docs; under `fx=warp` a flight to a calm site or to the overview draws no streaks (`warpAt`
-  returns 0 for `calm`) — done when: `FX_NAMES` has no `lanes`, `grep -rn "lanes" public/js/wall/galaxy` finds no
-  effect code (the word may stay for the Map's lane nodes), `?fx=lanes` is ignored without an error, a test pins
-  `warpAt(k, 'calm')` at 0, and filmstrips of `galaxy.html?demo=1&quality=0&fx=warp&pace=wall` show streaks only on
-  flights to warn/crit sites. (commit ec72e04)
-  Builder r29: `FX_NAMES` is now `comets, twinkle, beacon, warp` (T17 adds `activity` and drops the two); `warpAt`
-  returns zero unless the tone is in `WARP.hued`, so the overview (tone `calm`) is quiet as well; the scene's warp
-  code is otherwise unchanged. `fx.js placeOf` stays (comets, twinkle and beacon use it). The plan README's night 2
-  effect list still names `lanes` as history; left as written. Tests 4149 → 4141 (the lanes tests went, one
-  `lanes is gone` test and the calm/overview warp checks came). Films: `shots/r29-galaxy` (`fx=warp&pace=wall`:
-  red streaks only on the flight to crit HV2, 10.2 fps SwiftShader ×4) and `shots/r29-galaxy-calm`
-  (`fx=lanes,warp`: flights to calm CLOUD and REMOTE draw no streaks, 13 fps, 0 console errors).
-- [x] T16 (§7 Night 4 0b; README §7 Night 3 D `afterglow`; r46-skeptic touch 4, r59-dreamer 7) [ui] [variant:galaxy]
-  `fx=afterglow`: when trouble clears, its cluster keeps a faint outline ring in the old status hue on the plane,
-  cooling red → amber → grey and gone after about 30 min; outline only, never filled, never pulsing, quieter than any
-  live trouble (§2.1); the page remembers the clears it has seen (pure `fx.js` `afterglows(prev, model, now)` and
-  `afterglowAt(clear, now)`; no server route, D2; a reload forgets them); none in still mode beyond a static ring; off
-  by default — done when: tests map a clear's age to hue (crit token → warn token → `--text-3`) and alpha (monotonic
-  down, 0 at 30 min, always under the warn nebula's), a flap back to trouble drops the ring, nothing without
-  `?fx=afterglow`; and filmstrips of `galaxy.html?demo=1&quality=0&pace=wall` with and without `&fx=afterglow` on the
-  large demo (whose trouble clears and returns) show the ring only with it, after a clear. (commit c691da6)
-  Builder r30: `fx.js afterglows(prev, tones, now)` takes each drawn site's nebula tone (the scene's, after every
-  `update`) rather than the raw model, so a ring follows exactly what the nebula showed; the hue is the spell's worst
-  (crit → warn → crit-again stays one red spell), `afterglowAt` cools one step per 0.35 of the 30 min (blended over the
-  last 40 % of each step), alpha 0.42 × (1 − age)^1.4 (under NEBULA.warn's 0.7), fade-in 1.8 s (at once when still).
-  The ring is flat on the plane at radius 300, its line 0.35 % of the frame's height from the overview, dims while
-  its system is open and fades close up as the beacon does (`beaconNear`). `FX_NAMES` gains `afterglow` (T17 still
-  drops `comets`/`twinkle`). Tests 4141 → 4147. Films (`--tick 800`, so HV2's crit clears at 32 s):
-  `shots/r30-galaxy-with` (frame 12: a thin red ring round HV2 and an amber one round REMOTE, 14 fps SwiftShader ×4,
-  0 errors) and `shots/r30-galaxy-without` (no ring, 13.5 fps). The ring's near edge passes under the calm `HV2`
-  label (the DOM label stays on top and whole); T24's label placement may want to know about it.
-- [x] T17 (§7 Night 4 0b; README §7 Night 3 D `activity`; night 2's research Q8 `fade` and `miss`; Q18 when answered)
-  [ui] [variant:galaxy] `fx=activity`, replacing `comets` and `twinkle` (both removed: code, tests, `FX_NAMES`,
-  docs): a planet with a working session or a running job (`fx.js workingPlanets` and the events `flowComets` reads)
-  is brighter and slightly larger and carries a slow visible ring; a job that lands flashes its target once; a failed
-  one visibly does not land; what is quiet recedes a step; visible at the overview from 3 m; off by default —
-  done when: tests map working count to brightness/size/ring (calm stays calm: no hue, slow), a landed job to one
-  flash and a failed one to none, nothing without `?fx=activity` and no `comets`/`twinkle` left in `FX_NAMES`; and
-  filmstrips of `galaxy.html?demo=1&quality=0` with and without `&fx=activity` plus a 3 m shrunk overview still show
-  the working planets apart. (commit 202011b)
-  Builder r33: `fx.js`: `ACTIVITY`, `activityLook(count)` (glow, grow 1.12 → 1.15 capped at 4, ring, quiet 0.6),
-  `workingPlanets` now also counts a `service`/`job` at `working` (the large demo's runners, inference, worker, print
-  job), `trackWork`/`workAt` (fade 1.2 s, one ring breath of 4.8 s, own phase), `flowJobs` (was `flowComets`, adds
-  `failed`: kind `fail`/`failed`/`error` or crit; a warn is a landed job), `trackJobs`/`jobAt` (flash 0.9 s opening
-  1.6 → 9 planet radii; a miss flies 42 % of the way, slows, breaks up over 1.8 s). The miss is grey, not night 2's
-  red scar: no red line without a name (T26), the failure's own alert carries the hue. The scene swaps a calm planet's
-  material (busy: lit from inside; quiet: a step toward the ground) and eases `m.lift`, read by `place()`; trouble
-  is untouched. Glow, ring, flash and grain keep a floor in frame-height shares (`minGlow` 0.022, `minRing` 0.011,
-  `flashMin` 0.035, `missMin` 0.012): without it the overview's rings were 5 px. The large demo fails every 15th
-  tick's flow event (`kind: 'failed'`). Tests 4147 → 4148. Films: `shots/r33-galaxy-with` (10.2 fps SwiftShader ×4 on a
-  busy VM, 0 errors), `shots/r33-galaxy-without` (11 fps, same load: no cost seen), `shots/r33-galaxy-jobs`
-  (`--tick 1000&at=overview`, 0.5 s frames: frame 6 a grey flash ring on CLOUD, frame 11 a failed job's grain stopped
-  above HV2 on its way to REMOTE), `shots/r33-3m/with.png` vs `without.png` (456 px: HOME and CLOUD ringed, REMOTE a
-  plain dot). Honest: at 3 m the rings read but are quiet, the grain is faint; several working planets in one folded
-  cluster draw overlapping rings. The ring sits next to the `HV1` overview label (T24's placement).
-- [x] T18 (§7 Night 4 0b; README §7 Night 3 D `sweep`) [ui] [variant:galaxy] `fx=sweep`: once per tour cycle, at the
-  overview only, one faint sensor line from the sun turns once round the plane; each cluster it crosses pings softly
-  only if its site sent new data since the last sweep (per-site freshness kept by the page from the map frames, e.g. a
-  per-site key of its nodes' status and stamps, next to `fresh.js`), so a silent site stays dark and the gap shows;
-  none in still mode, never during a flight, never under a finger; off by default — done when: tests show the line's
-  angle over the sweep, a ping only for sites changed since the last sweep, none while held or in still mode, nothing
-  without `?fx=sweep`; and filmstrips of `galaxy.html?demo=1&quality=0` with and without `&fx=sweep` (one with
-  `demo-fleet.mjs --quiet-after`) show pings on live sites and none on a silent one. (commit 7cb92f3)
-  Builder r37: `fx.js`: `siteNews` (one FNV hash per drawn site over its nodes as the model has them and the events
-  on them: a site's number changes only when its data does), `sweepAt`/`crossAt` (one turn at an even speed from
-  the top of the frame, clockwise; fades in/out over 6 % of the turn, out over 0.3 s when stopped), `pingAt`,
-  `sweepStep` (rests only on the tour's overview leg with the tour driving, no finger, no show, the camera wanting
-  the overview and not flying; once per cycle, turning in the leg's time left less 0.25 s, at most 6 s, none under
-  1.2 s; `?at=overview`, which has no tour, sweeps every 15 s), `createSweep` (a site pings when the line reaches it
-  only if its number differs from when a line last reached it; a stopped sweep leaves the unreached sites their
-  news; the first sweep pings every site with data, all of it new to the page). `scene.js`: `sweepShape` (a grey
-  additive sector, bright 0.8° edge, 24° trail at 32 %, no hard end), a pool of thin grey (text-2) rings flat round
-  a cluster; nothing made in still mode. Demo: each host's cpu moves a point every tick (a live feeder's does; the
-  large demo was otherwise static, so every site would have read silent), `demo-fleet.mjs --silent-site <source>`
-  keeps one source as it was on the first tick. I used `--silent-site remote` instead of `--quiet-after`, which stops
-  every frame and so silences all sites at once, not one. Tests 4148 → 4163 (`test/wall-galaxy-sweep.test.mjs`, one in
-  `wall-demo-large`). Films: `shots/r37-sweep-first` (`pace=wall`, the first sweep: line from 12 o'clock clockwise,
-  rings on HV1, CLOUD, HOME, REMOTE, HV2 as it passes; 10.3 fps SwiftShader ×4, 0 errors), `shots/r37-sweep-second`
-  (`at=overview`, the second sweep: HV1, CLOUD, HOME, HV2 ring, silent REMOTE stays dark), `shots/r37-sweep-without`
-  (10.5 fps: no cost seen; nothing runs per frame without the switch). Honest: the line is faint by design and reads
-  at 3 m mostly as its trail; at `?demo=1` speed the overview's rest is about 1.75 s, so the turn there is a quick
-  1.5 s flick (wall pace gets the full 6 s). A node's `why` that counts time (`last seen 3h ago` → `4h`) reads as news
-  once an hour.
-- [x] T37 (§7 Night 4 B1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show commands, the state: a pure `galaxy/show.js` with `flyTo(nodeId)`, `highlight(nodeIds, note)`, `clear()`, `pin(nodeId, card)` (a plain text card next to a node), each display-only, each one line on screen ("shown by the agent", the tag's face), each undone by one tap (an `✕` target of 48 px, Q6); going through the director's `show` source (T13). Message shape from Q16. — done when: tests for `galaxy/show.js` (fake clock): each command, the one-tap undo, a show during touch and during a flight (commit f61e23d, 0eb72cb)
-  Builder r38: `galaxy/show.js`: `readShow` (Q16's envelope `{ v: 1, ch: 'laneboard.show', id, src, type, ttl?, data }`;
-  ttl default 60 s, at most 600, 0 = until undone; words one line, at most 140; a bad message answers `bad-shape`
-  with its id, another channel or version gets no answer), `showStep` (pure, fake clock: `msg`, `undo`, `drop`,
-  `tick` → `{ state, reply, fly, ended }`), `showLines`, `showMarks`, `cardPlace`, `createShow` (the page's part;
-  `__galaxyShow.send(msg)` returns the reply, for T38 to carry). Decided: **every command but `clear` is refused
-  `busy` under a finger** (not only `flyTo`: nothing appears under a person's hands), and **a first touch drops
-  everything shown** (as the director drops its show); one `flyTo` and one `highlight` at a time (the newer replaces),
-  one pin per node and at most 2 pins; a `flyTo` lasts as long as the director holds the camera (min of ttl and the
-  minute), so the row never names a place the camera has left; a newer `flyTo` takes over without handing the camera
-  to the tour in between; unknown nodes `unknown-node` (a highlight keeps the nodes it knows); repeated ids are
-  ignored (64 kept). On screen: `SHOWN BY <src>` (the tag's face, the name after `agent:`) top right where the
-  manual line stands (a show never runs under a finger, so they never meet), one row per command newest first
-  (`AT STORAGE`, `4 MARKED`, `NOTE ON STORAGE`, seconds only in the last 10) at the back control's step with its
-  own `✕` of 48 px (its press never reaches the stage, so it is not a wake); a ring (text-1, steady) round each
-  highlighted node and a card for a pin or a highlight's note beside its node, following it by transform (the
-  ring's size written only when it changes); cards on one node stack; the names keep off the cards. Tests:
-  `test/wall-galaxy-show.test.mjs` (15: each command, the undo, during touch, during a flight and a flyTo replacing
-  a flyTo mid-flight, the countdown, the page's wiring). Films: `shots/r38-show` (CDP: tour → flyTo storage + a
-  highlight of 4 with a note + a pin → ✕ on the highlight → a touch drops the rest → a pin under the finger answers
-  `busy`; 0 console errors), `shots/r38-galaxy` (no show: 10.3 fps SwiftShader ×4, worst gap 296 ms, 0 errors; r37
-  10.3). Honest: a highlight of a folded cluster's members stacks the rings on the cluster (seen only up close in the
-  film); the agent's rows are the brightest grey at the back control's size, quieter than the red banner but louder
-  than the tag. The `?show=demo` script and the transport are T38/T39.
-- [x] T38 (§7 Night 4 B2; promoted from Later by the watcher on 2026-10-27, before the merge) The show commands, the transport: one small documented message shape through `BroadcastChannel` and `postMessage` (origin-checked) into `show.js`; the relay room → hub → screens is cockpit work (fenced hub files): not this night. — done when: a test posts each message shape through BroadcastChannel and postMessage and a wrong origin is ignored (commit 5dc9618)
-  Builder r39: `galaxy/transport.js`: `createTransport({ send, win, Channel, origins })` listens on
-  `BroadcastChannel('laneboard.show')` (same origin; the answer goes to the channel, match it by `re`) and on
-  `window` `message` (only from an origin in the list, exact string compare; the answer goes to `event.source` with
-  the sender's origin as target, never `*`); both hand the envelope unchanged to `createShow`'s `send`. `showOrigins(
-  ?showOrigins=, location.origin)`: the own origin plus exact `http(s)://host[:port]` strings (`*`, `null`, a path, a
-  user, a query, another scheme or a host not in lower case are left out); a `file:` page (opaque origin) gets no
-  postMessage listener at all. `readWire`: another channel or version and any answer (has `re`) are ignored without a
-  reply (no loop between screens); over 4096 bytes as JSON (or a cycle) answers `bad-shape` when it has an id. Q16's
-  `dst` is not read (screens have no name until the cockpit's relay): every screen that hears a command shows it.
-  `__galaxyWire` for the console. Tests: `test/wall-galaxy-transport.test.mjs` (8: each shape through a real Node
-  `BroadcastChannel` and through postMessage from the own and an allowed origin, a wrong origin (other host, scheme,
-  port, subdomain, `null`, none) shows nothing and gets no answer, no listener without an origin, the parsers, the
-  page's wiring). Seen: `shots/r39-wire` (CDP, large demo: a flyTo and a highlight by a channel, a pin by
-  `postMessage`; three `ok` answers on their roads, `SHOWN BY COCKPIT` with three rows, 0 console errors). Honest:
-  in that still the held system sits at the frame's right edge under the rows (T25's matter, not the wire's).
-- [x] T39 (§7 Night 4 B3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show demo: `?demo=1&show=demo` plays a recorded conversation's show commands over the large demo fleet (fly to the crit, highlight what it breaks, pin a note); the video's second half (cockpit §5). A filmstrip. — done when: a filmstrip of `?demo=1&show=demo` shows the fly-to, the highlight and the pinned note (commit ba6e478)
-  Builder r42: `galaxy/showdemo.js`: `SHOW_DEMO_SCRIPT`, a recorded conversation as five commands from `agent:cockpit`
-  (`flyTo storage` at 0 s, a `pin` on it `POOL 97% FULL / Full in about 2 h at tonight's rate` at 3.5 s, `flyTo __core`
-  (the overview; server/map.mjs's core id) at 10 s, a `highlight` of storage, db and office-nas (its two links, dumps
-  and the offsite copy) with the note `Dumps from db and the offsite copy stop when the pool fills` at 11.5 s, `clear`
-  at 24 s); `showDemoStep` (pure: the first cycle 3 s after the first frame, so the tour is seen first; each command
-  once at its time, ids `demo-<cycle>-<i>`; the next cycle 36 s after the clear), `showDemoReply` (a `busy` answer
-  ends the cycle, the next waits a whole gap), `createShowDemo` (into `createShow`'s `send`, ticked each frame after
-  `shows.tick()`; `__galaxyShowDemo`). `?show=demo` alone plays it; on a fleet without those nodes each command
-  answers `unknown-node` and nothing shows. Tests: `test/wall-galaxy-showdemo.test.mjs` (8: the switch, the script
-  against the large topology and LARGE_TROUBLE, the timing and the cycles, busy, a whole cycle through a real show and
-  director, a finger mid-cycle, main.js's wiring). Film: `shots/r42-show-demo` (fresh large demo, quality=0: the
-  fly-to and pin at 3.9-10.8 s, the overview with three rings and both cards at 14-24 s, the clear and the tour back
-  at 27 s; 10.4 fps SwiftShader ×4, worst gap 293 ms, 0 console errors; r38 10.3). Honest: the conversation is fixed,
-  so it flies to storage even in the demo's ticks 40-89 when storage is calm (film within the first 2.5 min of a
-  fresh demo-fleet); at the overview the storage ring sits on the HV2 cluster's name and both cards stack beside it
-  (T52's matter); what the person says is not on screen (T51 gives the agent the plate).
-- [x] T40 (§7 Night 4 C; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `countdown: { at, label }` as a feed field (D3, like `glow` and `ring`): the galaxy draws a small countdown at that node, readable at the site step and quiet at the overview; the caption names it when the camera holds there; display only; the large demo carries one (`test/helpers/demo-hub.mjs`). Format from Q17. Maybe two tasks: the field and the drawing, then the caption line and demo data. — done when: tests for the field and the caption line, and a still at the site step shows the countdown readable at 3 m (commit b91bb9f)
-  Builder r43 split it: T40 is the field, the format, the line under the name and the demo data; T53 the caption.
-- [x] T53 (§7 Night 4 C, split from T40 by builder r43) [ui] [variant:galaxy] The caption names the countdown when the camera holds there: while a site is held, one plate line for its soonest countdown (overdue first) in countdown.js's held `m:ss` (`countdownText(at, now, { held: true })`, the only thing on the Wall that ticks seconds, Q17), grey, after the trouble lines; the same for a held planet or a tapped one in its sheet. — done when: tests for the caption line (soonest, overdue first, held format), and a still of `galaxy.html?at=cloud&open=1` on the large demo shows it (commit 09ebee7)
-  Builder r44: countdown.js `soonestCountdown` (overdue first, the longest overdue leading, else the soonest; a tie
-  keeps model order) over the held thing and everything in it; hud.js `countdownCaption` adds one row `{ kind:
-  'countdown', step: 'line', label, name, at, id }` after the trouble word, the count, the named problems and the grey
-  data line, before bars and facts (a calm tour plate, which has no lines, gets it alone); `name`/`id` are the member
-  it runs on (a finger on the row opens it), empty for a planet's own. The row carries `at`, not words: caption.js
-  renders `LABEL  MEMBER · m:ss` and `tick(now)` (main.js each frame, `Date.now()`) rewrites the clock only when its
-  second turns (one write a second, nothing while no countdown row is up); `data-phase` on the row. wall.css: grey
-  only, far `text-3` with the clock `text-2`, soon/now/late one step up (`text-2`, the clock `text-1`), tabular
-  figures. `plateFollows` takes a moved countdown at once (a job ran, the next is due), even on a tour plate.
-  Tests: `test/wall-galaxy-countdown-caption.test.mjs` (9). Still: `shots/r44-t53` (`galaxy.html?at=cloud&open=1`,
-  large demo: `LIFECYCLE  OBJECT-STORE · +15:46` under `CLOUD`, 0 console errors). Seen, not this task's: T40's
-  `LIFECYCLE +15 MIN` under the object-store planet is at the site name's size, so the open system shows the same
-  late run twice at two sizes.
-- [x] T41 (§7 Night 4 D1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] Half a screen: `galaxy.html` at 50 % width keeps the 3 m check (names, trouble, caption) and its touch targets (the 48 px floor); a still at 684 px wide shrunk to 3 m. — done when: a still at 684 px wide shrunk to 3 m passes the 3 m check and the touch targets keep 48 px (commit e9fd647)
-  Builder r47: seen at 684 x 912 (`shots/r47-half*`, a CDP probe of every text box and target per state: overview, held
-  crit, held calm, explore, site sheet, show demo; each still also shrunk to 50 % for 3 m). Two breaks, fixed: the far
-  line's why (`2 CRIT · HV1 · HV2` / `VM-C · BUILDER-C NO CONTACT FOR 25S`) had no band and ran into the clock, now cut at
-  the far line's 64vw (`.wall-fleet[data-step="far"] .wall-fleet-sub`); the trouble plate's 56vw cut `FEAT-SEAR…` at
-  the 9vmin floor, now on a stage narrower than high the plate takes 64vw (caption.js `HERO_PLATE.narrowVw`,
-  `heroPlateVw`; shared with `wall.html`) and the tag and manual line rise into the 8vh band above it (`@media
-  (max-aspect-ratio: 1/1)` at the end of wall.css). Targets were already px (back 80, fan rows and show undo 48, the
-  tap disc 54) and the fan stays on a 684 px stage: `test/wall-galaxy-half.test.mjs` (6) pins them. 3 m: site names,
-  the far word (62 px), the hero and the caption read; planet names are small as at full width. Film
-  `shots/r47-galaxy` (`--width 684 --height 912`, demo=1, quality=0): 21.6 fps SwiftShader ×4 (full width r42: 10.4),
-  worst gap 185 ms, 0 console errors. Honest: the show column (`SHOWN BY COCKPIT` and its rows, right, at the plate's
-  height) still meets a wide plate if a show holds a site at half width (T51/T52's matter); an 13+ letter hero is
-  still cut at half width (at full width 16 fit).
-- [x] T42 (§7 Night 4 D2; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `?role=tour|explore`: starts the page in that mode (explore: no tour until `▶ TOUR` or the director is asked); the canvas itself is cockpit work. — done when: tests for both roles, and `?role=explore` shows no tour until asked (commit a34674e)
-  Builder r48: touch.js `ROLES`, `roleOf` (`explore`, else the default `tour`) and a `stay` option on `touchStep`
-  and `idleLeft`: in the explore role the minute never hands the page back, `idleLeft` is Infinity and
-  `manualLine(Infinity)` reads `MANUAL` alone (no countdown: no tour is coming). `createTouch({ role })` starts in
-  `explore` with no wake; `createDirector({ driver: 'touch' })` starts with the finger driving, so the first tap
-  flies (not a wake's fit) and a show is refused `busy`. Decided: **"the director is asked" is the hand-back**
-  (`▶ TOUR` or `__galaxyTouch.handBack()`); a show under the explore role is refused `busy` as under a finger,
-  since a show's end resumes the tour, and a person's screen must not get a tour by itself. After `▶ TOUR` the tour
-  runs and shows work as on a tour screen; the next finger wakes it as usual, but the minute never hands it back.
-  `<html data-role="explore">`; `?at=` (parked) ignores the role. Tests in `test/wall-galaxy-resume.test.mjs` (5:
-  roleOf, stay, the tour role unchanged, the explore page on a fake clock (3 min with no leg, `MANUAL`, `▶ Tour`,
-  a show `busy`, a tap flies to cloud, back, `▶ TOUR` gives hv2 first, a wake then 2 min still explore), main.js's
-  wiring). CDP check `shots/r48-t42-role` (large demo): explore, `MANUAL`, `▶ TOUR` for 20 s, a show `busy`, a tap
-  on HV2 opens its sheet, `‹ BACK`, then `▶ TOUR` gives the tour (hv2), 0 console errors. Film `shots/r48-galaxy`
-  (`role=explore`): the overview held for 36 s, no tour, the banner updating (HV1 crit at 36 s); 11.8 fps under
-  SwiftShader ×4, worst gap 347 ms, 0 errors. Seen: the explore overview does not turn (only the tour's legs move
-  the camera), so a person's screen stands still until a finger moves it.
-- [x] T43 (§7 Night 4 E1; promoted from Later by the watcher on 2026-10-27, before the merge) (night 3's E; r43-stranger 1, 6) `docs/wall.md`: what it is, a tablet in kiosk mode, the URL switches `?demo`, `?pace`, `?fx` (each effect and what it means), `?perf`, `?at`, `?open`, `?quality`, `?role`, `?show`, the feed fields `glow`/`ring`/`countdown`, touch and how to stop the tour; `docs/map.md` says which page paints `glow`/`ring`; a Wall row in README's views table. — done when: `docs/wall.md` exists with every switch, and README's views table has the Wall row (commit 36735ee)
-  Builder r49: `docs/wall.md` (what it is, the two pages, what you see, touch with how to stop and give back the
-  tour, a tablet in kiosk mode, a table of every switch `main.js`/`variants.js`/`type.js` parse incl. `?ratio`,
-  `?showOrigins`, `?mm`, `?variant`, the five effects with what each means, the feed fields and who paints each);
-  `docs/map.md`'s extras bullet adds `countdown` and says `glow`/`ring` are `wall.html`'s, `countdown` the galaxy's;
-  README: a **Wall** `/galaxy.html` row in the views table and `docs/wall.md` in the docs table.
-  `test/wall-docs.test.mjs` (5) checks the switch rows, `FX_NAMES`, `ROLES`, `VARIANTS`, kiosk/touch sections and
-  the README and map.md rows. Left for T44: D10 (the director), the show message shape, a parser-driven switch list.
-  Found, for T45: the WebGL fallback (`fallback.js`) sends `wall.html?variant=islands-tiles`, but `islands-tiles`
-  is not in `variants.js VARIANTS`, so `pickVariant` falls back to radial: a browser without WebGL gets radial,
-  not the trouble tiles (`test/wall-tiles.test.mjs` checks only the href). The kiosk section names Edge's
-  `--kiosk … --edge-kiosk-type=fullscreen`, Android screen pinning and iPad Guided Access from general knowledge,
-  untested on a device here.
-- [x] T44 (§7 Night 4 E2; promoted from Later by the watcher on 2026-10-27, before the merge) `docs/wall.md` covers D10 (the director, who drives), the show messages and `countdown`; every feature has demo data (product §3.2): a test lists the switches in `docs/wall.md` against the page's parsers. — done when: a test lists the switches in `docs/wall.md` against the page's parsers and passes (commit 8c602ff)
-  Builder r52: `docs/wall.md` gains `## Who drives the camera` (D10: `touch` > `show` > `tour`, a show under a
-  finger refused `busy` not queued, a touch drops the show, every hand-over eased, explore starts with the finger
-  driving) and `## Show commands` (Q16's envelope with an example, a row per `flyTo`/`highlight`/`pin`/`clear`,
-  the limits, `BroadcastChannel('laneboard.show')` and `postMessage` with `?showOrigins=`, the answer and its codes
-  `bad-shape`/`unknown-node`/`busy`, `?show=demo`); `countdown` was already there (T43). The `?role` row now says
-  explore refuses shows *while a person drives it* (after `▶ TOUR` the director takes them, `busy` is
-  `driver === 'touch'`). `test/wall-docs.test.mjs` +4: walks each page's relative imports from its entry point,
-  collects every `q.get/getAll/has('x')`, and requires the switch table to match exactly, Page column included
-  (`both` = parsed by both); the director's order; the codes found in show.js/transport.js/director.js each have a
-  row; the large demo sets `glow`, `ring`, `countdown` and `SHOW_DEMO_SCRIPT` sends every show type. Checked that
-  dropping a row fails it. No UI change, so no film.
-- [x] T45 (§7 Night 4 E3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] (night 3's E; r43-stranger 2, 6) A web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the guardrails, and `wall.html?variant=galaxy` opens `galaxy.html` instead of falling back to radial (an "unknown variant" note on the tag for other names). — done when: `wall.html?variant=galaxy` opens the galaxy (test), the manifest validates (commit 655e1d9)
-  Builder r53: `variants.js PAGES` (`galaxy` → `galaxy.html`) and `pageHref(search)`: `wall.html` leaves with
-  `location.replace` before it builds anything, every other switch along (`?variant=galaxy&demo=1&fx=beacon` →
-  `galaxy.html?demo=1&fx=beacon`). An unknown name: `unknownNote(pick)` → frame.js `note(text)`, a grey (`text-2`)
-  line hung under the tag (`.wall-tag-note`, absolute, so the tag keeps its width) reading `UNKNOWN VARIANT "NOPE" ·
-  RADIAL`, and `frame.tagCover()` keeps the Map's names off it while it is up (none without a note: wall.html's default
-  is unchanged). T43's find fixed too: `islands-tiles` is registered (`links: 'focus'`) and `main.js` passes every model
-  through tiles.js `focusLinks` with the held site from `tour.onLeg`, so the no-WebGL fallback lands on islands with
-  trouble tiles, not radial (night 2's For-the-owner diff, no longer fenced). Manifest: `public/galaxy.webmanifest`
-  (`id` and `start_url` `/galaxy.html`, `scope` `/galaxy.html`, fullscreen, landscape, the board's icons and theme
-  colour), linked from `galaxy.html` only; served as `application/manifest+json` (http.mjs already knew the type),
-  CSP `manifest-src 'self'` covers it. Decided: scope is the galaxy page alone, so it never claims the board's URLs;
-  the price is a browser bar on the out-of-scope fallback (a machine without WebGL, rare). `docs/wall.md`: the
-  `?variant` row (`islands-tiles`, `galaxy`, the note), the manifest under Android. Tests:
-  `test/wall-pages.test.mjs` (5). Stills `shots/r53-t45/` (`islands-tiles`: tiles on hv1/hv2, no links at the
-  overview; `nope2`: the note under the tag, clear of the names), 0 console errors. Film `shots/r53-galaxy` through
-  `wall.html?variant=galaxy&demo=1&quality=0`: the galaxy tour, 14.1 fps SwiftShader ×4, worst gap 327 ms, 0 errors.
-  Seen, for T46: on radial at 1368 the labels at the ring's top pile up (`FEAT-SEARCH`, `BUILDER-A`, `CI-RETRY`,
-  `ACME-BILLING` over each other). Unverified on a device: the manifest's install prompt (no tablet here).
-  Round 52 left its demo fleet running (pid file stale); r53 stopped it by pid.
-- [x] T46 (§7 Night 4 E4; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `wall.html` (radial, the default) gets one filmstrip, since night 3 changed the shared `caption.js`, `tour.js` and `frame.js`; fix what it shows broken. The morning report lists what a reviewer should read first and what reaches outside the galaxy (`public/css/tokens.css --tex-vignette`). — done when: a `wall.html` filmstrip, and what it showed broken is fixed with tests (commit a7751f7)
-  Builder r54: filmed `wall.html?demo=1` (radial, large demo, SwiftShader ×4, `shots/r54-radial`, 0 console errors).
-  Three things broken, all fixed: (1) names piled on each other (ring top: `BUILDER-A`, `FEAT-SEARCH`, `CI-RETRY`,
-  `ACME-BILLING`; HOME's rooms; in holds `OBJECT-STORE` on `API-STAGING`): the collision pass stepped 14 px for
-  15-35 px type and, with no free place, drew the name where it was. New Map option `labelClear` (default off,
-  render.js `placeLabels`, documented in index.js): a name steps by its own line, and a calm one with no free place
-  is left out (trouble and the selection keep theirs, as on a phone); radial turns it on. Over a turn on the large
-  fixture 0 overlapping pairs (were 30 at 1368x912, 79 at 16:9), 0.3 of 59 names left out on average.
-  (2) In holds the Map's names ran over the tag and the clock: `frame.tagCover()` is now the tag always (the note
-  with it when there is one) and `frame.clockCover()` is new, both read again only when their words change or on
-  `resize` (a first try keyed on `root.clientWidth` forced a layout per frame: 2.2 fps). (3) Under a crit plate the
-  far line repeated the plate's hero (`STORAGE` twice, both hero size): wall.html now feeds the frame as the
-  galaxy does, `bannerModel`/`bannerEcho` from galaxy/hud.js and `frame.plate(tone)` from the camera's arrival, so
-  the line steps down to the next problem (`2 CRIT · HV1 · HV2` at the name step) or drops out. Tests:
-  `test/wall-radial-fit.test.mjs` (no overlap over a turn, trouble always named, both screens),
-  `test/wall-pages.test.mjs` (tag and clock covers, the banner wiring). Stills `shots/r54-t46`. Film fps on this VM
-  is noise: the same build gave 1.8-11.6 fps and the unchanged base 2.3-12.2 on back-to-back runs (the throttle stalls
-  screenshot capture; one film skipped from 19 s to 207 s), so no fps claim. Seen, not fixed: the plate's
-  `NO CONTACT FOR 17S` lags the banner's `21S` (the plate's text is typed once per leg).
-  For the morning report (E4), what reaches outside the galaxy this round: the shared Map's `render.js` and
-  `index.js` (`labelClear`, off by default; the fenced Map tests pass unchanged).
-- [x] T19 (§7 Night 4; r4-film-ui galaxy 1; after T9) [ui] [variant:galaxy] One top step of type while a site is held:
-  the banner (`hud.js`, `frame.js`, `wall.css`) may own the top step only at the overview; while a caption holds a site it
-  drops to the caption's second-line size (~0.45 of the hero) and becomes one line `■ HV2 · STORAGE · reason  +N`, so the
-  caption hero is the only top-step type on screen — done when: a test pins the banner's font size at the overview
-  against its size with a held site (held ≤ 0.5 of the hero's, overview unchanged) and a still with a different
-  trouble held shows the hero as the largest type; `wall.html`'s caption tests stay green. (commit f36f10f)
-  Builder r57: decided, under a **crit** plate only. Under a warn or calm plate the crit banner keeps its 3 m size
-  (night 3 T30, §2.1: the worst thing is the loudest; a calm plate has no hero to compete with). So the hero is the
-  only top-step type whenever its plate is crit. wall.css: `--cap-why: 4.3vmin` on the stage (= `STEPS.why`, the hero's
-  second line, ≤ 0.5 × `STEPS.heroMin` 9), and under `[data-plate="crit"]` the far block is one flex row on a shared
-  baseline: `■ HV2 · STORAGE · POOL 97% FULL  +3 MORE` (the why's `·` is a `::before`; the why is what gets cut; the
-  row keeps to 64vw + padding, so it stays clear of the clock in half a screen too). T9's why-echo now takes the why
-  out of the row (`display: none`), and the count keeps its own 2.4vmin. No JS change but a comment (`frame.js`
-  `plate`); `wall.html` shares the rule. Tests: `test/wall-galaxy-hud.test.mjs` (the T4/T30 CSS tests now pin
-  `--cap-why`; the overview stays `--fleet-far` 14vmin). Stills `shots/r57-t19/` (tool `tools/r57-held.mjs`, which
-  prints every visible text's computed size): `at-lab.png`, with VM-C held and STORAGE in the banner, has the hero at
-  128 px as the largest type and the banner at 39 px on the clock's baseline. `two-why.png` and `two-none.png` show
-  the two-crit row with and without the why. `half-at-lab.png` is 684 px wide. Film `shots/r57-galaxy`: 0 errors,
-  14.5 fps under SwiftShader x4, worst gap 283 ms. Its frames hold no crit (VM-C cleared early in this cycle), so the
-  stills are the evidence. Seen, for T28: the warn banner switches between `FIX-LOGIN` and `FEAT-SEARCH` across legs.
-- [x] T20 (§7 Night 4; r4-film-ui galaxy 3) [ui] [variant:galaxy] No orphaned leader line: the leader belongs to the plate
-  and fades on the plate's opacity curve, first out (drawn last on the way in: plate, leader, lock) — done when: a test
-  with a fake clock finds the leader's opacity never above the plate's and 0 once the plate is gone, and a film frame
-  after the plate fades shows no stub or diagonal in empty sky. (commit dac5cad) Builder r58: caption.js `alpha(t)` is
-  the plate's opacity on its fade curve with no style read (`plateEase` = the plate's `cubic-bezier(.2, 0, 0, 1)`,
-  read off the plate animation's own `currentTime`: it starts a frame late when that frame is long, and a clock-only
-  model put the leader at 0.58 over a plate at 0.17 on the live page). lock.js `leaderAlpha(p)` = 0 up to p 0.5, then
-  2p - 1: never above the plate, in on its second half, gone by the time the plate is half out. galaxy/lock.js takes
-  `plateAlpha` (main.js passes `caption.alpha`) and writes the legs' opacity only when it changes. Order on the way in
-  is plate, then leader. The lock's own timing is unchanged, so the brackets may still close before the plate. The
-  leader keeps its covers while it is faded, so no name moves in under it. wall.html's lock is untouched.
-  Tests: `test/wall-galaxy-lock.test.mjs` (a fake clock through the plate's fade-in and fade-out with the lock
-  opening; a pending animation keeps the plate at its start). Live probe `tools/r58-leader.mjs` (rAF, computed
-  opacities): 2765 frames, 590 with a leader, 0 above the plate, 0 with the plate at 0. Film `shots/r58-galaxy`:
-  0 errors, frames after a plate has gone (140 s, 148 s, 151 s) show no stub, and 165 s has the plate typing with no
-  leader yet. fps under the x4 throttle is noise here: 2.1 and 4.8 for this build against 3.3 for the unchanged base
-  back to back (`shots/r58-base`, `r58-galaxy2`), with worst gaps 120-143 ms in all three, so no fps claim.
-- [x] T21 (§7 Night 4; r4-film-ui fx-warp 1; after T15) [ui] [variant:galaxy] `fx=warp` says where, not everything:
-  streaks only inside a cone (~30°) round the direction of travel, about a quarter of today's count, white with the
-  status hue only on the leading tips, and none drawn over a crit nebula's screen disc — done when: a test pins the cone
-  and count (`fx.js`/`scene.js` pure helper) and a streak start inside a crit's disc is skipped, and a filmstrip of
-  `galaxy.html?demo=1&quality=0&fx=warp` on a flight to a warn site no longer streaks both arms or covers the crit. (commit 169f692)
-  Builder r59: "~30°" read as the cone's full angle: `WARP.cone` 15° either side of the ray to the target (the travel
-  when no target is in front), fading over its outer 4° (`fx.js warpCone`, the vertex shader does the same sum). "A
-  quarter of the count" read as on screen: `WARP.share` 0.5 keeps 400 far stars and 750 grains of night 3's 800 and
-  1500, and the cone leaves about 11 % of what streaked on screen before (the test counts 80 of 693 half-way to HV2 and
-  pins at most a quarter, and at least 40 so the vanishing point still reads). The body is text-1 white, only the leading
-  `WARP.head` 0.15 takes the hue (was 0.3, grey body). Crit discs: `critDiscs()` each frame of a flight, every folded
-  crit nebula (the destination too, none once a system is half open) at its star's point with the leash's reach, at
-  most `WARP.crits` 4, nearest first, in drawing-buffer px. The vertex shader drops a streak whose grain starts on one
-  and the fragment shader discards any pixel on one (`fx.js warpCovered` is the same test), so a tail that crosses a crit
-  stops at its rim. Tests in `test/wall-galaxy-fx.test.mjs` (cone, covered, the counts and on-screen share, discs and
-  uniforms). Film `shots/r59-fx-warp` (`demo=1&quality=0&fx=warp`, 0.7 s apart): f4, the flight to crit HV2, has white
-  streaks round it with red tips and its cloud clear; f7, the flight to warn HV1, streaks one patch below the sun and
-  neither arm; 0 console errors, 12 fps under SwiftShader x4 (r55 had 14.6 on the same URL with `pace=wall`, so this is
-  noise, not a claim). Seen: the skipped disc is round on the star while the lobes lie along the arm, so on a tilted
-  flight a few streaks stop short of the cloud's far edge; nothing crosses it.
-- [ ] T22 (§7 Night 4; r11-dreamer galaxy 1, §2.1) [ui] [variant:galaxy] A new trouble is a moment: when a site's
-  rollup rises (calm → warn, warn → crit) between two map frames, the banner types its new subject in letter by letter
-  as the caption does, once; never for trouble already standing at load, never repeated, never under a finger, whole
-  text at once in still mode — done when: a page test on a fake clock sees the banner type in after a rise and show
-  whole text with no typing at load, after a drop, or in still mode, and a film of `galaxy.html?demo=1&quality=0`
-  (large demo, `VM-C` going crit) shows the banner mid-typing in one frame.
-- [ ] T23 (§7 Night 4; r11-dreamer galaxy 6) [ui] [variant:galaxy] Crit and warn differ at 3 m by more than hue: the
-  crit nebula is one step bigger than the warn one (at least 1.5x, as Later's r21-operator line) and the warn nebula
-  does not breathe; the crit's breathing swing is visible within a frame pair 2 s apart — done when: a test pins crit
-  nebula radius ≥ 1.5x warn's at the overview and the warn's breathing amplitude 0, and a 684 px still of the crit
-  overview shows the red cluster plainly larger than the yellow one.
-- [ ] T24 (§7 Night 4; r11-dreamer galaxy 7 = r41-operator galaxy 7, r17-operator galaxy 5) [ui] [variant:galaxy] A
-  site name is never eaten by its own cluster: the overview label sits on the side away from the cluster's disc by the
-  disc's screen radius, and no nebula sprite is drawn over a trouble label's box — done when: a test on the large
-  fixture finds, at the overview and with HV1 in crit, the label's box clear of the cluster's screen disc, and a still
-  shows `■ HV1` whole.
-- [ ] T25 (§7 Night 4; r16-operator galaxy 4) [ui] [variant:galaxy] The held crit is not at the frame's edge: while a
-  member is the hero, the held framing centres on that member (left of centre, clear of the plate), not on the star,
-  and no other label sits inside the lock's brackets (warn labels step aside from the lock's box) — done when: a test
-  on the large fixture with `VM-C` held finds `screenOf(lockTarget)` inside the middle 70 % of the frame, outside
-  every cover, and no shown label box overlapping the lock's box; a `?pace=wall` film frame at the VM-C hold shows the
-  red lock clear of `acme-billing`.
-- [ ] T26 (§7 Night 4; r16-operator galaxy 8, = night 3's Later r46-skeptic galaxy 8, r26-skeptic 11)
-  [ui] [variant:galaxy] No red line without a name: hyperlanes are grey at the dimmest weight at every zoom and carry
-  no status tint (a lane running off the frame looked like a second, unnamed alarm) — done when: a test pins the lane
-  colour as the grey token for crit/warn/calm sites at the overview and with a site held, and a still of
-  `galaxy.html?demo=1&quality=0&at=hv2` shows no red line leaving the frame.
-- [ ] T27 (§7 Night 4; r16-operator galaxy 9) [ui] [variant:galaxy] The tag is a cover for map labels: the sun's name
-  (`DEMO-HOST`) and its sun are never drawn over `LANEBOARD · … LIVE`/`STALE` (the tag's box joins `hud.covers()` for
-  labels as the plate does) and the overview/flight framing keeps the sun out of the tag's corner — done when: a test
-  finds no shown label box overlapping the tag's box at the overview and over `flightPose` samples on the large
-  fixture, and a film frame shows the tag text whole.
-- [ ] T28 (§7 Night 4; r21-skeptic galaxy 1 and 2, §2.1) [ui] [variant:galaxy] One ranking for the banner and the
-  tour: T8's rule for every level, not only crit: the banner's subject is ranked by worst level, then oldest
-  (`firstSeen`), never by where the camera is (today a warn banner swaps `HV1` / `REMOTE` during one flight); the echo
-  rule (T9) may hide the line under its own plate but never picks another subject; the tour's first target comes from
-  the same ranking function, so the headline and the camera name the same place first — done when: a test with two
-  warns (and one with warn + calm) gets the same banner subject for every held site and camera position, a test finds
-  `tourOrder`'s first target equal to the banner's subject, and a `?pace=wall` film on the large demo shows no subject
-  change while the fleet is the same.
-- [ ] T29 (§7 Night 4; r21-skeptic galaxy 3, §2.1) [ui] [variant:galaxy] A down or crit member keeps its red at every
-  step and age: no grey fill after a while (a `no contact` member is a red outline at least, never grey); while a crit
-  is held the yellow attention halos drop one step so trouble stays the loudest thing — done when: a test on the large
-  fixture with VM-C down for 15 s and for 60 s finds its member colour/ring the crit token at the site step, and a
-  warn halo's intensity lower while a crit is held than at the overview; a film frame at the VM-C hold shows red on the
-  member inside the brackets.
-- [ ] T30 (§7 Night 4; r21-skeptic galaxy 4, §2.1) [ui] [variant:galaxy] A held crit does not blank to update a number:
-  a value change of the same problem (same subject, same level) updates the plate in place, no fade, no retype; retype
-  only on a change of subject or level; the `NO CONTACT FOR 15S` counter ticks every second on the client or is
-  replaced by a time that cannot go stale (`NO CONTACT SINCE 06:58`) — done when: a page test on a fake clock finds the
-  plate's opacity unchanged and no typing restart when only the age changes, and the text never lags the clock by more
-  than 1 s over 30 s.
-- [ ] T31 (§7 Night 4; r26-touch galaxy 1) [ui] [variant:galaxy] A pinch cannot lose the galaxy: the zoom stops closing
-  in (or eases back) once no site's anchor is within the frame; in explore with a steered overview pose the back control
-  reads `⌂ ALL` (flies to the fit) and only a fitted overview reads `▶ TOUR`; a tap on empty sky with a steered overview
-  eases back to the fit — done when: a page test pinches in 4x from the overview on the large fixture and finds at
-  least one site anchor in frame, the control reading `⌂ ALL` and a tap on it restoring the fit (then `▶ TOUR`), and a
-  CDP pinch film (as `r26-touch`) keeps a named site in frame.
-- [ ] T32 (§7 Night 4; r26-touch galaxy 2) [ui] [variant:galaxy] A palm does not wake: in `touch.js createTouch` `down`,
-  a palm-sized contact (`isPalm(ev)`, the test taps already use) neither wakes the tour nor moves the camera nor
-  resets the idle clock — done when: a page test on a fake clock sends a 160x120 contact down/up during the tour
-  and finds the mode still `tour`, no handover, and in explore finds the countdown not reset.
-- [ ] T33 (§7 Night 4; r26-touch galaxy 4) [ui] [variant:galaxy] Sheet rows are real targets: every `caption.js
-  targets()` box is at least 48 px tall (pad each row's box, centred, never past half the gap to the next row; or
-  `min-height` in `wall.css`) — done when: a test over the large fixture's site and planet sheets finds every
-  `targets()` box ≥ 48 px tall and no two overlapping, and `wall.html`'s caption tests stay green.
-- [ ] T34 (§7 Night 4, §2.4; r31-performance galaxy 1) [ui] [variant:galaxy] The overview is the cheapest frame it can
-  be: it is the heaviest today (203-212 draw calls, 84-86k triangles, against 51 and 14k for an open HV2) because
-  `scene.js place()` keeps every folded member's full L0 planet sphere (about 1.3k triangles each) drawn at 2-6 px.
-  While a site's `unfold < 0.05` and it is not held, folded planets take the dot geometry (`sphereSegs('dot')`, a swap
-  between two shared geometries, never a new one; swapped back as the system opens) and a folded member's halo is hidden
-  when under 1 px on screen — done when: a test pins the swap (dot geometry folded, planet geometry open, no geometry
-  created by the swap), `?at=overview&perf=1` reports at most 25k triangles on the large fixture (before/after in the
-  notes), and a still of the overview is unchanged by eye.
-- [ ] T35 (§7 Night 4, §2.4; r31-performance galaxy 3) [ui] [variant:galaxy] An open fan writes only what changed:
-  `galaxy/fan.js draw` rewrites about 50 style properties every frame for up to 60 s. Once every row has `k >= 1`, stop
-  writing the spot and the rows; write a leader's transform only when its rounded key changes (0.1 px, opacity to
-  0.01, as `lock.js`); resolve each row's mesh once in `show()` and project it directly instead of `o.screenOf(id)` per
-  frame — done when: a counting style proxy (as `wall-galaxy-savings`) sees no row or spot write 1 s after `show()`
-  with the camera still, a leader write when its planet moves more than 0.1 px, and the fan tests stay green.
-- [ ] T36 (§7 Night 4, §2.2; r31-performance galaxy 5, touch 2) [ui] [variant:galaxy] The wake does not force layout:
-  the first frame after a wake is the longest gap (183 ms under x4) partly because `boxOf` (`main.js` near 389),
-  `hud.js tagCover` and `frame.js cover` read `offset*` boxes in the frame that has just written `hidden`,
-  `textContent` and dataset values (`back.show`, `sayManual`). Read those boxes on the next rAF (a cover one frame
-  late is harmless: names move on a tween) — done when: a test with a counting fake DOM finds no box read between a
-  write and the end of the same tick on the wake frame, the covers are right one frame later, and the touch and
-  resume page tests stay green.
-- [ ] T47 (§7 Night 4, §2.1; r35-film-ui fx-afterglow 1) [ui] [variant:galaxy] The afterglow ring is never read as live
-  trouble: it is drawn dashed (or tick-marked) and starts amber at its first frame, never in the live crit red or the lock's
-  weight, then cools to grey (`fx.js afterglowAt`, `scene.js`) — done when: a test pins that no afterglow alpha/hue at any
-  age equals the crit token and that the ring is dashed, and a still of `galaxy.html?demo=1&quality=0&fx=afterglow` after
-  a clear (`--tick 800`, `at=overview`) shows an amber dashed ring where the live crit lock is solid red.
-- [ ] T48 (§7 Night 4, §4; r35-film-ui galaxy 4, = r21-skeptic galaxy 5 owner answer (a) in part) [ui] [variant:galaxy] The
-  kicker never counts itself: at `pace=wall` it reads `TARGET 01 / 01`, `02 / 02`, `03 / 03`. N is the fixed number of stops
-  in the tour's cycle (`tourOrder` length), or the count is dropped and the kicker says `TARGET`; never `n / n` with N grown
-  to n (the owner's keep-or-cut of the count stays open) — done when: a test over three consecutive legs of the large demo
-  at `pace=wall` finds N equal on all three and never below the index of a stop that stays in the cycle.
-- [ ] T49 (§7 Night 4; r35-film-ui galaxy 3, = r4-film-ui galaxy 5 from Later) [ui] [variant:galaxy] The typing cursor
-  never stands alone: it is the cap height of the line it sits on, at 60 % of the text's value, and is drawn only once the
-  line has its first letter (`caption.js`, `wall.css`) — done when: a test finds no cursor on an empty line at any step of
-  the typing and the cursor's height equal to the line's cap height, and `wall.html`'s caption tests stay green.
-- [ ] T50 (§7 Night 4, §2.1; r40-dreamer galaxy 1; build with T22) [ui] [variant:galaxy] Trouble leaving is a moment too: when
-  a site's rollup falls (crit → calm or warn) between two map frames, the banner types `HV2 · STORAGE · CLEARED` once in
-  `--text-2` and holds it about 4 s, then the next subject takes its place; never for trouble gone at load, never under a
-  finger, whole text at once in still mode — done when: a page test on a fake clock sees the CLEARED line type in after a
-  fall and hold ~4 s, none at load or in still mode, and a film of `galaxy.html?demo=1&quality=0` (large demo, `--tick 800`,
-  HV2 clearing) shows it in one frame.
-- [ ] T51 (§7 Night 4 B; r40-dreamer show 1) [ui] [variant:galaxy] The agent has a voice: a show takes the caption plate. The
-  kicker reads `SHOWN BY <src>`, a highlight's note types in letter by letter as the hero's second line and a pin's text types
-  in its card; the rows top right stay as undo controls, a step smaller (`galaxy/show.js`, `caption.js`, `wall.css`) — done
-  when: a page test on a fake clock sees the note type in on the plate after a highlight and the plate release on `clear`/✕,
-  a finger still drops it, and a still of `r39-wire`'s flow shows the note as plate type, not only a 14 px card.
-- [ ] T52 (§7 Night 4 B; r40-dreamer show 3 and 4) [ui] [variant:galaxy] Show cards and banner keep out of the way: cards sit
-  on the side away from the system's centre so they do not cover the marked nodes' names, and the banner line hides while a
-  show names its subject (T9's echo rule applied to `flyTo`/`highlight`) — done when: a test on the large fixture with a
-  highlight of `vault` and `audit-log` finds the card's box clear of both marked nodes' screen points, and a test with a
-  `flyTo` of HV2 STORAGE finds no banner line naming it.
-- [ ] T54 (§7 Night 4, §2.1; r45-operator galaxy 2; = r40-dreamer galaxy 5 in part) [ui] [variant:galaxy] The camera does not
-  leave a crit while its plate still names it: the held framing stays as long as the plate stands; the camera starts out only
-  after the plate has gone (plate out → camera out → banner back); if the hold must end early, plate and framing end together
-  (`tour.js`/`main.js`, `hud.js`) — done when: a page test on a fake clock with `VM-C` held finds, at every frame where the
-  plate names VM-C, the member's `screenOf` inside the held framing (no pull-out under a standing plate), and a `?pace=wall`
-  film frame near the hold's end shows no plate naming a machine the camera has left.
-- [ ] T55 (§7 Night 4, §2.1; r45-operator galaxy 3) [ui] [variant:galaxy] The banner corner is never empty while trouble
-  stands: during an echo (the held plate names the only crit) the fleet corner keeps one small count line at the reason line's
-  size (`■ 1 DOWN · 2 ATTENTION`, counts only, no subject), never louder than the plate and never a different subject's
-  headline (`hud.js bannerEcho`, `frame.js`, `wall.css`; with T19's held size) — done when: a test with a lone crit held finds
-  the corner's count line present with the right counts and its font size ≤ the plate's second line, and a film frame during a
-  VM-C hold shows the corner non-empty.
-- [ ] T56 (§7 Night 4, §2.1; r45-operator galaxy 10; = T53's "seen" note) [ui] [variant:galaxy] A countdown in the scene is
-  quiet: `countdown.js`'s scene label under a node is mono at about 0.6 of the member name's size in `--text-3`, drawn only once
-  its system is held (not during the flight, not at the overview); only the plate line (T53) gets readable size, and only when
-  it is soon or late — done when: a test pins the scene countdown's size ≤ 0.65 of the member name's and its colour
-  `--text-3` for a countdown two hours away, none drawn while the system is not held, and a still of `galaxy.html?at=cloud&open=1`
-  shows the countdown smaller than the member name.
-- [ ] T57 (§7 Night 4, §2.1; r50-skeptic galaxy 1 and 2; amends T53 and T56) [ui] [variant:galaxy] One countdown, never the
-  loudest mover on a trouble plate: while a plate's hero is trouble (crit/warn/down) it carries no countdown row, unless the
-  countdown's own node is the hero (T53's row is for calm holds and sheets); while any plate carries a countdown row, the
-  scene does not draw that countdown's label (T56's label is for a system open without a plate: touch explore) (`hud.js
-  countdownCaption`, `countdown.js`, `labels.js`) — done when: a test with VM-C held crit and a DB dump due finds no
-  countdown row on the plate, a test with a calm held CLOUD finds the row on the plate and no scene label for the same
-  node, and a film of `galaxy.html?demo=1&quality=0&pace=wall` shows no ticking number beside a held crit.
-- [ ] T58 (§7 Night 4, §2.1; r50-skeptic galaxy 3) [ui] [variant:galaxy] Late says late: an overdue countdown reads
-  `LATE 13 MIN` in the scene and `13:10 LATE` on the plate (words, not a `+` that looks like a bullet), still no hue
-  (late is not trouble) (`countdown.js countdownText`, `caption.js`, tests that pin `+`) — done when: tests map an overdue
-  `at` to both strings at overview, site and held formats and no string for a future `at` contains `LATE`, and a still of
-  `galaxy.html?at=cloud&open=1` shows `LATE` for the object-store lifecycle.
-- [ ] T59 (§7 Night 4, §2.1; r50-skeptic show 1) [ui] [variant:galaxy] A pinned card outlives its fact: when the pinned
-  node's status drops below the level it had at pin time, the card goes `--text-3` with `WAS` before the title (or is
-  dropped when it has cleared for good) (`show.js`, `wall.css`) — done when: a test pins a card on a crit node, clears the
-  node on the model, and finds the card dimmed with `WAS`, and the card unchanged while the status stays.
-- [ ] T60 (§7 Night 4 B, D10; r55-touch galaxy 1; amends T37's "a first touch drops everything shown") [ui]
-  [variant:galaxy] A finger beats a show for the camera only: the first touch ends a show's `flyTo` (the director's
-  show source) but pins and highlights stay until their ✕, their ttl or `clear`; in explore `pin`, `highlight` and
-  `clear` are accepted and only `flyTo` answers `busy`; a tap on a card or a highlight ring is a tap on its node
-  (`show.js`, `main.js wake`, `touch.js`) — done when: a page test with a pin and a highlight up and a first touch
-  finds both still drawn and only a flyTo gone, a pin sent in explore answers `ok`, a flyTo in explore answers `busy`,
-  and a tap on a card opens its node's site.
-- [ ] T61 (§7 Night 4, §2.1; r55-touch galaxy 6) [ui] [variant:galaxy] The fan keeps off trouble as well as words:
-  in `fan.js` placement each trouble member's 27 px disc and its label box count as blocked beside the words, and when
-  both arcs are blocked the arc covering fewer trouble discs wins — done when: a test on the large fixture taps
-  `monitor-logs` in HV1 and finds no fan row over a trouble member's disc that the other arc would have left free, rows
-  still ≥ 48 px and ≥ 48 px apart.
-- [ ] T62 (§7 Night 4, §2.2; r55-touch galaxy 7 = r26-touch 5 from Later) [ui] [variant:galaxy] The wake is not silent:
-  as the first touch lands, `MANUAL · TOUR IN 1:00` and the `‹ BACK`/`▶ TOUR` control show at once (not after the 1.5 s
-  ease), and the fan's `galaxy-fan-spot` ring marks the finger's down point — done when: a page test on a fake clock
-  finds the manual line and the control present within 200 ms of the waking down, and a CDP still 200 ms after a wake
-  shows both.
-- [ ] T63 (§7 Night 4, §2.4; r60-performance galaxy 3 and 4, show part; T35 is the fan's half) [ui] [variant:galaxy] The
-  show does nothing while nothing is due: `galaxy/show.js tick` steps and re-applies only when the soonest `until` has
-  passed or the shown seconds line turns (a cheap `nextAt(state)`), and `build()`/`showMarks` run only when the items
-  changed; `draw()` keeps a rounded key per ring and card (0.1 px) and writes `transform`, `hidden` and `dataset.side`
-  only on change, and runs `cardPlace` only when a card or the camera moved — done when: a counting style proxy (as
-  `wall-galaxy-savings`) sees no ring or card write and no `JSON.stringify`-built key 1 s into a held pin with the camera
-  still, a write when the node moves more than 0.1 px, and `wall-galaxy-show` and `-showdemo` tests stay green.
-- [ ] T64 (§7 Night 4, §2.4; r60-performance fx-sweep 1) [ui] [variant:galaxy] The sweep's news costs nothing per frame:
-  `fx.js siteNews` (and `mix`) hashes the fields that make news (status, metrics, `at`, words) directly with `fnv`, with no
-  `JSON.stringify` per node, and runs at most once per model frame that changed (or once per sweep, its only reader) —
-  done when: a test finds the same numbers' change/no-change behaviour as before (the existing sweep tests stay green), a
-  spy on `JSON.stringify` sees no call in `siteNews` over the large fixture, and nothing runs without `?fx=sweep`.
+- [x] T1 (§7 Night 5 A1+A2) [ui] [variant:galaxy] Spacing half and the rosette, as defaults: in `galaxy/layout.js` arms,
+  gaps, `SITE_LIFT`, `MIN_SITE_GAP`, dust and `ARM_RIBBON`/`ARM_BAND` at 0.5x, a system's spread 0.75x; in `scene.js`
+  nebulae and the sun halo at 0.64x; a wider-wound two-arm spiral with a site every 72°, all sites level, only shown sites
+  taking slots (`galaxyLayout(nodes, aspect, shown)`, the sketch's `siteSpot`), the first site far enough out that an open
+  system never reaches the sun's halo; `camera.js overviewShot` frames the whole galaxy snugly — done when: layout tests pin
+  the 72° step, equal site heights, slots for shown sites only, and the nearest site's star farther from the sun than its
+  open reach plus the halo radius; an overview still of the large demo (`?at=overview`) fills the frame with all five sites
+  and no site name off screen. (commit 6d278d7)
+  Notes (builder, round 9): `layout.js TIGHT` {arm 0.5, neb 0.64, spread 0.75}; rosette `ARM` r0 625, turn 72°, `siteSpot`
+  (arm 1 half a step out). Deviations, on purpose: `ARM.step` 180, not the sketch's 165, because past five sites the rosette
+  laps and the sixth stands 2.5 steps behind the first on one ray (165 gave 412 < the gap); `MIN_SITE_GAP` follows the
+  nebulae (700 x 0.64 = 448), not the arms (0.5x = 350 would no longer keep crit nebulae, 435 across, apart). Dust kept as the
+  sketch's formula (a tighter inner spiral, out to about 940). `overview.js OVERVIEW_FIT.shift` 0.4 → 0.6: an even rosette in
+  a snug frame always has two sites under the widest plate, and the reduced-motion test needs the fit to slide past it.
+  The sketch's `ROOM` (arms pushed out 1.24x by `sk_sys=1`) is not in T1: T6 decides it with the 1.4x spread (the nearest
+  open system clears the halo with margin: star 733 out, reach 297 + halo 205; at 1.4x spread still 621).
+  `scene.js SIZE.sunHalo` and `OVERVIEW_MARGIN` are literals (no imported binding at evaluation time, `frontend.test.mjs`),
+  pinned to `TIGHT` by the layout test. Perf: no mesh or vertex count changes (same geometry, smaller numbers), so draw
+  calls/triangles stand as night 4's. Looked at (`$RUN_DIR/shots/r9-t1-*`, `r9-galaxy`): overview shows all five sites named,
+  none off screen, HV2's red the loudest; `?demo=1` film 34.5 fps at cpu 4x, 0 console errors. Found: T1b below.
+- [x] T1b [ui] [variant:galaxy] The sun is out of a held system's frame again: with the tighter galaxy HV1's star is only
+  733 from the sun, so the inward look (`scene.js siteShot`, `framing.js FRAMING.inward`/`inwardRise`) puts the sun's disc in
+  the top right of the frame, on the tag (`?at=lab&open=1`, film frames 9.3 s and 32.5 s of r9; labels keep the sun's name off
+  the tag, the bright disc is not). `inwardRise` 1.0-2.2 does not clear it (tried, round 9). Keep the sun out of the frame
+  or out of `hud.covers()` for every site of the large demo at its hold — done when: a test projects the sun for each held
+  site's `siteShot` with the tablet view and finds it off the frame or clear of the tag box; a still of `?at=lab&open=1`. (commit deecadd)
+  Notes (builder, round 12): no rise and no small turn of the look-in shot clears it: the camera stands 1000-1600 back
+  from a star 733 from the sun, so its frustum takes the sun in from most bearings (probed every 10° on four frames,
+  with and without a plate). The near-hub system is now shot **from the side**: `FRAMING.aside` -65° from the sunward
+  bearing, the sun off the frame's right edge past the free box, no per-site jitter (it alone brought the sun back);
+  the sway stays. `inwardRise` is gone (unused). It holds for any caption plate over about 500 px wide; with no plate at
+  all (before the first one, when `kept` is empty) the sun can show in the frame, but `kept` remembers the widest plate,
+  so the steady hold is clear. Tests (`wall-galaxy-framing`): the sun's disc and halo middle off the tablet frame for
+  `lab` over 6 min of sway at zoom 2.3 and 3.5 with the trouble plate and a calm one, every other site clear of the
+  words; the side bearing pinned. Both fail on the old shot. Looked at (`$RUN_DIR/shots/r12-t1b-hv1`, `r12-t1b-overview`,
+  `r12-galaxy`): `?at=lab&open=1` has no sun and the tag is clear; overview unchanged; `?demo=1` film 38.1 fps at cpu 4x,
+  0 console errors, HV1's holds (9.3 s, 15.1 s) without the sun. No geometry change, so perf is as before.
+- [x] T2 (§7 Night 5 A3) [ui] [variant:galaxy] Size is what it carries: a planet's radius factor 0.8 + 0.35·log2(1+n) of
+  what is below it, a star's 0.8 + 0.2·log2(1+planets), clamped 0.8x-2.2x, never by status (a pure `carryScale` in
+  `layout.js` or `scene.js`); a big sphere takes more segments so it never looks faceted, within the triangle budget — done
+  when: tests pin the formula, both clamps and that a status change leaves the size alone; `?perf=1` triangles at the
+  overview before/after in the notes (no rise past night 4's numbers); a still of `?at=hv1&open=1` shows smooth large bodies. (commit ac22fb0)
+  Notes (builder, round 13): `layout.js CARRY`/`carryScale` and a `carry` on every layout member (planets: every member
+  below, any depth; the rest 1) and site (its planets); `scene.js bodyRadius` multiplies the planet size by it (sphere,
+  halo, mark, labels via `m.radius`), the star's scale, halo, `starRadius` (labels.js stands the name beside it; without
+  it `HV1` sat on the bigger star) and `camera.js screenOf` follow `s.carry`; a relayout eases the star to its new carry.
+  The tone still picks planet size or dot (a dot in trouble grows to `SIZE.planet`, uncarried, r8-film-ui 3): only that
+  test's planet reference moved (`wall-galaxy-trouble`, the builder is now 1.5x). Segments: stars are flat-shaded, so only
+  the edge can look faceted; above `BIG_STAR` 1.2x a star takes `bigStar` 26x18 (as round an edge up to 1.65x as a 1x star
+  at 20x14, pinned in `wall-galaxy-carry`); planets keep 32x22 (rounder at 2.2x than a 1x star). Triangles (`renderer.info`,
+  large demo, pinned levels, `$RUN_DIR/r13-tri-*.txt`): overview L0 83.9k → 85.7k (night 4's 84-86k), L2 20.6k → 21.2k,
+  `lab` open L0 30.7k → 32.3k; draw calls unchanged (203); no per-frame work added. Looked at
+  (`$RUN_DIR/shots/r13-t2-hv1b`, `r13-t2-overview`, `r13-t2-hv2`, `r13-galaxy`): HV1's star 1.6x and round, builders and
+  rooms by load, names clear; `?demo=1` film 30.2 fps at cpu 4x, 0 console errors.
+- [x] T3 (§7 Night 5 A4) [ui] [variant:galaxy] Colour: each site a quiet warm-set tint (teal, indigo, plum, sage; the
+  sketch's `TINT_SETS.warm`) in its calm nebula and dust; "lift": calm bodies and names a step lighter (stone) on a deep
+  blue-black ground; a warmer, softer sun. One frozen table in `galaxy/palette.js` (see the colour note above); status hues
+  stay the loudest thing on screen, no neon — done when: palette tests find every tint's chroma below every status hue's and
+  the lifted calm text still under `--text-1`, a scene test finds calm nebulae tinted and trouble nebulae in the status hue,
+  `test/design-guardrails.test.mjs` green; a still of the overview with HV1 in crit shows the red cluster as the loudest thing. (commit 117cfbd)
+  Notes (builder, round 14): `palette.js LOOK` (frozen, OKLCH) holds the tints, the lift and the sun; `applyLift(page)` in
+  `main.js boot` sets `--text-3`/`--text-2`/`--bg-canvas` one property at a time before the palette is read (the guardrail
+  scans CSS, the values stay out of the sheets); `lifted(readVar)` gives tests the same view. `scene.js`: a site keeps the
+  tint of the place it came in for life (`s.tint`, a later site never repaints it); a calm nebula takes it, a trouble
+  nebula its status hue and eases back to the tint on clear; the dust is tinted per nearest site (`tintGrain`, brightness
+  kept) once per site change and after a star's glide, no per-frame work. Changes against the sketch: dust chroma 2.6x
+  instead of 3.2x (indigo dust reached 0.116, past `--p3`'s 0.11; now ≤ 0.095); the sun halo keeps `SIZE.sunHalo` with the
+  softer falloff instead of growing 1.15x (it would pass the crit nebula's size, the r8 guard). `wall-galaxy-sun`'s core
+  test now reads the warm core under the lifted text-2. Tests: `test/wall-galaxy-tint.test.mjs` (7). Looked at
+  (`$RUN_DIR/shots/r14-t3-overview`, `r14-t3-hv1`, `r14-t3-hv2`, `r14-galaxy`): blue-black ground, warm sun, HOME's teal
+  haze faint, stone labels readable, red and yellow the loudest; `?demo=1` film 30.1 fps at cpu 4x, 0 console errors (frame 1:
+  HV1 crit, its red cluster the loudest thing).
+- [x] T4 (§7 Night 5 A5) [ui] [variant:galaxy] Depth haze: distance fog from 0.6x to 2.6x of the look-at distance on calm
+  materials only; status-hued materials and trouble nebulae never fogged (`scene.js`) — done when: a scene test finds `fog`
+  off on every status-hued material and trouble nebula and on for calm bodies and dust, the fog range following the look-at
+  distance; a still of `?at=hv2&open=1` shows the far side fade and the crit member at full strength. (commit 6255bf1)
+  Notes (builder, round 17): `scene.js HAZE` {near 0.6, far 2.6, min 200}, `hazed(tone)` (calm only) and a pure
+  `hazeRange(pos, dir)`: the look-at distance is where the sight line meets the galaxy's plane (all sites level: the held
+  star or the overview's middle), else the distance to the sun; the old `FogExp2(bg, 0.00008)` is now a linear `Fog` in the
+  same (lifted) ground colour, its near/far set each frame before the render (one direction read, no new draw). Never fogged:
+  warn/crit/low bodies, halos and stars (shared materials by tone), the marks, a trouble nebula's lobes and its lane (flipped
+  in `paintSite` only when the nebula's tone changes, one program rebuild), the beacon and afterglow fx, and the sun core and
+  halo (its look is the freshness signal, night 3 T6; deviation from the sketch, which fogged it). Fogged: calm bodies, calm
+  nebulae and lanes, orbit lines, arm ribbon/band, dust; far stars stay `fog: false`. What the camera looks at takes 20 %
+  haze (the sketch's numbers). Test: `test/wall-galaxy-haze.test.mjs` (5); the getter is `galaxy.haze` (a `fog()` getter
+  trips `frontend.test.mjs`'s call check). Perf: no geometry or draw-call change, the fog shader chunk swaps exp2 for linear.
+  Looked at (`$RUN_DIR/shots/r17-t4-hv2_open_1`, `r17-t4-overview`, `r17-t4-lab_open_1`, `r17-galaxy`): the crit `storage`
+  at full strength in front of a slightly dimmed calm system, HV2's red at the back of the overview as loud as before;
+  `?demo=1` film 32.6 fps at cpu 4x, 0 console errors. A large demo started 21:56 by an earlier round (no pid file) still
+  holds :7795 and serves this checkout; left running (not started by this round).
+- [x] T5 (§7 Night 5 A6) [ui] [variant:galaxy] Gentler motion: open/fold 2800 ms on smootherstep (`layout.js OPEN_MS`,
+  `ease`), the target opening from 0.32 of a flight (`camera.js FLIGHT.openAt`), held drift 0.6x (`SITE_SHOT`), dust turn
+  0.6x (`still.js dustTurn`) — done when: tests pin the constants and that smootherstep has zero slope at both ends; the
+  tour and touch page tests stay green (timings they assert updated only where they read these constants); a
+  `?demo=1` film shows an opening without a jerk at its start or end. (commit 36bfcb4)
+  Notes (builder, round 18): `layout.js` `OPEN_MS` 2800 and a new `smoother` (smootherstep) beside `ease`; `foldAt` and
+  every fade that follows the opening in `scene.js` (the line spread, beacon/ring/ping fades, the crit-lobe switch, the
+  dust hole, `fadeNear`) use `smoother`, so members and fades stay in step. Flights, the overview, `live.js` and the
+  nebula colour changes keep the cubic `ease` (not in A6; the sketch's softer flight *out* belongs with C's Back, T13).
+  `FLIGHT.openAt` 0.32: the opening ends ~1.3 s after landing (720 + 2800 vs 2250 ms). `SITE_SHOT.speed` 0.000012,
+  `dustTurn` 0.0000024 rad/ms (comments updated: ~4.4 min a swing, ~44 min a turn). Test: `test/wall-galaxy-soft.test.mjs`
+  (3: constants, smootherstep ends and midpoint, `foldAt`); `wall-galaxy-still`'s dust check moved from > 0.9 to > 0.5
+  rad at 250 s; no tour or touch test read these constants. Perf: constants only, no draw change. Looked at
+  (`$RUN_DIR/shots/r18-galaxy-b`, 30.3 fps at cpu 4x, 0 errors; a first run read 25.8 fps at load avg 4.5 from other rooms;
+  `r18-galaxy-open`, 350 ms frames over HV1's opening, its 20 fps is the screenshot cadence): the cluster leaves folded at
+  2.3 s, is most of the way open at 3.3 s and settles by 4.1 s with no pop at either end. The plate's `WAITING ON A
+  PERMIS…` truncation is T24's, untouched here.
+- [x] T6 (§7 Night 5 B1) [ui] [variant:galaxy] System room: planets spread 1.4x with a minimum gap of 13 % of the system's
+  reach (the sketch's `spaceOut` in `layout.js`); what hangs below a planet moves with it; open-system labels never collide
+  (`labels.js`), HV1's builders cluster the test case — done when: a layout test on the large fixture finds every planet pair
+  in an open HV1 at least 0.13 of its reach apart and each child at its planet's offset, a labels test finds no two shown
+  name boxes overlapping with HV1 open at 1368 px, and a still of `?at=hv1&open=1` shows every builder name whole. (commit 1cca98f)
+  Notes (builder, round 19): `layout.js ROOM` {spread 1.4, gap 0.13, arms 1.24}; `SPREAD` x1.4, `CLOSED` 0.16/1.4 (a folded
+  cluster keeps its size); `spaceOut` (exported, the sketch's: planets pushed apart to the gap and 0.8 gap off the star,
+  children moved with their planet, dots step off 0.55 gap). Deviations, on purpose: the sketch's arm push (`ARM.r0`/`step`
+  x1.24) lands too, which T1 left to this task. Without it the 1.4x reach makes the held shot stand back so far that the
+  sun came into HV1's frame (calm plate) and onto HV2's words (HV2's reach/sun ratio 0.315, just under the side shot's
+  0.33). No bearing (-30° to -85°) or `inward` value fixed both. `scene.js OVERVIEW_MARGIN` x1.24 with it, so the overview
+  is the same picture from farther back and the T19 fit tests pass unchanged. `camera.js FLIGHT_SAMPLES` 24 → 32: HV2 →
+  REMOTE jolted (5.9x the mean step) where the step-back need peaked between two samples. The A1 test pins the arms,
+  margin and dust bound with `ROOM.arms`. Found: the large fixture's planets already stood ≥ 0.24 of reach apart, so on it
+  B1 is the spread; `spaceOut`'s parting is pinned on a synthetic pair. Test: `test/wall-galaxy-room.test.mjs` (5:
+  constants, pair gap on every large-demo system, children at their orbits offset ± the step-off, spaceOut parting,
+  HV1 open at 1368 px naming every room and builder with no overlap in the plain hold). Perf: constants and a layout-time
+  pass; flights sample 32 points instead of 24 per frame (cheap pure math), no draw change. Looked at
+  (`$RUN_DIR/shots/r19-t6-*`, `r19-galaxy`): overview names all five sites; `?at=hv2&open=1` roomy, every name whole;
+  `?demo=1` film 34.7 fps at cpu 4x, 0 errors, no sun in any hold. **Not met:** `?at=lab&open=1` with the trouble
+  plate up does not name `ba` and `bb`. Their own trouble lanes' names (feat-search, fix-login, ci-retry, a few px off
+  them) take every side, and the plate squeezes HV1 into the right third. That part is split to T6b, after T7.
+- [x] T6b (split from T6) [ui] [variant:galaxy] HV1's builders named in the tour's hold: with the trouble plate up
+  (`?at=lab&open=1`, free box ~550 px wide) `ba`/`bb` lose every side to their trouble lanes' names, which sit a few px
+  off them; `feed:hv1/106` (scratch) also falls behind git-mirror in projection. Once T7 folds lanes into moons (tight,
+  unnamed), check again and, if a builder is still unnamed, let a planet's name win over a child's of its own in
+  `labels.js` while it stays in trouble's colour on the planet's glyph — done when: a labels test with
+  `zoomedSiteShot(lab, t, DEMO_TIMING.zoom, view)` and the plate's covers names `ba`, `bb`, `bc` at four times, and a still
+  of `?at=lab&open=1` shows them whole. (commit 5cf9de0)
+  Notes (builder, round 23): after T7 `ba`/`bb` were still unnamed at 3 of 4 times (their trouble moons' spheres and
+  names took every near side). `labels.js`: `placeLabels` puts a planet's item just before the first of its own moons'
+  (items carry `host`); `candidates(…, ring)` adds the four sides again just outside the planet's shown moons (`ringsOf`:
+  trouble or tappable moons, css px reach); and, since leading costs a trouble moon its name at some times (16 of 20
+  trouble names at the four times vs 18 before), a planet whose own trouble moon goes unnamed **says it**: its name
+  takes that moon's shape and hue (`▲ ba` in warn), its box reserved that wide so nothing hops. The plate's hero is not
+  counted as lost. Every trouble moon is named or carried by its planet (pinned). Test:
+  `test/wall-galaxy-hostnames.test.mjs` (3: the held shot `zoomedSiteShot(lab, t, DEMO_TIMING.zoom, view)` with the
+  trouble plate's covers names ba/bb/bc at 5/30/60/90 s with no overlaps and carried trouble; host ordering; ring sides);
+  the moons test now asks for `ba` too. Perf: one more projection per shown trouble moon of an open site, no draw change.
+  Looked at (`$RUN_DIR/shots/r23-t6b`, `r23-galaxy`): `?at=lab&open=1` names `▲ ba`, `▲ bb`, `■ bc` whole beside the
+  VM-C plate, VM-C still the loudest; `?demo=1` film 35.4 fps at cpu 4x, 0 errors. `feed:hv1/106` and some rooms
+  (vm-a/vm-b) still go unnamed in the plate's hold at times: not in this task's done-when, left as is.
+- [x] T7 (§7 Night 5 B2, folded) [ui] [variant:galaxy] Moons in the model and the scene: services under a room, lanes under a
+  builder, sessions under a lane become moons (pure: which nodes are moons of which planet, from the map model); folded, they
+  sit tight to their planet at half size, unnamed, not tappable (`scene.js` `MOON`, `moonOrbit`); the large demo carries
+  lanes and sessions under at least two builders (`test/helpers/demo-hub.mjs`, if missing) — done when: tests pin the moon
+  tree for the large fixture, folded moons inside their planet's reach at half size, none in `labels`' list nor in the hit
+  points; the overview's draw calls/triangles before/after in the notes. (commit 2da817b)
+  Notes (builder, round 22): `layout.js moonHosts` (pure): a non-planet member is a moon of the nearest planet above it, so
+  a session orbits its lane's builder; `galaxyLayout` members carry `moon: { host, i, n }`. `scene.js MOON` {calm 5.5 open,
+  foldK 0.5, tight 1.45, pad 3, from 0.35, to 0.9}, `moonOrbit` (per planet: 40-90 s a turn, ≤ ±40°), `moonRing` (a
+  planet's moons on its one orbit, evenly spaced: the first still had HV1's trouble moons piling onto ba/bb when each had
+  its own plane), `moonAt`; `placeMoons` puts them on the ring at the planet's drawn radius x1.45 + 3 + their own, and
+  `frame()` turns them on (never in still mode). A calm moon grows in from 0.35 to 0.9 of the opening, so **the overview
+  draws no calm moon** (the nebula and site name carry a folded cluster). **Deviation, on purpose:** a moon in trouble stays
+  as a dot in trouble was: planet size, round sphere, halo, shape, named and a target, only its place is a moon's. Eight
+  existing tests pin that (r8-film-ui 3 trouble ≥ a planet; the tour's locked lane named in big caps, T9/T20/T22), and
+  readable trouble wins (README §2). T8 can make it tappable inside the open ring. Calm moons skip `labels.js` and
+  `touch.js memberPoints`. Demo: `demo-fleet.mjs` gives builder-b's `deps-bump` a second session (`deps audit`), so the
+  live Map hangs sessions under builder-a and builder-b (checked on `/api/map`). The static fixture
+  `wall-large-map.json` is unchanged: adding the two session nodes moved one name pair in the radial variant's T46 test,
+  and the fixture already pins lanes and sessions (builder-a), lanes and a run (builder-b). Test:
+  `test/wall-galaxy-moons.test.mjs` (8: the fixture's moon tree, moonHosts, orbit, tight and clear of the planet at half
+  size / planet size, none calm at the overview and growing in, turning and still, one ring that never touches, calm moons
+  not named and not targets while trouble moons are). The carry and trouble tests' "calm dot = 4" lines now read the folded
+  moon's 2.75. Perf (`?at=…&quality=0`, 1368 px, the r13 tool): overview **204 → 151 draw calls, 87.0k → 75.2k
+  triangles**; HV1 open 94 → 91 calls, 32.3k → 24.9k. The moons are re-placed each frame only for sites with one shown
+  (a few dozen positions). Looked at (`$RUN_DIR/shots/r22-t7-*`, `r22-galaxy`): overview clean, trouble still the loudest;
+  HV1 open: rings round ba/bb with trouble moons apart; `?demo=1` film 27.3 fps at cpu 4x, 0 errors. Still for T6b: `ba`
+  and `bb` lose their sides to their own trouble moons' names (the moons test leaves `ba` to T6b).
+- [x] T8 (§7 Night 5 B2, open) [ui] [variant:galaxy] Opening moons: tapping a planet (or one of its moons) opens them onto a
+  ring round it with the site's open time and easing, tilted toward the camera, a faint orbit line and thin tethers; about
+  110 px apart on screen, at least 72 px from the planet; named and tappable while open; another planet's tap folds the
+  first's; no picker (Q19 when answered) — done when: a test with the camera at a picked builder finds its moons' screen
+  points ≥ 72 px from the planet and ≥ 100 px apart, named and in the hit points only while open, folded again when another
+  planet is picked; a still of an open lane ring on the large demo. (commit a756402, 6bdc125)
+  Notes (builder, round 24): `scene.js openMoons(id)` / `moonsOpen()`: a planet (or a moon: its planet) opens, every
+  other ring folds, null or a planet with no moons folds all; each ring eases over `OPEN_MS` on `smoother` (still mode:
+  at once) and goes with its system when that folds. `MOON_RING` {gapPx 110, minPx 80, clearPx 28, tilt 0.42 rad, segs
+  48, alpha 0.9}: the ring is measured on screen at the planet's depth (`moonRingPx`), re-solved each frame, so it keeps
+  its px size through any camera move (T9, T12). It faces the camera, its top tilted toward it; moons start at the top
+  and go clockwise (`ringAngle`) and **hold still while open** (a finger aims at them; folded they turn as in T7). An
+  opened calm moon is drawn at `MOON.calm` (5.5), named and a target from half open (`m.ringOpen`). One `LineSegments`
+  per site (`s.moonLines`, invisible unless a ring is open, so the overview's draw calls are unchanged) carries the faint
+  ring and tethers. `main.js` asks `galaxy.openMoons(moonsAt(place))` when the place changes (touch.js `moonsAt`), so a
+  planet tap opens, a moon tap keeps its planet's ring, and its system, Back, the overview and the tour's hand-back fold.
+  `labels.js`: a picked ring's calm moons are named at any size, ranked just after trouble (`RANK.site`), so on HV1's
+  crowded right side they beat the neighbouring calm planets the ring overlaps (`vm-b` goes unnamed while builder-a's ring
+  stands). **Found while filming, fixed:** a tap on builder-a fanned out four rows, because its folded trouble moons are
+  inside the finger's 27 px. `touch.js ringHit`: a planet and its own folded moons are that planet, a moon on an open
+  ring wins its tap, two different planets still fan (T11 replaces the fan). `memberPoints` points carry `host`/`onRing`
+  for moons. One source assertion in `wall-galaxy-fan.test.mjs` now reads the `ringHit` line. Test:
+  `test/wall-galaxy-moon-ring.test.mjs` (7: ring px, moonsAt, builder-a's five moons ≥ 72 px from it and ≥ 100 px apart
+  at the held shot, named and targets only while open, held still, the ring line; builder-b folds builder-a's, a moon
+  keeps its planet's, a bare planet folds all; a folding system takes it; still mode; ringHit; the page pick on the large
+  fixture). Looked at (`$RUN_DIR/shots/r24-t8-ring/`, CDP touch walk on `--size large`: wake → HV1 → ba → bb → a moon →
+  Back): builder-a's ring 90-109 px out, builder-b's 78-93 px, no fan, 0 console errors; `r24-galaxy` (`?demo=1`, cpu 4x)
+  33.9 fps, worst gap 213 ms, 0 errors, the tour unchanged. **Left for T9:** at the system hold HV1 sits top right under
+  the plate, so builder-a's top moon (and the lock on it) runs under the Back control and builder-b's ring past the
+  frame's right edge (`04-ba-open`, `07-tap-moon`); T9's camera (planet left of centre, 45 % closer) is what puts the ring
+  in empty screen, and its test should assert every open moon inside the frame and off the covers.
+- [x] T9 (§7 Night 5 B3) [ui] [variant:galaxy] Picking a planet or moon flies the camera about 45 % closer with the planet
+  left of centre, so the ring and the card use the empty screen (`camera.js`, `main.js` selection) — done when: a page test
+  on a fake clock taps a planet and finds, at the flight's end, the camera distance about 0.55 of the system hold's and the
+  planet's screen x in the left 45 % of the frame with its open ring inside the frame; a still shows it. (commit c39f2dc)
+  Notes (builder, round 27): `camera.js PICK` {closer 0.55, at 0.3, padPx 64} and pure `planetShot(hold, p, view)`: the
+  camera 0.55 of the hold's distance along the hold's own line of sight (no swing; the drift goes on), the planet at 30 %
+  across the free box, never nearer its edge than its ring (`moonRingPx`) + 64 px, never past the box's middle. A site move
+  carries `{ member }` (`focus`/`cut`'s options, passed through `director.js`; a moon frames its planet, so a tap on the
+  ring keeps the camera); a move between two shots of the same system keeps its drift clock. `main.js openPlanet` flies
+  (a cut in reduced motion), and `openSite`'s `there` holds only without a member, so Back from a planet flies out to the
+  system's hold (T13 changes that to "keeps the camera where he turned it"). **Deviation, on purpose:** "left of centre"
+  is of the free box, not the frame: while a planet's sheet stands the plate covers the frame's left half (x 110-780 on a
+  1368 px tablet), so a planet in the frame's left 45 % would put its ring under the words. The pick's box
+  (`main.js pickBox`) also leaves out `‹ BACK` and the manual line (r25 #15). T17's card can take the box's right side.
+  Test: `test/wall-galaxy-pick.test.mjs` (5: planetShot; the page's camera and director on the large demo: builder-a at
+  0.55 of the hold's distance, 30 % across the free box, its five moons inside the frame and off the plate, tag, fleet
+  line and Back; a moon's tap keeps the camera, builder-b flies on, Back to the system flies out; reduced motion cuts;
+  main.js's wiring). One source assertion and one stale comment in `wall-galaxy-touch.test.mjs` follow openPlanet. Perf:
+  camera only, no draw call or triangle added. Looked at (`$RUN_DIR/shots/r27-t9-pick/`, CDP touch walk on `--size
+  large`): HV1 hold 2500 → builder-a 1375 units (0.55), its ring 89-107 px round it at (1038, 444), all moons in frame
+  and clear of Back; builder-b the same; a moon tap holds still; Back ×2 out to HV1 and the overview; 0 console errors.
+  `r27-galaxy` (`?demo=1`, cpu 4x) 32.9 fps, worst gap 224 ms, 0 errors, the tour unchanged. **Seen, not fixed:** at 1.8x
+  the HV1 builders cluster's neighbours (vm-a, vm-b, bb's trouble moons) crowd the open ring, and a picked planet's own
+  name is pushed off beside the ring (`ba` 120 px below it, `bb` past the ring's right); the names' trouble moon icons
+  cross `ci-retry`/`search ui` as in r24. Candidates for T17/T18 (the card names the planet) or a labels pass.
+- [x] T10 (§7 Night 5 B2, contract) [ui] [variant:galaxy] Moons join the page contract, additive only: `__cockpitView`'s
+  `screenOf` and `emphasis` accept a moon id, a show `fly_to` on a moon frames it as planet → system does now (site, then
+  its planet opened, then the moon), every existing name and value unchanged; `data-wall-state` gains no renamed value. If
+  `fly_to` on a moon needs `show.js` (fenced), write the patch under `docs/plans/wall/patches/` and do the `main.js` side —
+  done when: a test finds `screenOf(moonId)` a point while its ring is open, `emphasis` for a moon, and a `flyTo` of a moon id
+  ending with its site held and its planet's ring open; `wall-galaxy-show` and `cockpit-wall-hold` tests green unchanged. (commit 942eac2)
+  Notes (builder, round 28): `screenOf` and `emphasis` already took any drawn id (camera.js finds a moon among its
+  site's members; show.js's highlight `known` is main.js's `nodeAt`), now pinned for a moon. `director.js showNode` /
+  `showTarget` (pure) replace main.js's inline `nodeAt`/`targetOf`: a moon's target is its site's shot at the show's
+  zoom with `{ member: moon }`, so the camera frames its planet as a finger's tap on that moon does (T9 PICK); a site,
+  a planet and the sun fly exactly as before (no member). `touch.js showPlace`: in main.js's `show()` a moon's move sets
+  the place to its planet's (`placeOf(site, moon)`), so the tick's `moonsAt` opens the ring and Back steps out from it;
+  a later show move (not a `stay`) takes back only a place a show set, a finger's place stays. **No `show.js` change, so
+  no patch.** `zoom` is a required argument (a default reading `TIMING` broke frontend.test's evaluation-time guard).
+  Test: `test/wall-galaxy-show-moon.test.mjs` (6: showNode/showTarget; showPlace; the page on the large demo: a show to
+  `lane:builder-a/fix-login` lands with `lab` held, member the moon, builder-a's ring open, the moon in the frame ≥ 72 px
+  from its planet, a later site move folds it; a planet's fly as before; emphasis of a highlighted / left-out moon;
+  main.js's wiring and every handle name). `wall-galaxy-show`, `cockpit-wall-hold` unchanged and green. Looked at
+  (`$RUN_DIR/shots/r28-t10-moon/`, CDP on `--size large` calling `__cockpitView.map.flyTo`): moon → landed true, ring
+  open round ba at (290, 320), moon at (243, 397); `hv2` folds it; a builder-b moon opens bb's; Back to the system;
+  0 console errors. `r28-galaxy` (`?demo=1`, cpu 4x) 27.9 fps under load, again 30.6 fps (`r28-galaxy-2`), worst gap
+  222-234 ms, 0 errors, the tour unchanged (camera/show path only, no draw call added). **Seen:** a show releases the
+  plate, so the free box is the whole frame and the picked planet lands far left (x 290 of 1368); fine for T17's card
+  on the right.
+- [x] T11 (§7 Night 5 C1) [ui] [variant:galaxy] Hit targets in screen space: 48 px for a finger, 28 px for a mouse (by
+  `pointerType`), the nearest centre wins (`touch.js` the sketch's `hitNearest`, `hitRadius`). The owner wants no picker, so
+  the fan (`fan.js`, its `main.js` wiring, `test/wall-galaxy-fan.test.mjs`, its `wall.css` rules unchanged or left unused)
+  goes; night 4's T35 and T61 close with it — done when: tests find the nearest of two members under one finger picked,
+  a mouse 30 px off a member picking nothing and a finger 30 px off picking it, no fan module or row left, and the touch page
+  tests green. (commit 81dac29)
+  Notes (builder, round 29): `touch.js` `TAP.fingerPx` 48 / `mousePx` 28, `hitRadius(pointerType)` (a pen or an event that
+  does not say is a finger), `hitNearest` (the sketch's: nearest drawn centre within `max(reach, r)`, a name under the
+  finger 0 away, a beacon pillar by its nearest point, a tie within 2 px to the louder tone) and `memberHit` (hitNearest,
+  and a folded moon nearest the finger is its planet when that planet is in reach too: T8's "a planet and its folded moons
+  are one target"; a moon on an open ring is nearest anyway). `createTaps` now calls `pick(x, y, ev)`, so main.js's pick
+  takes its reach from `ev.pointerType`; sites use `hitNearest` too (the nearest centre, no longer worst tone first).
+  `hitAll`/`ringHit` are gone with `fan.js`, `test/wall-galaxy-fan.test.mjs` and every fan line in `main.js` (night 4's
+  T35/T61 close with it). `hitTest` (worst tone first, 27 px) stays exported: the touch/resume page tests use it as their
+  pick. Fenced `galaxy.html` keeps a hidden, unused `#galaxy-fan`; `wall.css` keeps the fan rules unchanged (comment
+  marks them unused) plus one added rule `.galaxy-fan { --fan-px: 18px; }`, because `frontend-static`'s var check no longer
+  saw fan.js set it. Empty sky is still a step back (T12 changes that). Test: `test/wall-galaxy-hit.test.mjs` (6: reaches,
+  nearest of two under one finger regardless of tone, the tie, mouse 30 px off nothing / finger 30 px off it, two planets
+  give the nearer, a page tap through `createTaps` with mouse/touch/pen events, no fan left); moon-ring, half and touch
+  tests moved to `memberHit`/`hitNearest`. Looked at (`$RUN_DIR/shots/r29-t11-hit/`, CDP on `--size large`, the nearest
+  centres logged at each tap): a finger 40 % of the way from ba to bb (80 px apart) → builder-a (its folded moon 10 px
+  off, ba 32); a finger 30 px past bb → builder-b (its moon ci-retry 22, bb 30, room-c 32); a mouse 30 px off ba → its
+  folded trouble moon fix-login, 13 px off (ba at 30 is past a mouse's 28); a mouse on ba → ba; never a fan row, 0
+  console errors. HV1's right side is so crowded that a live "30 px off = nothing" needs empty sky; the unit test pins it.
+  `r29-galaxy` (`?demo=1`, cpu 4x) 33.1 fps, worst gap 191 ms, 0 errors, the tour unchanged (no scene or draw change).
+- [x] T12 (§7 Night 5 C2) [ui] [variant:galaxy] Inside an open system a drag orbits it round its own star (both axes, pitch
+  clamped; the sketch's `orbitRound`) and it stays open; the first drag does not shift the system on screen (no aim offset);
+  a tap on empty space does nothing — done when: a page test on a fake clock opens a site, drags 200 px each way and finds the
+  site still held and open, the star's screen point within 2 px of where it was, pitch within its clamp, and an empty tap
+  changing neither mode, selection nor camera. (commit d33e1c8)
+  Notes (builder, round 32): `touch.js orbitRound(pose, pivot)` keeps the star's **direction in the camera's own frame**
+  (`see`: right/up/ahead), not a world aim offset; `orbitPose` solves the view's pitch and heading in closed form (world up,
+  no roll), so the star stays on its exact screen point through any yaw, pitch or zoom (`zoomStep` on a round orbit changes
+  only the distance). The pitch clamp (`range`) is ORBIT's widened to where the camera stands (a hold below 20° does not
+  jump on the first drag) and narrowed where the view would tip over the top. `createGestures({ pivot })` takes a round
+  orbit when the page gives one, steers with `{ hold: true }` (director.js forwards it), and keeps a near limit no farther
+  than where the gesture started (a pick shot nearer than `ORBIT.near` does not jump out on a pinch). `camera.js
+  steer(pose, { hold: true })` keeps the site the want with `turned` (the finger's pose, no drift), so it stays held and
+  open; any later move (a planet tap, Back, a show) drops the turn. `main.js`: `pivot` is the wanted site's star; a tap on
+  empty sky now does nothing (was a step back; T13 brings double-tap/right-click). `lock.js offFrame`: the brackets and
+  leader hide while their target is outside the frame (r30 #1's note). Source assertion in `wall-galaxy-touch` updated to
+  the tap line without `goBack`. The touch/resume test harnesses still step back on an empty tap in their own copies of the
+  wiring; T13 should replace that there with its double-tap. Test: `test/wall-galaxy-orbit.test.mjs` (6: orbitRound
+  round-trip, star fixed < 0.5 px over six drags and two zooms, both clamps; low-pitch hold; the page on the large demo:
+  lab tapped and held, drags 200 px each way, star ≤ 2 px during and after the coast, open > 0.99, pitch clamped, a 600 px
+  drag stops at the top, empty tap changes nothing; a planet tap after a turn drops it; offFrame; main.js wiring). The
+  page test fails with the pivot removed (checked). Looked at (`$RUN_DIR/shots/r32-t12-turn/`, CDP touch on `--size large`,
+  script `$RUN_DIR/tools/r32-t12.mjs`): HV2 held, drags left/right/down/up/420 px right: the star at (1120, 387) every time
+  (0.0 px), open 1, STORAGE's lock follows it; empty tap keeps hv2; with k8s-2 picked a drag keeps the star too; 0 console
+  errors. **Seen:** a long turn brings the sun and HV1 in behind the tag and Back (`07-drag-far-right`), and the faceted sun
+  edge (T28). `r32-galaxy` (`?demo=1`, cpu 4x) 39.8 fps, worst gap 173 ms, 0 errors, the tour unchanged (no draw change).
+- [x] T13 (§7 Night 5 C3) [ui] [variant:galaxy] Back, one step at a time (moon → planet → system → overview): right-click,
+  double-click/double-tap on empty space, or the Back control; Back from a planet folds its moons and keeps the camera where
+  the finger turned it; zoom-out flights 3000 ms on a soft ease (`director.js` timings); double-click from a system goes to
+  the overview as now — done when: a page test walks moon → planet → system → overview with each Back kind and asserts the
+  step, the folded moons, the kept pose from a planet, and each zoom-out flight's duration 3000 ms; keep B239. (commit 23a511b)
+  Notes (builder, round 33): `touch.js` `placeOf(site, planet, moon)` gives a `moon` level (`planet` its host), `backStep`
+  moon → planet → system → overview, `moonsAt` a moon's planet; `createTaps({ back })` hears a right-click (secondary button
+  down and up within the slop, however long; never a pick nor a tap) and a double tap/click on empty sky (`TAP.doubleMs`
+  450, `doublePx` 40, the sketch's; the first empty tap is told as any and does nothing); `createGestures` ignores a
+  non-primary button (a right drag never turns). `director.js ZOOM_OUT` {3000, soft}: `soft` rides on a finger's move to
+  `camera.js`, which eases it on `smoother` (other moves keep the cubic `ease`). `main.js`: `openPlanet` makes a moon's
+  place (`hostOf`) and **keeps the camera on a tap on the framed planet or one of its moons** (found while testing: the
+  moon tap re-flew to the pick shot and dropped the turn); `backToSite` keeps a turned camera (or one already at the hold),
+  else eases out to the hold in ZOOM_OUT; `goBack` from a moon only changes the sheet (a moon's shot is its planet's);
+  to the overview `toOverview(left.pose(), ZOOM_OUT)`. **Deviation, on purpose:** the wake's ease out stays
+  `TOUCH.fitMs` 1500 (not a Back; B237's minute counts from it); B239 untouched. A show's moon flight still makes a
+  planet-level place (`showPlace`, unchanged), so Back from it steps to the system. Tests: `test/wall-galaxy-back.test.mjs`
+  (8: ZOOM_OUT and the soft move, the levels, createTaps right-click/double tap edges, no right-drag turn, the page walk on the
+  large demo moon → planet (right-click) → system (double tap: moons fold, turned pose kept, star < 2 px) → overview (the
+  control, 3000 ms soft), the unturned planet → hold and double-click → overview each 3000 ms, single tap/right-click at the
+  overview nothing, main.js wiring); the touch/resume harnesses now wire `back` as main.js (empty tap nothing, double tap
+  Back) and their source assertions read the new `toOverview(…, out)`/`backToSite`. Looked at (`$RUN_DIR/shots/r33-t13-back/`,
+  CDP touch + mouse on `--size large`, `$RUN_DIR/tools/r33-t13.mjs`): HV1 → builder-a → drag (star 872,685 → 872,685) →
+  empty tap nothing → moon feat-search (pose kept) → right-click (builder-a's sheet) → double-click (HV1's sheet, moons
+  folded, star unmoved) → Back: the flight at k 0.24/0.59/0.93 at 0.75/1.5/2.25 s, done by 3.2 s, overview, 0 console
+  errors. `r33-galaxy` (`?demo=1`, cpu 4x) 34.5 fps, worst gap 150 ms, 0 errors, the tour unchanged. **Seen:** a turn can
+  bring the held star under the banner (`04-turned`, T23/T30's banner size); the plate still truncates (T24).
+- [x] T14 (§7 Night 5 C5) [ui] [variant:galaxy] The `createReturn` leftover (`touch.js`, `main.js`): Back returns to the
+  explore pose a person left, never to a pose a show's `flyTo` left — done when: a page test explores to a pose, lets a show
+  fly elsewhere and end, presses Back and finds the camera at the explore pose; the existing return tests green. (commit 9a49689)
+  Notes (builder, round 34): the leftover was `leave` keeping any `free` want: a show's `place` (fitNodes, setCamera, an
+  undo) is one, so a tap on a site after a show made Back fly to the show's frame; after a show's flyTo (a site want) it
+  went to the fit. `touch.js createReturn` now has `moved(m)`, wired as `director.onMove(left.moved)` in `main.js`: a
+  finger's steer (not a `{ hold }` turn round a held star), its fly back and its fit set the explore pose; any other
+  source's move marks the camera not the finger's, and `leave` then keeps the explore pose from before the show (null
+  after a finger's fit: back to the fit). Without `moved` it is night 4's (the touch/resume/back harnesses unchanged, all
+  green). `clear` forgets the explore pose too. Test: `test/wall-galaxy-return.test.mjs` (5: the unit cases; the page on
+  the large demo: explore by drag → a show's fitNodes-like free pose → tap HV1 → Back lands on the explore pose; the same
+  after a show's flyTo to HV2; no show between; main.js wiring). The two show cases fail on the old `createReturn`
+  (checked). No draw or per-frame change. Looked at (`$RUN_DIR/shots/r34-t14-return/`, CDP touch on `--size large`,
+  `$RUN_DIR/tools/r34-t14.mjs`): explore drag → `__cockpitView.map.fitNodes([hv2, cloud])` (1922 off the explore pose)
+  → tap HV1 → Back: 0.0 off the explore pose; explore → `flyTo(hv2)` → tap HV2 → Back: 0.0 off; 0 console errors.
+  `r34-galaxy` (`?demo=1`, cpu 4x) 34.1 fps, worst gap 145 ms, 0 errors, the tour unchanged.
+- [x] T15 (§7 Night 5 C4) [ui] [variant:galaxy] The overview turn: 0.0032 rad per px, the camera follows with a short lag
+  (about 70 ms), a longer gentler coast (τ about 650 ms), a capped fling speed (`touch.js`, the sketch's `SOFT.perPx`,
+  `tauMs`, `follow`, `maxVel`) — done when: a test drags 100 px and finds 0.32 rad of target turn, the camera behind the
+  target during the drag, the coast decaying with the τ, and a 3000 px/s fling capped; the touch tests green. (commit d4bcca4)
+  Notes (builder, round 37): `touch.js ORBIT` perPx 0.0032, tauMs 650, new `followMs` 70 and `maxVel` 1.4 px/ms, as
+  defaults with no switch (the sketch's `SOFT`). New pure `capVel` and `followStep` (yaw/pitch close the gap as
+  1 - exp(-dt/followMs), distance and look at once so a pinch or the wheel never lags; within 1e-4 rad it is the goal).
+  `createGestures`: a drag and its coast move a `goal` orbit, `frame` draws the orbit following it (one steer a frame as
+  before); a pinch zooms both. **Deviation from the sketch, on purpose:** a finger down drops the goal as well as the coast
+  (the sketch kept following), so a tap after a turn never has a follow steering over its flight. The feel applies to
+  the round orbit in a held system too (T12; the star stays put, since every round pose keeps `see`): one feel for every
+  turn, as the owner picked it. The wheel's impulse keeps its total zoom (∫ v e^(-t/τ) = v τ) and now eases out over the
+  longer τ. A capped fling coasts about maxVel × τ = 910 px (2.9 rad) and rests after τ ln(maxVel / REST) ≈ 4.3 s; REST
+  kept (stopping sooner would cut a visible move). Three page tests waited a 250 ms coast out (touch: drag/coast and back
+  from a turned system; return: `explore`): they now wait 8τ / 5.2 s, their assertions unchanged. Test:
+  `test/wall-galaxy-turn.test.mjs` (9: ORBIT values and 100 px → 0.32 rad, capVel, inertia's τ, followStep; on
+  createGestures with a fake clock: 100 px past the slop is 0.32 rad, the camera behind the finger each frame and on it
+  after, 1 - exp(-16/70) after one frame and 63 % at 70 ms, a finger down stops the follow, a 3000 px/s fling's coast
+  ≈ maxVel·τ·perPx within 3 % (not the uncapped 6.2 rad), the coast's τ windows falling by e). No draw change. Looked at
+  (`$RUN_DIR/shots/r37-t15-turn/`, CDP touch on `--size large`, `$RUN_DIR/tools/r37-t15.mjs`): a slow 112 px drag turns
+  0.320 rad, the trace trailing the finger; a ~3000 px/s fling coasts 0.75 rad by 0.4 s, 1.37 by 1 s, about 1.78 by 4.5 s
+  (SwiftShader frames are slow and `frame` caps dt at 100 ms, so the coast runs short in wall time); 0 console errors.
+  `r37-galaxy` (`?demo=1`, cpu 4x) 33.2 fps, worst gap 182 ms, 0 errors, the tour unchanged. **Seen:** a free overview
+  turn can carry the crit site (HV2) under the plate (`07-fling-4500ms`): the plate's corner is fixed while a finger
+  turns the galaxy anywhere (for triage, near T23/T30/T35).
+- [x] T16 (§7 Night 5 C, done-when) [ui] [variant:galaxy] The night's touch walk as one page test and one film: tap site →
+  tap planet (moons open) → drag-turn (system stays open, star stays put) → empty tap (nothing) → tap moon → Back ×3 →
+  overview, with the flight durations asserted (`test/wall-galaxy-walk.test.mjs`); then a CDP touch film of the same walk
+  on the large demo — done when: the test passes on a fake clock and the film's sheet shows each step (frames named in the
+  notes). (commit 7126a88)
+  Notes (builder, round 38): `test/wall-galaxy-walk.test.mjs` (1 page test, fake clock, large demo): tap lab → flies
+  FLIGHT.ms (2250 ± 32) and opens; tap builder-a → FLIGHT.ms, its ring open; a 165 px drag → turned round lab's star,
+  the star < 2 px off through the drag and 8τ of coast, still held, open, ring open; an empty tap → no step, no move, the
+  pose exact; a calm moon on the ring → moon picked, no move (0 ms); Back with the control ×3 → planet (0 ms, ring open),
+  system (0 ms, moons fold, the turned pose exact), overview (want `overview` 3000 soft, flew 3000 ± 32) → the fit (no
+  explore pose was left), lab folded, the control ▶ TOUR. T13's page harness moved verbatim into
+  `test/helpers/galaxy-page.mjs` (one copy of main.js's wiring for both; `wall-galaxy-back` imports it, its tests and its
+  main.js source pins unchanged). No app change. Film (`$RUN_DIR/shots/r38-t16-walk/sheet.png`, CDP touch only, Back by a
+  touch on the control's rect, `$RUN_DIR/tools/r38-t16.mjs`): `00-tour` → `01-explore` (first touch wakes) → `02-site-flying`
+  (k 0.47 at 1.1 s) → `03-site-held` → `04-planet-moons` (BA, ring open) → `05-turning` / `06-turned` (star 872.2,684.2 →
+  872.1,684.2) → `07-empty-tap` (pose kept) → `08-moon` (feat-search, pose kept) → `09-back-planet` (BA's plate, ring open,
+  pose kept) → `10-back-system` (HV1's plate, folded, star unmoved) → `11-out-0.75s` k 0.24, `12-out-1.5s` 0.59,
+  `13-out-2.25s` 0.94, `14-out-3.2s` landed → `15-overview` (▶ TOUR); 0 console errors. `r38-galaxy` (`?demo=1`, cpu 4x)
+  33.8 fps, worst gap 192 ms, 0 errors, the tour unchanged. **Seen:** `08-moon` the plate truncates (`WAITING ON A PER…`,
+  T24); `05`-`10` CLOUD's label sits against the Back control and the tag after the turn (T35's family); `03-site-held`
+  the plate names the trouble FEAT-SEARCH large while the held site is HV1 (T32/T24's hierarchy).
+- [x] T17 (§7 Night 5 D1) [ui] [variant:galaxy] The card's place: a new `galaxy/card.js` with a pure `cardPlace` (beside the
+  selected node with a visible leader line; docked to the right edge when it does not fit beside the node or would cover the
+  open system's planets; never over the fleet line or the tag, `hud.covers()`) and the DOM shell `main.js` creates under the
+  stage on a selection, replacing the left-hand sheet for a tapped node; the caption and the fleet line stay (Q20 when
+  answered) — done when: `cardPlace` tests (fits beside, docks when off the edge, docks when it would cover a planet, clear
+  of fleet line and tag), and a page test taps a planet and finds a card, no sheet, the leader joining card and node. (commit e424189)
+  Notes (builder, round 39): `galaxy/card.js`: `CARD` {w 360, gap 24, hitPx 24, edge 16, pad 8, bodyPx 10, spot 14};
+  pure `cardPlace({ at, size, W, H, covers, bodies, ring, prev })` → `{ side: right|left|dock, x, y, w, h, leader }`:
+  beside means *level with* the node (its height inside the card) and past its own open ring of moons (`cardRing`, the
+  ring's screen reach), the side away from the nearer edge first, the previous side kept while it fits (no flip mid-move,
+  Q20); the card may slide up or down past a cover's or a planet's edge; else docked at the right edge, off the words, over
+  the fewest planets. Without `ring` an open ring always sent it to the dock, over the system: the ring is what made it
+  work. `cardBodies` (the open system's other members on screen), `cardInfo` (header: name, kind, tone), `cardCover`.
+  `createCard(stage, …)`: a `section` role region with an aria-label, dot, name (condensed caps 24 px), kind (mono chip)
+  and a 48 px × (`aria-label` Close, pressed state, `touch-action: manipulation`); its pointers stop at the card (touch.js
+  never sees them: a tap on it is no tap and no turn); a 1 px leader and a 28 px ring on the node; transforms in whole px,
+  written only on change; the size measured once per open. **It comes as the camera lands** (the first placement waits
+  while `cam.flight()`; placed at the tap it docked top right, then jumped left on landing). `main.js` (selection/card
+  parts only): `pickCard(id, site)` = `hud.release()` + `card.open(cardInfo(…))` in `openPlanet` and Back's moon → planet
+  step; `openSite`, `backToSite`, `toOverview` and the idle resume close it; the frame closes it when the place no longer
+  names its node (a show's flight); covers = `hud.covers()` + Back/manual + show cards; the names keep off the card.
+  **A tapped site keeps its sheet** (the plate, every trouble line): a site's card comes with T18/T19 (site stats and
+  actions), which decide whether it replaces the site sheet too. `wall.css`: rules added only (`.galaxy-card*`), tokens,
+  no shadow (guardrail). `test/helpers/galaxy-page.mjs` makes the card as main.js does and calls `cam.drawn()`; the
+  back/walk/touch pins now read `pickCard` and the card where they read the planet's sheet. Test:
+  `test/wall-galaxy-card.test.mjs` (11: beside/leader, dock off the edge and off the frame, dock for planets, never over
+  tag or fleet line over a grid of node points, side kept, ring, cardInfo/Bodies, the shell, waits for landing, the page:
+  tap builder-a → card, no sheet, leader from the node's ring to the card's edge, no planet under it, Back closes it,
+  main.js wiring). Looked at (`$RUN_DIR/shots/r39-t17-card/sheet.png`, CDP touch on `--size large`,
+  `$RUN_DIR/tools/r39-t17.mjs`): BA's card left of it past the ring, level, leader to its ring; a tap on the card steps
+  nothing; FEAT-SEARCH (moon) and VM-A cards the same; × closes; Back to HV1 closes it; 0 console errors. `r39-galaxy`
+  (`?demo=1`, cpu 4x) 34.1 fps, worst gap 305 ms, 0 errors (the tour never opens a card). **Seen:** the pick framing still
+  keeps the planet right of the remembered plate box, so the card stands in the plate's old place (fine now; T18's taller
+  card may want `pickBox` to count the card instead of the plate); the leader crosses the ring's orbit line.
+- [x] T18 (§7 Night 5 D2) [ui] [variant:galaxy] The card's content: status dot, name, type chip, parent path (`hv1 › vm-a`),
+  a 48 px ×; 3-4 key stats from the model where only the off value takes a status hue; a "Below" strip of child chips (tap:
+  select and fly there; `+N`); a pure `describe(sel, model)` (the sketch's `card.js describe`) — done when: `describe` tests
+  for a site, a room, a builder, a service moon and a lane moon (path, stats, below, `+N`), a test that a calm stat has no
+  hue, and a page test tapping a Below chip selecting that node. (r40-stranger #3: a tapped planet's card is today empty,
+  `• BA BUILDER ✕`, and the sheet's status and named problems are gone; the content must carry the node's status word and
+  its named problems, not stats only.) (commit 5ad5a89)
+  Notes (builder, round 42): `card.js describe(sel, world)` (pure; `CARD_SAYS` {stats 4, problems 3, below 6}) →
+  `{ name, kind, tone, chip, path, status: {word, text, tone}, problems, more, stats, below, belowMore }`. The dot is
+  the worse of its own tone and the worst below it; the status row is its **own** word and why (`OK builder-a · 3 lanes`,
+  the word grey when calm); the problems are the troubles below it grouped as the plate groups them (a lane's waiting
+  session is named under the lane, as the plate does), `▲ ATTENTION FEAT-SEARCH · waiting on…`, full text wrapped, never
+  clipped; stats in order rooms up (site) · lanes/waiting (builder) · cpu/mem/disk · cost/context/age · detail (ID goes to
+  the chip `ROOM · 201`); a word value (a branch) spans two columns. Below: direct children, trouble first by severity,
+  else model order, `+N` past six (plain text, not a button: no dead tap). A chip is a 48 px button `Fly to <name>`
+  → `onPick` → `openPlanet(id, place.site)` (main.js, shared helper the same). `wall.css`: rules added only, one scale
+  24 / 20 / 15 / 11 px, hue only on the status word, a problem's mark and word, an off value and a chip's border.
+  **cardPlace fix:** the taller card (≈350 px) no longer fits beside a moon near the right edge, and the dock covered the
+  selected moon itself so its leader was null (`r42-t18-card` first take, 04); the dock now keeps off its own node, tries
+  the right edge then the left, and a dock above/below the node meets the card's edge. Tests (6 new in
+  `test/wall-galaxy-card.test.mjs`): describe for a site, a room, a builder, a service moon and a lane moon; a calm stat
+  without tone and off ones with; the card's DOM (no innerHTML, chip 48 px/pressed/manipulation, reopen clears); the page
+  taps BA's `feat-search` chip and lands on the lane moon with its card; the dock never over its node, the left edge.
+  Looked at (`$RUN_DIR/shots/r42-t18-card/sheet.png` + `crop-*.png`, CDP touch, `--size large`,
+  `$RUN_DIR/tools/r42-t18.mjs`): BA card left of it with leader, the lane chip → lane card docked left with its leader,
+  Back → BA, HV2 → STORAGE card → `nfs` chip → NFS card (`HV2 › STORAGE`, `OK 18 TB`); × closes; 0 console errors.
+  `r42-galaxy` (`?demo=1`, cpu 4x) 35.7 fps, worst gap 206 ms, 0 errors; this VM was loaded (load avg 5-6): two other takes
+  gave 26.3 and 31.4, the commit before gave 27.1 in the same minute; the tour never opens a card, so it is noise.
+  **Seen:** in the first take a tap on `scr('storage')` while HV1's BA was framed (HV2 not on screen) left the camera
+  very close to HV1's star with BA's card still up (frames 07-08 of that take, overwritten): a tap on a point from a
+  node off the frame; worth a look by T35/T36's rounds. The site's tap keeps its sheet (T19 decides the site card).
+- [x] T19 (§7 Night 5 D3+D4) [ui] [variant:galaxy] The card's actions per type, at most 4 and `…`: site (Open, What's below,
+  Board, Pin; `…` Proxmox link), room (Logs, Board, What's below, Pin; `…` Fly to, Terminal link, Proxmox link), builder (Run
+  log, What's below, Board, Pin), service moon (Logs, Board, Pin, Fly to), lane moon (Log, PR, Pin, Fly to). Navigation
+  works; links open existing app views or are absent (never a dead button). Fleet actions (restart a service, pause a builder
+  or lane, snooze or ack) are disabled outline buttons tagged `later` in their slots; a tap says so; nothing touches the fleet,
+  nothing heavier ever appears — done when: tests per type list the buttons in order, find no button without a handler or an
+  existing target, every `later` button disabled and saying so on tap, and no network call from any card button. (commit 5fc2b76)
+  Notes (builder, round 43): `card.js cardActions(node, { kind, under, direct })` (pure, in `describe` as `actions`
+  `{ row, more }`): the plan's order per type, absent ones dropped, the first `CARD_ACTS.row` 4 in the row and the rest
+  behind a 48 px `…` (`aria-expanded`, a second row). Each is `go` (`open`, `below`, `fly`: main.js `cardAct`, which
+  pokes the idle minute since card presses never reach the stage), `link` (an `<a>` to `/#/board?b=…`,
+  `/#/board?b=…&sel=<fkey>&open=transcript`, `/#/runs?run=…` or `/#/diff?sel=<fkey>`, `target=_blank rel=noopener`: the
+  Wall stays up) or `later`. **Decisions:** Logs (room, service), Terminal and Proxmox are absent: the app has no logs
+  view and the model carries no terminal or Proxmox address (adding one is `server/*`, fenced). Board is the builder's
+  board (a site with several builders: the whole board; none below: absent). Run log only when a run hangs below the
+  builder (builder-b yes, builder-a no). The lane's PR slot is `Diff` (the app's diff view; no PR address in the model).
+  **Pin is `later`**: the only pins are the cockpit room's shared ones (`show.js`, a network message), so it says
+  "Pinning comes later, with the cockpit." Fleet `later`s: Restart (service), Pause (builder, lane), Ack and Snooze (a
+  node whose own status is trouble); nothing for rooms or hosts. A `later` is `aria-disabled`, not `disabled` (a
+  disabled button takes no tap), dashed in `--line` with a small `later`; a tap writes the note (`role=status`).
+  `What's below` shows every child chip (`describe`'s new `belowRest`, no `+N` left). `Fly to` re-frames the node
+  (`finger.focus(site, zoom, { member })`), clearing a turn. `wall.css`: rules added only (`.galaxy-card-acts`,
+  `-act`, `-later`, `-note`), 15 px label face like the chips, a long word wraps to two lines in its 48 px button.
+  Test: `test/wall-galaxy-card-actions.test.mjs` (6: order per type; every button on every large-demo node has a page
+  action or a same-origin view whose builder/run/fkey exists, later ones say so, no restart of a room; the DOM: links,
+  aria-disabled, the note, `…`; What's below; the page: Fly to after a turn, the other buttons move nothing, fetch/XHR/
+  WebSocket stubbed and never called, no network API in card.js; main.js wiring). `test/helpers/galaxy-page.mjs` mirrors
+  `cardAct`. Found: `test/render.test.mjs` fails on any `d3` in app JS (a chart library guard), so comments say "the
+  card's item 3", not "D3". Looked at (`$RUN_DIR/shots/r43-t19-acts/sheet.png` + `crop-*.png`, CDP touch, `--size
+  large`, `$RUN_DIR/tools/r43-t19.mjs`): BA's row `WHAT'S BELOW · BOARD · PIN later · PAUSE later`, Pin's note,
+  Board an `<a>` to `/#/board?b=builder-a`, the lane's `LOG · DIFF · PIN · FLY TO · …` and the rest row, Pause's note,
+  Fly to after a drag frames the lane again, STORAGE's `… · ACK · SNOOZE`; 0 console errors. `r43-galaxy` (`?demo=1`,
+  cpu 4x) 34.7 fps, worst gap 239 ms, 0 errors (the tour opens no card). **Not done here:** a site still keeps its
+  sheet, so the site's actions are tested pure only: T19b.
+- [x] T19b (split from T19) [ui] [variant:galaxy] The site's card: a tapped site gets the card (its `describe` and
+  `Open · What's below · Board · Pin`) or keeps the plate, decided against README D5 ("the caption and the fleet line
+  stay") and the e2e cockpit selectors (`e2e/cockpit/*.mjs`, grep `galaxy-caption`/sheet first) — done when: a page test
+  taps a site and finds what was decided (card with its actions and `Open` flying in, or the plate), and a still. (commit f3b1b2c)
+  Notes (builder, round 44): **Decided: the card.** README D5 says "the old left-hand sheet for a tapped node gives way
+  to the card"; the site's sheet *was* the left-hand plate (`hud.open`, sheetCaption), so it goes as a planet's did in
+  T17, and the owner's sketch (`sk_card=1`) did the same (`hud.release()` on a site). "The caption and the fleet line
+  stay" is read as the fleet line and the tag, as T17 read it. No e2e or cockpit test names `galaxy-caption`, a sheet
+  or the card (grepped). `main.js`: `openSite` and `backToSite` call `pickCard(id, id)` instead of `hud.open`; the
+  frame's card check keeps a site's card (`place.moon ?? place.planet ?? place.site`); `FLIGHT` import dropped (unused).
+  `hud.open` stays in hud.js (a show or test may use it) but no finger's tap calls it now; the sheet's bracket step
+  (T25) goes with it, the card's spot ring marks the site. `cardAct('open')` from the site's own card after a drag-turn
+  flies back to the system's hold (else `openSite` would see "already there" and do nothing). Tests: new
+  `test/wall-galaxy-site-card.test.mjs` (2: tap HV1 → its card, no sheet, hidden while flying, row
+  `open · below · board · pin`, a leader from the star, no planet under it; Back from BA → the system's card, Open
+  after a turn flies to the hold and keeps the card, Back → overview closes it); five tests that pinned the site's
+  sheet updated (`card`, `card-actions`, `touch`, `walk`, `back`). Looked at (`$RUN_DIR/shots/r44-t19b/sheet.png`,
+  `crop-*.png`, CDP touch, `--size large`, `$RUN_DIR/tools/r44-t19b.mjs`): HV1's card (519 px tall) docks left at
+  the landing, clear of the opening system, the banner and the tag; Back from BA gives it again; HV2's card docks
+  right with `CRIT STORAGE · pool 97% full` and no Board (no builder there); 0 console errors. `r44-galaxy`
+  (`?demo=1`, cpu 4x) 33.2 fps, worst gap 176 ms, 0 errors (the tour opens no card). **Found:** a drag's coast still
+  running (≈2 s after the finger lifts) re-turns the camera over a card's `Open` or `Fly to` (the coast steers with
+  `hold`); worth a line in T35/T36's rounds. The site card is tall (≈520 px with three problems); T20's manners
+  round may want the problems capped lower for a site.
+- [x] T20 (§7 Night 5 D5+D6) [ui] [variant:galaxy] The card's manners: grey glass from tokens, the site tint only as a 2 px top
+  edge, a 150 ms fade, the galaxy dimmed slightly behind it; closes on ×, Esc, an empty tap, a second tap on its node, a
+  sideways swipe, or 60 s idle (then the tour may resume as now, B237); a labelled region, real named buttons, focus moves in
+  on open and back on close — done when: a page test on a fake clock closes it each of the seven ways, finds focus inside on
+  open and back on the opener on close, the region's label and every button's name; `wall.css` gains rules only; a still of
+  `?at=hv1&open=1` with a builder picked shows card, leader and ring together.
+  (r45-accessibility #1, measured: today the card never takes focus — `document.activeElement` stays `BODY` — and Esc leaves it
+  open. On open focus the heading (`tabindex=-1`, `focus({ preventScroll: true })`); Esc closes and returns focus to the opener,
+  or to Back after a canvas tap; pin both in a fakedom test.) (commit 42ce20f)
+  Notes (builder, round 47): `card.js`: `CARD_SWIPE` {fadeMs 150, swipePx 64, slope 2}; pure `cardTint(world, site)`
+  (palette.js `LOOK.tints` at `tintL`, as CSS) → `--galaxy-card-tint` via `style.setProperty`, the 2 px top edge only
+  (`[data-tinted]`). **The fade is JS, on the frame clock** (opacity eased out, written only on change, on card,
+  leader, spot and dim): the app's CSS guardrails (`css-guardrails.mjs` [6]) cap transitions at 120 ms and allow no
+  animation but `lb-flash`, so a 150 ms CSS fade would break them; reduced motion: no fade. A closing card is closed
+  for the page at once (`shown()` false, `inert`, no presses) and hidden after the fade; a new card replaces a fading
+  one at once. The dim: `.galaxy-card-dim` (`--bg-canvas` 30 %) inserted before `galaxy-show-veil`, so canvas and
+  names dim and the frame's words (plate, banner, fleet line, tag) stay as loud. No `backdrop-filter` (guardrail [2]):
+  the "glass" stays the 88 % ground it had. Closes: × (as before), Esc (keydown on the document), a sideways swipe
+  on the card (decided on the move, the click after it swallowed), and in `main.js`'s tap: **an empty tap or a tap on
+  the card's own node closes the card and does nothing else** (place, ring and camera stay: T12's "empty tap does
+  nothing" kept for the camera); a further tap on the node opens it again; the idle minute's resume already closed
+  it. Focus: the name is `role=heading aria-level=2 tabindex=-1`, focused (`preventScroll`) when the card first
+  shows (it waits for the landing); on close, only focus the card took is given back: to the opener (what had focus
+  at open) or `focusBack()` = the Back control after a canvas tap. Tests: new `test/wall-galaxy-card-manners.test.mjs`
+  (6: cardTint; the shell's region/heading/named buttons and focus in/back; Esc and swipe, not a downward drag nor a
+  tap; the fade in/out and dim order, reduced motion; the page closing it seven ways on a fake clock: ×, Esc, empty
+  tap (no move), second tap, swipe (no turn), Back to the overview, the idle minute on the tour-role page (B237);
+  main.js wiring, wall.css rules added only). `galaxy-page.mjs` mirrors the new tap, tint, focus doc, resume and a
+  `role` option; two source pins updated (`card`, `touch`). Looked at (`$RUN_DIR/shots/r47-t20/`, CDP touch +
+  key events, `--size large`, `$RUN_DIR/tools/r47-t20.mjs`): HV1's card with the teal top edge and the galaxy a step
+  darker, the banner undimmed; BA's card, leader and ring together (`02-ba-card`, the still the task asked for:
+  `?at=hv1&open=1` is parked and has no touch, so no card; this is the explore equivalent); Esc → closed, focus on
+  Back (its focus ring shows, a keyboard close); second tap, empty tap, swipe, × each close it, place and ring kept;
+  opacity 0.66 read 40 ms into the fade out; 0 console errors. `r47-galaxy` (`?demo=1`, cpu 4x) 32.3 fps, worst gap
+  152 ms, 0 errors (the tour opens no card; the hidden dim costs nothing). **Seen:** a site's leader runs long across
+  its open system to the left dock (`01-hv1-card`); BA's card covers its ring's `docs-refresh` moon (its name keeps
+  off, the moon is under the card).
+- [ ] T21 (§7 Night 5 E) `docs/wall.md`: the look (the defaults and why), moons, the card (actions, `later` buttons), the
+  gestures (mouse and touch: right-click, double-click/tap, drag in a system, Back steps); not the "Show commands" or handle
+  sections; demo data for every feature named — done when: `test/wall-docs.test.mjs` (extended) finds the new sections and
+  every URL switch it names in `galaxy/main.js`, and the hygiene test is green.
+- [ ] T22 (§7 Night 5 E) The cockpit's handover: `docs/plans/wall/patches/README.md` lists every change this night made in
+  shared files (`galaxy/main.js`, `public/css/wall.css`, `galaxy/director.js`, `galaxy/touch.js`) with its commit and what it
+  touches, and every patch written for a fenced file; the 3 m check (an overview still shrunk to 3 m) and a `?demo=1` film
+  of the new defaults — done when: the list names every commit of the night that touched those files (`git log` check in the
+  notes) and the film's sheet is read in the notes.
+- [x] T23 (triage, r10-film-ui #3) [ui] [variant:galaxy] One hero per held frame: the banner drops to its one-line size
+  whenever the camera holds a site, not only once the plate is up (frames 1-4 of `r9-galaxy` show `■ HV2 · STORAGE` at full
+  size over a hold on HV1); full size stays at the overview — done when: a test finds the banner's size step follow the
+  camera's hold state (overview full, any hold one-line, plate up or not), and a `?demo=1` film's held frames before the plate
+  types show the one-line banner. (commit 17fd358, wip e5f02c4)
+  Notes (builder, round 48): **Deviation, on purpose: "any hold one-line" is not built for a warn hold.** The review's
+  frame 4 is the camera on HV1 (warn) with HV2's crit banner the loudest thing; shrinking it there would make a warn's
+  plate louder than the crit, against README §2.1 ("it is the loudest thing on screen") and night 3 T30/T22, which put
+  it there on purpose. So the step follows the camera (not the plate) by the held site's tone: `frame.hold(tone)` →
+  `data-hold` on `#wall-frame` (crit, warn, low, grey; none at the overview, in a flight, in a free pose); `wall.css`
+  (rules added only, the T19 crit-plate rules twinned): over a crit hold one line at `--cap-why`, over a calm hold one
+  step down to `STEPS.heroMin` (`min(var(--fleet-far), 9vmin)`, still ≥ 1.25x the calm name), over a warn or low hold
+  the 3 m size. `hud.hold(siteId)` reads the tone (`captionLines` of the site, its worst) only when the site or the model
+  changes; `main.js` calls it from an `onDraw` gated on `cam.version()` and a flight under way (a settled camera reads
+  nothing), and for a parked still from `parked()` (it aims the camera itself, `want` stays `overview`). The card's
+  explore hold (no plate) now steps the banner too. Tests: new `test/wall-galaxy-hold.test.mjs` (5: the tone per site and
+  a newer model; `frame.hold` re-reads the far box; the page harness tapping HV2: none in the flight, `crit` landed with
+  no plate, kept through a turn, none leaving, `warn` on HV1, none at the overview; the css twins, the calm step, no warn
+  rule; main.js's read pinned); the T30 css test in `wall-galaxy-hud.test.mjs` accepts the hold twin and pins no warn
+  rule. Looked at (`$RUN_DIR/shots/r48-galaxy`, `r48-t23/`, probe `r48-t23-probe.json`, `$RUN_DIR/tools/r48-t23*.mjs`):
+  `r48-galaxy` (`?demo=1`, cpu 4x) 34.4 fps, worst gap 220 ms, 0 errors; CLOUD and REMOTE calm holds show the banner a
+  step down, HV1 warn holds keep it full, HV2 crit holds hide it (the echo, as before); the 200 ms probe sees `data-hold`
+  land with the camera (flight 121 px, calm hold 82 px, crit hold 39 px, warn hold 121 px); `park-home-1.png`
+  (`?at=home`, crit `HV1 · VM-C` standing): the red banner at 82 px over the white `HOME` at 6.9 vmin, clearly one hero.
+  The demo's crit had cleared when the touch probe tapped HV2 (hold `grey`, the banner a warn line, untouched): a crit
+  explore hold is pinned by the page test only. **Seen:** HV2's card still read `CRIT STORAGE` after the model had
+  cleared it (the card is described at open, not followed); a drag's coast still steers over a later `focus` (the test
+  waits it out; as noted under T19b, for T35/T36).
+- [x] T24 (triage, r10-film-ui #4) [ui] [variant:galaxy] The plate's text never truncates and has three levels:
+  `FEAT-SEARCH · WAITING ON A PERMIS…` is cut at the plate's edge; the site name `HV1` is smaller than the line above it and
+  the status lines compete with the headline. Wrap (or grow one line) instead of cutting; headline, subject, facts on one
+  scale (about 1.0 / 0.42 / 0.28), facts in `--text-1` with only the mark and label coloured — done when: a test with a long
+  fact finds no ellipsis cut and the plate inside the frame, a still of a crit plate (large demo, `HV1` down) shows three
+  clear sizes. Also (r40-stranger #5): no plate line is clipped through its glyphs (`r40-fx-warp` frame 6, VM-C's third
+  line): the plate cuts at whole lines (`+N MORE`), never mid-glyph. (commit a795344)
+  Notes (builder, round 49): the plate is the Wall's shared caption (`js/wall/caption.js`, `wall.css`), so `wall.html`
+  gets it too (looked at, same plate). **Three levels:** `STEPS.subject` 5.6 (the why and, under a word, the site's name:
+  `.wall-caption[data-hero] { --cap-name }`) and `STEPS.fact` 3.6 (the count and the named problems), against the word's
+  14 (0.40 / 0.26; at the least word 9 still 1.6x and 1.56x apart); `STEPS.why` 4.3 stays as the banner's size under a
+  crit plate, now under the plate's own why (the T19 hud test reads that). A named problem's words are `--text-1`, its
+  shape and status word keep the hue; the count's parts keep theirs (each is shape + word). **Never cut:** no
+  `text-overflow` left on the plate; the why, name, word and every value wrap (`overflow-wrap: anywhere`,
+  `text-wrap: balance` on the why and values); `MAX_TEXT` 40 → 96, a guard against runaway strings only. Each box stays an
+  exact height, its step x `var(--lines, 1)`: `build` reads each part's `scrollHeight` once a leg (where it already reads
+  the plate's box) and sets `--lines`; `plateHeight(cap, shown, hero, wraps)` adds whole lines. A first try with
+  `min-height` let rows lay out 1-2 px over the sum and the plate's content overflowed 5 px (the r40 clip in small);
+  exact heights read scroll = client height in Chromium. **Fit:** `plateRoom` (8vh top to the clock, 11vmin, over the 8vh
+  margin: 73 vmin at 1368x912) and pure `fitPlate`: whole rows give way from the end (facts first) to a `+N MORE` row at
+  the key step, mono like the banner's. Tests: new `test/wall-caption-wrap.test.mjs` (5: the levels, long why/fact kept
+  and wraps counted, fit with `+N MORE`, the page on a fake layout wrapping and fitting, the css); `wall-caption` and
+  `wall-galaxy-hud` updated for the new steps and `--lines` heights only. Looked at (`$RUN_DIR/shots/r49-t24/`,
+  `$RUN_DIR/tools/r49-t24.mjs`, large demo): `after-lab2` is the crit plate with VM-C down: `■ VM-C` / `BUILDER-C NO
+  CONTACT FOR 15S` and `HV1` / the facts, `FEAT-SEARCH · WAITING ON A PERMISSION PROMPT · 10M` whole on two balanced lines;
+  `after-hv2`, `radial` (wall.html) whole; `before-lab` shows the old cut. `r49-galaxy` (`?demo=1`, cpu 4x) 33.7 fps,
+  worst gap 130 ms, 0 errors, every plate whole. **Seen:** the banner's own why is still cut with `…` (`BUILDER-C NO
+  CONTA…` under the HV2 hold; frame.js, T30/T32's).
+- [ ] T25 (triage, r10-film-ui #11) [ui] [variant:galaxy] The overview banner returns after a Back flight lands, from its
+  own place: in `r10-touch` 09-back-2 (3.2 s after the tap) `HV2 · STORAGE` is clipped by the frame's bottom edge while the
+  camera still flies — done when: a page test on a fake clock finds the banner's box inside the frame at every step of a
+  planet → system → overview Back, and not shown before the flight's end.
+- [ ] T26 (triage, r15-dreamer #1) [ui] [variant:galaxy] The red wins the map at the overview: HV1 (warn) has a ~200 px
+  yellow nebula and ring while HV2 (crit) has a thin red smear behind its own label (`r14-t3-overview`, `r15-3m.png`);
+  night 4's T23 from `## Later`. Crit nebula at least 1.5x the warn's area and drawn on the side away from the label; the warn
+  does not breathe and its nebula stays inside its cluster's reach — done when: a scene test finds the crit nebula's area ≥ 1.5x
+  the warn's for equal clusters, the warn's nebula not animated in size, and the crit nebula's centre not under its label box; an
+  overview still shrunk to 684 px (3 m) with one warn and one crit shows the red as the larger shape.
+- [ ] T27 (triage, r15-dreamer #6) [ui] [variant:galaxy] A crit member is a light, not a hole: `storage` in `r14-t3-hv2` is a
+  red disc with a black square and no name on the map. The crit shape stays `--text-1`/white on the red over a lit core, and the
+  name stays beside it at every step (night 4's T29) — done when: a test finds the crit mark's colour light against the red
+  body and the member's label in the shown list at every zoom step of its system; a still of `?at=hv2&open=1` shows both.
+- [ ] T28 (triage, r15-dreamer #4) [ui] [variant:galaxy] Big stars are still faceted at 2x pixels: HV2's, `secrets`' and
+  `media`'s star outlines show polygon steps at 1368 px (T2's 26x18 at ≤ 1.65x was not enough). Shade them smooth or take 48x32
+  above 1.2x — done when: a test pins the new segment count (or smooth shading) for `BIG_STAR` bodies, `?perf=1` triangles at
+  the overview before/after are in the notes (no rise past night 4's 84-86k beyond a few hundred), and a still of `?at=hv2` at
+  1368 px shows a round edge.
+- [ ] T29 (triage, r20-operator #1+#2) [ui] [variant:galaxy] A down member stays on the map as a red body, under the plate's
+  name: in `r20-galaxy-real` frame 5 the plate says `VM-C · BUILDER-C NO CONTACT · 1 DOWN`, the lock closes on a yellow
+  planet, the fleet line drops 115 → 114 and no red body stands; the map label reads `bc`. A member that goes down keeps a red
+  body (night 4's T29) or, if the model drops it, `live.js` keeps a red ghost until it returns; the lock frames that body; while
+  the plate stands the locked member's label is the plate's headline in its hue (r10 #5) — done when: a test drops a member
+  from the feed and finds a red body for it in the scene and the lock on its screen point, the label equal to the headline
+  while the plate stands, and the fleet count unchanged or the ghost counted as down; a still of the down builder on the large demo.
+- [ ] T30 (triage, r20-operator #4) [ui] [variant:galaxy] The banner corner is never empty and never rivals the plate: during
+  a crit hold `r20-galaxy-real` frames 3-4 show no banner and frame 5 a big yellow `▲ REMOTE · OFFICE-PRINTER · PAPER JAM`
+  beside the red plate. In a hold the banner stays at its one line (T23) and always shows something while trouble stands: the
+  held trouble, or the next one with a small `NEXT` kicker — done when: a test finds a non-empty banner at every step of a
+  50 s real-timing hold with trouble standing, its size at most the one-line step, and the next trouble carrying `NEXT`.
+- [ ] T31 (triage, r20-operator #3) [ui] [variant:galaxy] A number on the plate keeps counting: `NO CONTACT FOR 15S` stands
+  still over three frames (11-22 s) while the banner's age counts up. Tick the age text in place every second without
+  retyping the line (night 4's T30) — done when: a fake-clock test finds the plate's age text advancing each second while
+  the typed text node and its typing state are untouched.
+- [ ] T32 (triage, r25-skeptic #1+#9) [ui] [variant:galaxy] The banner says only what the plate does not, and its count is the
+  fleet's: in a trouble hold `▲ HV1 · FIX-LOGIN · ASKED A QUESTION · 80M` repeats the plate's fourth line word for word, and
+  `+4 MORE` / `+3 MORE` flips with the camera with no change in the fleet. In a hold the banner shows a trouble not on the
+  plate (`▲ CLOUD · API-PROD · P95 1.8 S`), or nothing if every trouble is on it; the `+N` is always the fleet's total trouble,
+  never a function of what the plate shows. Goes with T23/T30 (read both first; T30's "never empty" yields to this when
+  nothing is off the plate) — done when: a test finds, for a plate holding trouble X, no banner line equal to X's text, the
+  `+N` equal across every camera state for a fixed fleet, and changing only when the fleet's trouble count does.
+- [ ] T33 (triage, r25-skeptic #12; night 4's T26 raised) [ui] [variant:galaxy] Hyperlanes stay grey at every zoom: in
+  `r24-galaxy` frame 1 the sun-to-site lanes repeat their nebula's yellow, and in `r24-t8-ring/04-ba-open` a red lane cuts
+  through HV1's open system and leaves the frame. A lane is grey; optionally it goes dark when its site's feed is silent
+  (freshness, a line already drawn) — done when: a scene test finds every lane's material the neutral grey for warn, crit and
+  down sites (trouble nebulae keep their hue), and a still of `?at=hv1&open=1` with HV1 in crit shows no red line through the
+  system.
+- [ ] T34 (triage, r25-skeptic #6; night 4's T49 raised) [ui] [variant:galaxy] The typing cursor never stands alone: a white
+  block blinks on an empty line under a full headline or under nothing (`r24-galaxy` frame 10, 26.9 s; `r20-fx-warp` frame 11).
+  The cursor shows only while letters arrive; the name line's space stays reserved but empty until the first letter; the typing
+  itself stays — done when: a fake-clock test finds no cursor element visible when the line is empty or fully typed and more
+  than the settle time has passed, and the line's box height equal before and after the first letter.
+- [ ] T35 (triage, r30-touch #2) [ui] [variant:galaxy] The held star is never under a control: after picking STORAGE the
+  star of HV2 stands at about (1248, 228), inside `#galaxy-back` (1160-1286 × 151-231), so a finger on the star presses Back;
+  `k8s-1`/`k8s-2` sit under the manual line and Back too. T9's `pickBox` excludes Back and the manual line for the planet
+  and its ring, but not for the star and the other members. The pick framing's free box excludes Back and the manual line
+  with 24 px margin — done when: a test on the large demo finds, at every pick framing (each planet of each site), no
+  member's or star's screen point inside `#galaxy-back`'s box or the manual line's box; a still of STORAGE picked in HV2.
+- [ ] T36 (triage, r30-touch #3, second half; T13 does the levels) [ui] [variant:galaxy] Back never fires the tour on a
+  repeated tap: from a moon, three Back taps in a row reached the overview and the third turned into `▶ TOUR` and started the
+  tour (`r30-touch/14-back-3-150ms`, `driver: tour`). When Back has just reached the overview the control keeps its place and
+  its `‹ BACK` label but is inert for 1.5 s, then becomes `▶ TOUR` — done when: a fake-clock page test taps the control at
+  0, 300 and 1000 ms after Back lands on the overview and finds mode and driver unchanged, then a tap at 1600 ms starting the
+  tour; B239 (hand-back to the tour starts with the overview) stays green.
+- [ ] T37 (triage, r30-touch #5) [ui] [variant:galaxy] A slow press is not lost, and a press answers at once: a finger held
+  on HV1 for 450 ms did nothing (`TAP.ms` 300, no mark). `TAP.ms` 600 (the 12 px slop already separates a tap from a drag);
+  at `pointerdown` a 48 px ring under the finger fills while it stays down and fades on lift (a tappable's pressed state,
+  `wall.css` rule added, no colour literal) — done when: a test finds a 450 ms press with under 12 px of travel picking the
+  member, a 650 ms press picking nothing, and the ring present from `pointerdown` to lift; a touch film frame shows the ring.
+- [ ] T38 (triage, r35-performance #1; night 4's T34 raised) [ui] [variant:galaxy] The overview is the cheapest frame it can
+  be: `?at=overview&quality=0` still draws 84.3k triangles (an open HV1 33.7k) because `scene.js place()` gives every folded
+  member its L0 planet sphere, 2-6 px on screen. While `s.unfold < 0.05` swap a member's geometry to `geo.dot` and hide halos
+  under 1 px; swap back as the system opens past `MOON.from`/the opening starts, with no pop — done when: a test counts
+  `renderer.info.render.triangles` after one `frame()` on the large fixture at the overview and finds at most 25k, and a
+  system opening shows no geometry jump (same member radius before and after the swap); before/after in the notes.
+- [ ] T39 (triage, r35-performance #3) [ui] [variant:galaxy] An open moon ring allocates and uploads nothing while the camera
+  holds still (about +1 ms script per frame and +50 KB/s retained): in `scene.js` write the ring's points straight into the
+  array (no `at()` array per segment), keep one pose object per host with its `moons` array reused, upload the `moonLines`
+  buffer only when `camera.matrixWorld` elements or the ring's `e` changed; in `camera.js pickedShot` cache the host and moon
+  count per `want.member` — done when: a page test on the fake clock holds a picked planet with the camera still and, after
+  the opening settles, finds no `moonLines` position upload over 30 frames, and the ring's points equal the old ones to 1e-6
+  at a moving camera; the moon-ring and pick tests green.
+- [ ] T40 (triage, r35-performance #6; goes with T28) [ui] [variant:galaxy] Big carried bodies keep their roundness at the
+  lowest quality level: at L2 HV1's star (carry 1.6x) shows a flat polygon edge and `dns`/`git-mirror` corners
+  (`r35-perf/moons-open.png`) because `budget.js LEVELS[2].seg` cuts segments in proportion. In `scene.js sphereSegs` floor
+  `planet` and `bigStar` at 20x14 at every level and take the saving from dust and far stars — done when: a test pins the
+  floor at L2 for planet and bigStar and that L2's overview triangles stay at or under night 4's L2 number plus a few hundred
+  (or lower after T38); a still of `?at=hv1&open=1&quality=2` shows round bodies.
+- [ ] T41 (triage, r40-stranger #1) [ui] [variant:galaxy] The galaxy paints a feed's `glow` and `ring`: the README and the
+  kiosk docs send a stranger to `galaxy.html`, where `lamp` (glow) and `printer-3d` (ring 0.72) are plain grey balls; only
+  `wall.html` paints them. A soft halo in the light's colour on the planet (capped below status brightness, never read as
+  trouble) and a thin grey arc for `ring` progress, taking the radial variant's data path (`/api/map` fields) — done when:
+  a scene test finds a halo for a node with `glow` (colour kept, brightness under a warn halo's) and an arc of the right
+  sweep for `ring: 0.5`, none for nodes without; `?perf=1` draw calls at the overview before/after in the notes (none added
+  for nodes without either); a still of the large demo's `kitchen-light` and `printer-3d` at `?at=…&open=1`.
+- [ ] T42 (triage, r40-stranger #4) [ui] [variant:galaxy] The calm plate says it is calm: a calm site's plate is a bare
+  `HOME` (still 2, `r40-galaxy` frames 5, 6, 8), so from the hallway it could be fine or still loading. Put a calm line in
+  the status slot (`ALL CLEAR · 9 ROOMS`, in the calm grey, from the model's counts) — done when: a test finds, for a calm
+  site, the status slot holding the calm line with the site's count and no status hue, and a trouble site's plate unchanged;
+  a still of a calm hold.
+- [ ] T43 (triage, r40-stranger #6) [ui] [variant:galaxy] Manual versus touring is readable from the hallway: `MANUAL · TOUR IN
+  0:58` and `▶ TOUR` are about 10 px caps (`r39-t17-card` frame 00), gone at a quarter scale, so a frozen galaxy after a touch
+  says nothing. While manual show a `MANUAL` word at the clock's scale beside the clock (or a countdown ring on it); the small
+  line stays — done when: a test finds the manual word present in explore and absent while touring, its font size at least
+  the clock's, and the tag/clock boxes not overlapping; the 684 px shrink of a manual overview still shows the word.
+- [ ] T44 (triage, r45-accessibility #2) [ui] [variant:galaxy] The card's status is a shape and a true word, not a dot beside
+  `OK`: BA's header has a bare yellow dot over `OK builder-a · 3 lanes`, HV2's a red dot over `OK demo hypervisor · GPU`
+  (`r45-a11y/card-builder.png`). Replace the dot with the worst status's shape (`■` crit, `▲` warn/attention, grey `●` calm) at
+  the name's cap height, and say the node's own state apart from what is below it (`OK itself · ▲ 2 BELOW`, or lead with the
+  worst: `▲ 2 ATTENTION BELOW · builder-a · 3 lanes`); shape, word and hue travel together (design rule 2) — done when: a
+  `describe`/card DOM test finds, for a calm node with a warn child and for a crit node, a shape glyph in the header matching the
+  worst tone, no `OK` word beside a trouble shape, and no header status carried by colour alone; a still of BA's and HV2's cards.
+- [ ] T45 (triage, r45-accessibility #3) [ui] [variant:galaxy] Map labels keep a dark ground: `search ui` (yellow 235,200,49)
+  over its planet's yellow halo is 2.30:1 declared, 2.07:1 rendered; `ci` 1.85:1 over a body; `proxy` 2.39:1 on the warn hold.
+  Give every `.galaxy-label` a 2-3 px text halo in `--bg-canvas` at about 0.85 (`paint-order: stroke` or stacked
+  `text-shadow`; `wall.css` rule added, no colour literal) or a feathered plate like the caption's — done when: a labels test
+  requires the halo on every label class (trouble and calm) and a probe like `tools/r45-a11y.mjs` (or a computed pair of the
+  label colour against the halo's peak colour) finds ≥ 4.5:1; a still of `?at=hv1&open=1` shows `search ui` and `ci` readable.
+- [ ] T46 (triage, r45-accessibility #4) [ui] [variant:galaxy] Text sizes for a hand-held tablet: map names are 11 px (about 2 mm
+  on the 12.3" Surface), and the card's labels (`ROOMS UP`, `CPU`, `BELOW`, `+1 MORE`, the path `hv1 › vm-a`, `later`) and
+  status glyphs are 11 px too. Card labels, path and `later` 13 px, problem glyphs 15 px to match their line; planet and moon
+  names 13 px in an open system (`labels.js`), lanes 12 px; the collision pass makes the room, and names that no longer fit
+  lose to trouble's as before — done when: a test pins the new sizes (card CSS rules and the labels' font size), the T6/T6b
+  label tests (`wall-galaxy-room`, `wall-galaxy-hostnames`) stay green or are updated only for the size, and a still of
+  `?at=hv1&open=1` at 1368 px with a builder picked shows card and names at the new size without overlap.
+- [ ] T47 (triage, r50-film-ui #1) [ui] [variant:galaxy] The banner's size is its rank, not its text's length: at the 3 m
+  step `wall-fleet[data-step="far"]` is fitted to 64vw by `frame.js fleetSize`, so `■ HV1 · VM-C` stands at about 10 vmin cap
+  height and `■ 2 CRIT · HV1 · HV2` at about 6 (`r49-galaxy` frames 1 and 4; `r40-fx-sweep` 9-12) — the same message jumps 60 %
+  in size by the length of a name. One cap height for the 3 m step (the 9 vmin floor), a short line gets air, not size; and
+  check `data-hold` when the camera has landed on a calm site with no plate (frame 4: the line is at its no-hold size). Goes
+  with T23/T30 (read both) — done when: a test finds the banner's font size equal for a short and a long text at the same
+  rank and step, and at most the floor step, and the hold attribute set on landing with or without a plate; a 684 px shrink
+  of frames 1 and 4 shows one size.
+- [ ] T48 (triage, r50-film-ui #4+#5) [ui] [variant:galaxy] The pick shot frames the system in the space the card leaves,
+  clear of the banner: with the card docked left (x 16-376) the leader runs flat about 750 px into the star's centre across
+  `template`, `gpu-box` and `media`, and the system is pushed to the right edge (`r50-walk` 02, 03, 05, 06, 08, 09, 11); at
+  `04-ba-card` HV1's star sits on the bottom edge under the banner's feathered ground. The pick framing's free box (`framing.js`,
+  `main.js pickBox`) starts right of the card and subtracts `hud.covers()` (banner, clock, Back, tag) as the tour hold does, and
+  checks the star as well as the picked planet; the leader ends on the star's rim and stays under a quarter of the frame's
+  width. Read T35 (Back and manual line) first, it edits the same box — done when: a page test on the large demo finds, for
+  each planet of HV1 and HV2 picked, the star and the planet's ring outside the card's box and every `covers()` box, and the
+  leader shorter than a quarter of the frame; a still of BA picked in HV1.
+- [ ] T49 (triage, r50-film-ui #2) [ui] [variant:galaxy] A held card has a hero: at the warn hold `04-ba-card` the banner's
+  `■ HV2 · STORAGE` is the biggest type while the touched `BA` is a 20 px name; at the crit hold `11-hv2-card` the clock `03:00`
+  is the biggest type and the crit member `storage` an 11 px red label. While a card is up its name takes the plate's subject
+  step in the plate's condensed caps (about 5 vmin), the banner follows T23's one-line rule as for a plate, and the selected
+  node's map label takes the same face and status hue at 2x, so a crit member is never the smallest word in its own shot.
+  Check against T44/T46 (card header, sizes) — done when: a DOM test finds, with a card up, its name at the subject step in the
+  condensed face, the banner at the one-line step, the selected label at twice the plain label size in its status hue, and
+  the clock smaller than the card name; a still of `04-ba-card` and `11-hv2-card`'s views.
 
-## Research questions
-
-- [x] Q16 → research/Q16-show-message-shape.md. The show interface's message shape (for Later B, the first show task): how do kiosks, digital signage and
-  display walls take remote "show this" commands in the browser (`BroadcastChannel`, `window.postMessage`, a
-  WebSocket topic; e.g. signage players, Grafana kiosk/playlist, presentation remotes like reveal.js multiplex, OBS
-  browser sources): message envelope (type, id, source, ttl), how a command is undone or expires, how a screen says
-  who is driving it, and origin checks for `postMessage`. One recommended shape for `flyTo`, `highlight`, `clear`,
-  `pin` — for Later §7 Night 4 B
-- [x] Q17 → research/Q17-countdown-at-distance.md. A countdown readable from 3 m (for Later C, `countdown: { at, label }`): how departure boards, broadcast
-  clocks, launch countdowns and control-room timers show time-to-event at distance (format `T-4:12` vs `in 4 min`,
-  when seconds appear, tabular figures, a ring or bar vs digits, what happens at zero and after), and how to keep many
-  small countdowns quiet at an overview while one is readable when held. Night 1's Q3 already has type size per
-  metre: do not repeat it — for Later §7 Night 4 C
-- [x] Q18 → research/Q18-busy-vs-idle-at-a-glance.md (thin on game sources; ISA-101 grey-scale practice is the firmest). IDEAS: "at work" vs "idle" at a glance for `fx=activity`: how strategy and sim games (Factorio, Stellaris,
-  Homeworld, RimWorld, city builders) and ops tools show that a unit or machine is busy, finishing, or failed at a
-  zoomed-out map scale without hue (hue is for trouble here). Night 2's Q8 (alive without meaningless motion: `fade`,
-  `miss`, `pulse`) is answered: do not repeat it. 2-3 concrete proposals for the galaxy (what it shows, what it means,
-  a cost guess) — for T17
+- [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
+  Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
+  picker (spacing on screen, a ring or fan-out on selection, hit radius vs drawn size, labels on and off), how a selection
+  steps down and back up (site → planet → moon) and how the camera frames each step. Touch guidelines already answered in
+  night 1's Q6 and night 3's Q12: do not repeat them. 2-3 concrete proposals with a cost guess — for T8, T11
+- [x] Q20 → research/Q20-node-card-placement.md (Apple HIG page not loaded; summary only). How a node card stays out of the way on a 3D view: anchored callouts with leader lines vs docked panels in games
+  and 3D tools (Stellaris's outliner and selection panel, Homeworld, Google Earth, CAD/BIM viewers, map apps' place cards):
+  when to dock, how a card avoids covering what it describes while the camera moves, how it follows a moving anchor without
+  jitter, and how it closes. `research/stellaris-ui-brief.md` already covers Stellaris's panels: read it, do not repeat it —
+  for T17, T20
 
 ## Later
 
-From r60-performance (triage, night 4; not tasks yet):
-- (r60-performance galaxy 6) A recolour runs the full layout: in `scene.js update` compare `treeKey` first and call `recolour` without `galaxyLayout` on the same tree (about 1.2 ms/s unthrottled on the demo).
-- (r60-performance galaxy 7, fx-activity 1, fx-afterglow 1) Per-frame garbage: `director.tick` event/pose, `heldDust()` spread, `drawJobs` filter (filter in place, only when a job expired), the template keys in `drawAfterglows`/`drawSweep`, the afterglow slot shuffle on a new clear (key the slot on id and rounded width). Do it when a builder is in those files.
-- (r60-performance galaxy 5) A 555 ms wake-window gap not reproduced: whoever touches T36 profiles wake → tap → sky tap with `show=demo` in one window.
-- (r60-performance galaxy 2) Frame cap: the owner's `?cap=30` (see For the owner); T34 (the overview's 85k triangles, now 215-228 calls with effects) is the review's first ask and stays open.
+Night 4's open tasks (`nights/night-4/PROGRESS.md`, full text there; its own `## Later` notes stay in that file):
+- night 4's T22 A new trouble is a moment (the banner types its new subject once after a rise).
+- night 4's T23 Crit and warn differ at 3 m by more than hue (crit nebula ≥ 1.5x warn, warn does not breathe).
+- night 4's T24 A site name is never eaten by its own cluster at the overview (re-check after T1's spacing).
+- night 4's T25 The held crit is not at the frame's edge (touches the tour hold, which stays as it is tonight).
+- night 4's T26 No red line without a name (hyperlanes grey at every zoom).
+- night 4's T27 The tag is a cover for map labels (re-check after T1's framing).
+- night 4's T28 One ranking for the banner and the tour (needs `tour.js`, fenced tonight: a patch if taken).
+- night 4's T29 A down or crit member keeps its red at every step and age.
+- night 4's T30 A held crit does not blank to update a number.
+- night 4's T31 A pinch cannot lose the galaxy (`⌂ ALL`).
+- night 4's T32 A palm does not wake.
+- night 4's T34 The overview is the cheapest frame it can be (dot geometry folded; T2 and T7 change the counts).
+- night 4's T36 The wake does not force layout.
+- night 4's T47 The afterglow ring is never read as live trouble (dashed, starting amber).
+- night 4's T48 The kicker never counts itself (needs `tour.js`, fenced tonight).
+- night 4's T49 The typing cursor never stands alone.
+- night 4's T50 Trouble leaving is a moment too (`CLEARED`).
+- night 4's T51 The agent has a voice: a show takes the caption plate (needs `show.js`, fenced tonight).
+- night 4's T52 Show cards and banner keep out of the way (needs `show.js`, fenced tonight).
+- night 4's T54 The camera does not leave a crit while its plate still names it (tour hold, stays tonight).
+- night 4's T55 The banner corner is never empty while trouble stands.
+- night 4's T56 A countdown in the scene is quiet.
+- night 4's T57 One countdown, never the loudest mover on a trouble plate.
+- night 4's T58 Late says late (`LATE 13 MIN`).
+- night 4's T59 A pinned card outlives its fact (needs `show.js`, fenced tonight).
+- night 4's T60 A finger beats a show for the camera only (needs `show.js`, fenced tonight).
+- night 4's T62 The wake is not silent (manual line and control within 200 ms).
+- night 4's T63 The show does nothing while nothing is due (needs `show.js`, fenced tonight).
+- night 4's T64 The sweep's news costs nothing per frame.
 
-From r55-touch (triage, night 4; not tasks yet):
-- (r55-touch galaxy 4) A sleeve swipe (starts within 40 px of the edge at full speed) is not a drag; while a sheet is up, a drag that takes the subject out of frame eases back or closes the sheet (= r26 3).
-- (r55-touch galaxy 8) A still 500 ms press is a tap (`TAP.ms` 500) (= r26 8).
-- (r55-touch galaxy 9) After a wake the held site keeps dim lock brackets for 5 s, or a wake whose down landed on the held target opens that site after the ease.
-- (r55-touch 1e.1) A tap on the activity ring wider than the star's disc counts as the site's target (not measured).
-- (r55-touch across) Fan and sheet rows take the show ✕'s build (real 48 px box, events stop there); show cards keep off the system's trouble as the fan should (T52).
+From `r10-film-ui.md` (bugs and gaps past the 3-task limit):
+- r10 #5 The plate's headline (`VM-C`) and the locked node's map label (`bc`) differ; show one name while the plate stands.
+- r10 #10 In explore mode the touched node's name is the headline and the fact its subject (the card, T17-T18, may settle it).
+- r10 #12 The wake says nothing for 300 ms (same as night 4's T62).
+- r10 3 m check: the banner's second line (`POOL 97% FULL`) turns to texture at 342 px; a step larger or bolder.
+- r10 #1/#2 sun on the tag and the held shot composed for the plate: T1b covers the sun; plate-sized bracket and the star on the right third line stay here.
+- r10 fx beacon: cap the pillar with a tick and the crit's age; keep it under a quarter of the frame in a flight.
+- r10 fx activity: rings at `--text-3` alpha, never inside a lock nor on the held trouble member.
+- r10 fx sweep: a ping is a short dash arc fading in about 1 s, not a closed ellipse (reads as selection).
+- r10 fx afterglow: needs a filmable clear (a demo hook clearing a site at a known second).
 
-From r45-operator (triage, night 4; not tasks yet):
-- (r45-operator touch 1) Explore reads from 3 m: the clock corner or banner count line carries `MANUAL` at the reason line's size and the corner brackets go `--text-2` (= r16 touch 1, r21 touch 2).
-- (r45-operator fx-beacon 1) Beacon screen-vertical with a width floor at the overview, hidden while its own site is held (= r16/r41 beacon lines).
-- (r45-operator fx-activity 1) Held ring at most 2.5 planet radii, none in a system whose hero is trouble (= r40 1f.1).
-- (r45-operator fx-sweep 1) After a sweep a silent site's name drops to `--text-3` with `SILENT 4M`, the tag reads `1 SILENT` beside `LIVE` (= r40 1g.1).
-- (r45-operator galaxy 9, fx-warp 1, fx-afterglow 1) covered by T25/T27, T21, T47. Across: warn holds copy the sheet's single headline (T19); the lock tinted to the destination's hue on trouble flights (already under For the owner).
+From `r15-dreamer.md` (past the 3-task limit):
+- r15 #5 The plate's leader cuts through the system it points at; route it round the system's bounding ellipse to the lock's nearest bracket corner.
+- r15 #7 The red banner never rests: T23 (one line in holds) is the first step; aging trouble dropping a size step is under `## For the owner`.
+- r15 #8 The hub is a beige ball with no corona: C1b's (stale/live work), not ours.
+- r15 #9 A picked planet's tether to its star brightens while selected (T8/T9 cover the camera and ring; the tether is the addition).
+- r15 fx beacon: pillar stops at about the cluster's diameter with a tick for the crit's age (same as r10); fx afterglow/sweep: demo hook (clear a site, one sweep in the first 5 s of `?demo=1`) so they can be filmed; fx activity: rings at `--text-3`, slow fill, never inside a lock (same as r10).
 
-From r35-film-ui (triage, night 4; not tasks yet):
-- (r35-film-ui galaxy 1, 2, 5, 8; fx-warp 1; fx-beacon 2 in part) covered by T19, T28/T22, T20, T25, T37-T39, T21; the plate's ground sized to the type's own column (galaxy 5) is new, Later.
-- (r35-film-ui galaxy 6) Plate rows on one two-column grid, values in one face at two sizes (= r4-film-ui galaxy 8).
-- (r35-film-ui galaxy 7) One label anchor at the overview (right of the star, baseline on its centre); move only for a collision, always to the left (with T24).
-- (r35-film-ui fx-beacon 1) Beacon 6-8 px core with a soft glow and a tick cap, width grows with age (= r4/r16 beacon lines). Beacon 2: check whether the pillar waits for an age floor (a young crit should show at once).
-- (r35-film-ui fx-warp 2) 0.3 s stillness before the streaks with the lock brackets tinted to the destination's hue.
-- (r35-film-ui fx-afterglow 2) Film note: a clear needs `--every 6000` or `at=overview` to be caught.
-- (r35-film-ui fx-activity 1) In an open system cap the ring at about 1.6 planet radii, under labels; the frame-height floor only at the overview.
-- (r35-film-ui fx-activity 2) One ring per folded cluster, thickness by the number of working planets.
-- (r35-film-ui touch 2) On a sheet, hide the scene's names for members the sheet names and for the trouble cluster while the fan is closed.
-- (r35-film-ui touch 3) `‹ BACK` / `▶ TOUR`: brackets only, at the plate's weight (= r4-film-ui touch).
-- (r35-film-ui across) Every leader an L, never a diagonal (with T20); afterglow gets activity's overview floor in its dashed language.
+From `r20-operator.md` (past the 3-task limit):
+- r20 #5 Tour hold scales with severity (~14 s crit/down, ~8 s warn/attention), a crit revisited after every other site (`tour.js`, fenced: a patch).
+- r20 #6 `DEMO_TIMING` keeps the real ratios (trouble hold ≈ 2.3x calm, `revisitEvery: 2`; `tour.js`, fenced: a patch); with no plate the held shot recentres on the star.
+- r20 #7 Among equal severity the oldest trouble stays the banner's subject (night 4's T28, one ranking; needs `tour.js` for the tour side).
+- r20 #8 Status-hued labels take no depth fade (CLOUD's warn label is dark ochre at the overview); the crit nebula size is T26.
+- r20 #9 Trouble members' names a step larger in the condensed face; calm names stay small.
+- r20 #10 Wake says nothing for 300 ms (night 4's T62, r10 #12).
+- r20 fx: beacon pillar straight up about a cluster's diameter with a tick and the crit's age; activity rings at `--text-3` alpha, never in a lock; sweep pings only trouble as short fading dash arcs; afterglow needs a demo clear hook (same as r10/r15).
 
-From r31-performance (triage, night 4; not tasks yet):
-- (r31-performance galaxy 2) No frame cap yet: stays behind `?cap=30`, off by default (owner; see the cap line below). The overview and holds render at display rate.
-- (r31-performance galaxy 1, later) Folded members as one `InstancedMesh` per tone: draw calls from about 200 to about 50 (after T34).
-- (r31-performance galaxy 4) Per-frame garbage: `director.tick` returns early while the tour drives and no show is held (reads `cam.pose()` only for a move); `touch.mode()` once per frame, not three times; `covers()` rebuilds its array only when a part changes; `manualLine` only when `ceil(left/1000)` changes.
-- (r31-performance galaxy 6) `?perf=1` gets a style-and-layout line from a `long-animation-frame` observer (= r56 galaxy 4).
-- (r31-performance galaxy 7) Afterglow slots keyed on id and rounded width, so a new clear does not rebuild up to 8 `RingGeometry`s.
-- (r31-performance fx-warp 1) If the Surface dips in flights, halve `WARP_DUST` at level 1.
+From `r25-skeptic.md` (past the 3-task limit):
+- r25 #2 Drop the `STATUS ▲ N ATTENTION` count line when the list below shows every trouble it counts (`+N MORE` only when cut).
+- r25 #3 In explore the tapped node is the headline (`▲ BA` in its worst hue), its troubles the lines below; T18's card must not copy the plate's trouble-first order (also r10 #10).
+- r25 #4 Remove `VERSION` and `HOLDS 3 lanes` rows from the plate/sheet (the version, if anywhere, in the card's `…`).
+- r25 #5 The lock closes only on a member in trouble or one a finger picked; a calm hold has no lock (also `fx=activity` rings).
+- r25 #7 The tag is one word, `LIVE` or `STALE 2M`, readable at 3 m (C1b owns the stale part; note for it).
+- r25 #8 The tour's kicker is kind and parent (`BUILDER · IN HV1`), no `TARGET 02 / 05` counter (owner has it open as a taste question; skeptic votes yes; `tour.js` fenced).
+- r25 #10 `OFFSITE COPY OFFICE-NAS · 45:43` has no unit; one format (`LAST COPY 46 MIN AGO`) or remove.
+- r25 #11 Remove star-to-planet spokes (keep stems and a faint ellipse).
+- r25 #13 Dim the galaxy's outer arm ribbon below the hyperlanes.
+- r25 #14 Halve the clock and drop its date line at the overview.
+- r25 #15 Covered by T9; add to T9's test: every open moon and its lock inside the frame and off the controls (`‹ BACK`).
+- r25 fx: beacon straight up, short, crit age at its tip (same as r10/r15/r20); sweep: no wedge, a silent site gets one small outline mark; afterglow: demo clear hook or remove; warp, activity: skeptic says remove (see `## For the owner`).
 
-From r26-touch (triage, night 4; not tasks yet):
-- (r26-touch galaxy 3) A fast sleeve swipe (160 px in ~70 ms near the edge) throws the held planet out of frame: a drag needs a still start or a speed cap, and a planet sheet's subject is kept in frame (ease back or close the sheet).
-- (r26-touch galaxy 5) Wake feedback in 200 ms: `MANUAL · TOUR IN 1:00` and the control at once, plus a 72 px ring at the finger (as the site tap and the fan do).
-- (r26-touch galaxy 7) Fan rows: trouble first then distance; names under 3 letters (`ba`) fall back to kind + parent (= r11-dreamer touch 2).
-- (r26-touch galaxy 8) `TAP.ms` 300 → 500, a long non-drag press acts as a tap.
-- (r26-touch across) The crit nebula (about 60x120 px) counts as its site's tap target; any drag result keeps the held subject on screen.
-- (r26-touch galaxy 11) Banner under a planet sheet = T19.
+From `r30-touch.md` (past the 3-task limit):
+- r30 #1 Drag in an open system throws it off screen: T12 is the fix; until then hide the leader and lock when their target is out of frame. Add that to T12's test.
+- r30 #3 Back skips the planet step: T13 (levels); the inert-Back half is T36.
+- r30 #4 A palm turns the galaxy: `createGestures` ignores a pointer `isPalm` flags (down and move); Back to the overview lands on the fitted overview if the explore pose leaves a site out of frame.
+- r30 #6 The first touch has 1.5 s with no `MANUAL`/`▶ TOUR` (same as night 4's T62): show them in `easing` already.
+- r30 #7 Planet centres in an open system at least 64 px apart at the held and pick framings on every large-demo site (HV2's `media`/`gpu-box`, `k8s-*` miss it).
+- r30 #8 Tappable names in an open system at least 14 css px, condensed caps at `--text-2` (also r10 #6).
+- r30 #9 A tap on the plate whose subject is already selected does nothing; it flies only for a different subject.
+- r30 #10 In explore the banner keeps its overview size (T23) and is tappable only on its subject's name.
+- r30 fx: beacon pillar a target only within 24 px of base and tip; warp no streak in the first 300 ms after a tap; afterglow ring dashed, never closed or lock-sized; activity never draws a closed ring; sweep ends at `pointerdown`.
+- r30 3 m: `HV2`/`HOME` calm names do not read at a quarter width; the tag and the manual line not at all.
 
-From r21-skeptic (triage, night 4; not tasks yet):
-- (r21-skeptic galaxy 5) A second red `■ VM-C` (the site lobe's leashed name) far from the member: `named()` also hides the lobe/site label carrying the plate's subject.
-- (r21-skeptic galaxy 6) Trouble plate says it three times: drop kicker `TARGET n / N`, the `STATUS` row, `CPU/MEM` and `HOLDS n rooms` on trouble plates; attention lines one step smaller (owner question (a)).
-- (r21-skeptic galaxy 7, touch 1) Explore sheet echoes the banner: run `bannerEcho` for the sheet as for the tour plate.
-- (r21-skeptic galaxy 8) Remove `+N MORE` and the flickering fleet facts line from the overview banner; milder count only as a stable number.
-- (r21-skeptic galaxy 9) Tag is `LIVE` / `STALE 2M` only (with T27).
-- (r21-skeptic galaxy 10) A system that opens fades its nebula; the trouble member's glow carries the colour.
-- (r21-skeptic galaxy 11) Calm hold: one fact line or no plate, never the star's name alone (= r11-dreamer galaxy 2).
-- (r21-skeptic galaxy 12) Date under the clock removed (= r26-skeptic 9).
-- (r21-skeptic fx-beacon 1) Beacon: age as width, or remove; (fx-warp 1, 2) covered by T15, T21.
-- (r21-skeptic touch 2) `MANUAL · TOUR IN 0:54` is tag-sized: kicker says `MANUAL`, or the `▶ TOUR` box carries the countdown.
-- (r21-skeptic across) The single-warn banner takes the two-crit form (`▲ 2 ATTENTION · HV1 · REMOTE`) (with T28).
+From `r35-performance.md` (past the 3-task limit):
+- r35 #4 Memoise `framing.js freeRect` on a key of W, H, gap and each cover's four numbers (`main.js freeBox`/`pickBox`; 13 % of all bytes allocated).
+- r35 #5 A status change re-runs `galaxyLayout` (`scene.js:1410`; 10.6 % of bytes): compare the tree key first and only `recolour` on the same tree (r60 #6).
+- r35 #7 Read `frame.cover()` once in `freeBox`; mark `hud.js tagCover` dirty from `frame.update`/`live` instead of rebuilding its key each frame.
+- r35 #8 `flightPose` resamples its arc every flight frame (cache `extra`/`scale` per want); night 4 r60 #7 list unchanged (`director.tick` event, `heldDust()` spread, `drawJobs` filter).
+- r35 fx: none filmed but beacon; afterglow/sweep key strings per slot per frame (r60 note stands).
+- r35 #1 is T38, #3 is T39, #6 is T40; night 4's T34 is now T38.
 
-From r11-dreamer (triage, night 4; not tasks yet):
-- (r11-dreamer galaxy 2) Calm holds are empty: one real-facts line on the calm plate (owner question (b)), system framed centre-right (= r54-film-ui 8 below).
-- (r11-dreamer galaxy 5) The sun is a planet: larger, warmer-white grey body, no hue, static.
-- (r11-dreamer galaxy 8) The clock a step smaller (= r26-skeptic 9 below).
-- (r11-dreamer touch 2) Fan rows carry trouble status as a hue edge, trouble rows first, leaders as non-crossing elbows.
-- (r11-dreamer across) A 300 ms settle on arrival at trouble, then the type; the tour's return types `TOUR` in the kicker (with T5).
-- (r11-dreamer fx-warp 2) Reverse streak on leaving a crit (taste).
-- (r11-dreamer galaxy 3, 4, fx-beacon, fx-warp 1) covered by T17, T9/T20, the beacon lines below, T15.
+From `r40-stranger.md` (past the 3-task limit):
+- r40 #2 The docs' `POST /api/map/feeds` answers 404 on a hub (route is builder-only): `demo-fleet.mjs` prints its `feedsDir` and `docs/wall.md` "Feed fields" says to drop `<feedsDir>/<source>.json` there on a hub (demo-fleet is `test/tools`, not fenced; the route is `server/*`, fenced: patch if taken).
+- r40 #7 The empty-tap step back is by design gone (T12): `docs/wall.md` Touch section says it still goes back; T21 rewrites it (double-tap/right-click/Back).
+- r40 #8/#9/#10 Docs (T21): the README Wall row says "switches for a kiosk" (none exists: kiosk is OS setup), `docs/map.md` feed extras cite the plan's D3 (point at `docs/wall.md` "Feed fields"), and the demo (`demo-fleet.mjs --size large`, `/galaxy.html?demo=1`) is buried: one line in the Wall row. `docs/wall.md` also still promises "tap a planet for its own sheet".
+- r40 #11 The plate is empty for about a third of the tour's flights (fleet line carries it; minor).
+- r40 #12 The status word on a feed-site plate is lowercase and small (`STATUS warn`), `HOLDS 2 rooms` for lamps: caps as on trouble plates, `HOLDS` names the feed's kind.
+- r40 fx warp: no streaks on a flight that ends at the overview (frame 12 crosses the trouble); fx activity: rings round CLOUD/HOME read as a selection, thinner or brightness only (same as r10/r30); fx sweep: faint rings unexplained, harmless; fx afterglow: nothing cleared in 35 s, needs the demo clear hook (r10).
 
-From r4-film-ui (triage, night 4; not tasks yet):
-- (r4-film-ui galaxy 4) Hold rhythm: arrive and lock 0.6 s, stillness 0.4 s, name types, rows fade in, hold at least
-  1.5 s still before leaving; under `demo=1` cut the overview, not the hold; calm plates two lines minimum.
-- (r4-film-ui galaxy 5) Typing cursor at cap height, 60 % value, only after the first letter.
-- (r4-film-ui galaxy 7) Label system of three steps: held site, sun and other sites, members; sun never bigger than the held site.
-- (r4-film-ui galaxy 8) Plate rows on one two-column grid (mono label, condensed-caps value); CPU/MEM on one row.
-- (r4-film-ui fx-beacon 2) Beacon fades on the flight out, not cut: film one departure at 0.5 s spacing.
-- (r4-film-ui touch) `‹ BACK` box uses the plate's 2 px bracket weight; the sheet's `■ SITE` kicker says `MANUAL` in explore (with T5).
+From `r45-accessibility.md` (past the 3-task limit; #1 is T20's, #2-#4 are T44-T46):
+- r45 #5 In still (reduced-motion) mode HV1 sits on the frame's right edge and its lock brackets cover its name (REMOTE's touches): the lock frames the star only, clear of the label box; the overview fit keeps every site's label box inside the free box.
+- r45 #6 The fleet line has no `role="status"` (night 3's A5 asked for it) and its `+N MORE` is text: container `role="status"`, announce text changes only, `+N MORE` a button labelled `N more problems`.
+- r45 #7 Reduced motion: the plate is empty for gaps (frame 6, 15 s) — cross-fade one plate straight into the next in still mode.
+- r45 #8 Far labels fade to 2.6:1 grey during a flight: fade them to opacity 0 instead of parking at a grey that fails 3:1.
+- r45 #9 Small red text (`--crit` 4.89:1) at 15 px kicker and the card's 11 px `■`: keep small red text bold, or put status text in `--text-1` with the red shape before it.
+- r45 fx warp: white streaks over a flight that ends at the overview (vestibular trigger on normal motion): never run on a flight to the overview (same as r40). Beacon is the model for colour-blind readers; afterglow/activity/sweep harmless.
 
-From r16-operator (triage, night 4; not tasks yet):
-- (r16-operator galaxy 2) With two crits the banner says one: count leads at the banner's size (`■ 2 CRIT`), `+N MORE` dropped or the reason line's size (with T8).
-- (r16-operator galaxy 10) The calm plate says `ALL CLEAR` or one fact under the name.
-- (r16-operator fx-beacon 1, 2) Beacon width floor in screen px (≥ 6 px at 2x), screen-vertical; age as width.
-- (r16-operator touch 1) In explore the plate's kicker says `MANUAL` and the corner brackets go `--text-2` (= r4-film-ui touch).
-- (r16-operator across) Plain galaxy steals warp's tint toward a trouble destination, without the streaks (= r51-touch across).
-- (r16-operator galaxy 3, 5, 7; warp 1) covered by T23, T22, T24, T21; galaxy 1 by T8; galaxy 6, touch 2 need no fix.
+From `r50-film-ui.md` (past the 3-task limit; #1 is T47, #4+#5 T48, #2 T49):
+- r50 #3 Four voices set the same facts (plate caps, card mixed-case mono, map labels lowercase mono, plate `WHERE`/`HOLDS` light lowercase): card problem lines and stat values and the plate's `WHERE`/`HOLDS` values in condensed caps, map labels condensed caps a step down in `--text-2`, mono only on keys and the kicker (r10 #6; goes with T45/T46's label work).
+- r50 #6 The warn banner wraps to a two-line block heavier than a calm hold's name: the warn line takes the crit line's one-line grammar with the why on the sub line, and the calm plate's bare `+17:21` gets its word (`NEXT RUN 17:21`). Warn size is the owner's call (see `## For the owner`, builder r48).
+- r50 #7 Flights are dead air (frames 3 and 10 are 85 % black): r15 #3 and r10's idea of the next kicker riding in during the last 40 % of a flight, already under `## For the owner`.
+- r50 #8 The block cursor stays on a finished word (`HV1▌`, `CLOUD█`): T34's.
+- r50 #9 The plate's headline and the map's name disagree (`VM-C` vs `bc`): T29's (r10 #5).
+- r50 fx beacon: the pillar is uncapped and runs to the frame's edge in a flight; a small mono tick with the crit's age at its top, under a quarter of the frame's height in a flight. warp (26.9 fps, the most expensive): streaks only in the middle 40 % of a flight to a site, never on the way out (same as r40, r45). activity: rings at `--text-3` alpha, none inside a lock. sweep: a short dash arc fading in over about 1 s, not closed ellipses that read as selected. afterglow: not found in any frame, needs a demo clear at a known second (r10, r40).
 
-Night 4's list B-E: promoted to tasks T37-T46 (the watcher, 2026-10-27), placed before the panel fixes so they are built before the Wall merges.
-- §7 Night 4 (owner note) A frame cap behind `?cap=30` only, off by default: 30 fps in holds, at the overview and in
-  reduced motion, 60 in flights and under a finger (r56-performance galaxy 2, r37-performance 6).
+Closed by this night's plan (moot):
+- night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
+  buttons and chips are 48 px by the night's tappable rule.
+- night 4's T35 An open fan writes only what changed, and T61 The fan keeps off trouble: the owner wants no picker; the fan
+  goes with T11 (nearest centre wins, roomier systems in T6).
 
-Night 3's list, still open (README §7 Night 3; task numbers in the lines below are night 2's or night 3's):
-- §7 Night 3 A4 (was night 2's T34, r49-accessibility galaxy 4) The trouble planet's name readable at 3 m: in
-  `labels.js` warn/crit members of the held system at least the room step + 1, weight 500, on a `--bg-canvas`
-  plate; calm names stay at the room step.
-- §7 Night 3 A4 (was night 2's T33, r49-accessibility galaxy 1) Crit the most visible status for low vision too:
-  on the Wall only (`html.wall` token override read by `paletteFrom`) lift `--crit` toward oklch 70 % (hue kept,
-  ~7:1), brighter crit nebula core, the banner's crit glyph and word on a `--p1` slab; a protanopia still shows crit
-  brighter than warn.
-- §7 Night 3 A5 (night 2's r49-accessibility 7) Accessibility: no letter-by-letter typing for screen readers
-  (`caption.js` plate `aria-live="off"` while typing, one visually hidden live node with the full text), the
-  fleet line `role="status"` announcing only on a change of subject or tone; `+N MORE` readable at 3 m and a
-  48 px tappable chip (`frame.js`, r31-touch 5) whose tap flies to its node.
-- §7 Night 3 A6 `wall.html?variant=islands-tiles` registered (`variants.js` + `main.js`, the diff in
-  `sketch/main.js.diff` and night 2's For the owner), so the galaxy's no-WebGL fallback (`galaxy/fallback.js`)
-  lands on it, not on radial.
-- (was night 2's T32, r43-stranger 6; not named by Night 3, fits E) Screen Wake Lock in `galaxy/main.js`: request
-  at start and again on visible, silent when denied or missing (Q15).
-- §7 Night 3 D unbuilt, staying unbuilt: `fx=storm`, `fx=lights`, `fx=rings`, `fx=arrive`.
-
-From night 3's reviews (`nights/night-3/reviews/`; task numbers in these lines are night 3's, not tonight's):
-
-From r56-performance (not tasks yet):
-- (galaxy 3b) One `InstancedMesh` per sphere geometry and tone for members (about 5 calls, not about 120).
-- (galaxy 4) `?perf=1` overlay shows style-and-layout time per window from `long-animation-frame` (overlay only).
-- (galaxy 5) `camera.js go()` computes flight `extra` and swell scale once; `avoid()` stops spreading per frame.
-- (galaxy 6) = r37-performance 4 (`setOpen` marks dirty, `advance` places once).
-- (galaxy 7) = r37-performance 7 (per-frame garbage in labels, beacons, heldDust).
-- (touch 2) When the frame cap lands, the coast until `atRest` counts as under a finger; a 20-step pinch ends close
-  and low with HV1 at the top edge (framing, for a touch round).
-- (fx-beacon 1) Additive pillars add fill rate on 5 MP; measure on the Surface. (fx-warp 1) If flights dip there, halve `WARP_DUST` at level 1.
-
-From r51-touch (not tasks yet):
-- (r51-touch galaxy 8) In a system opened by a tap, trouble members' names at the room step's 2x (>= 2.2vmin), calm unchanged.
-- (r51-touch galaxy 9) A two-finger tap anywhere is back; document in `docs/wall.md`.
-- (r51-touch across) The tapped flight takes a minimum of warp's tint toward its destination (with T28).
-
-From r46-skeptic (not tasks yet):
-- (galaxy 5) Plate kicker, `STATUS` row and attention row repeat the hero: kicker the site's kind only, `STATUS` only
-  when more than the hero (`+1 warn`), in hue (with T23).
-- (galaxy 7) Calm planets tinted pink inside a crit nebula: the nebula's light must not reach the planets' material.
-- (galaxy 8) A red hairline from HV2 off the frame (hyperlane in the site's tone): hyperlanes stay grey at every zoom
-  (= r26-skeptic 11), or fade a lane whose far end is off screen.
-- (galaxy 10) `+N MORE` changes with the camera: count all open problems, at the reason line's size, or remove it.
-- (galaxy 11) Ambient line `5 SITES · 115 NODES · 8 WORKING`: keep only `8 WORKING` or remove.
-- (galaxy 12) Warn banner wraps after its separator: break at the separator (site · node / reason).
-- (galaxy 13) Leader line repeats the brackets: film one round without it, keep only if a panel cannot find the target.
-- (galaxy 14) The date under the clock unreadable at 3 m (= r26-skeptic 9): remove, or put in the tag.
-- (fx-beacon 2, 3) Beacon flares into a streak in flights near its site: fade it in flights; billboard it
-  screen-vertical (= r31-film-ui galaxy 6).
-- (fx-warp 1, 2, 3) No streaks on a flight to a calm site; the trouble tint at full token value (T28); streak far
-  stars only, not the near dust, or cap opacity at the ribbon's (the overview's S turns to scratches in out-flights).
-
-From r41-operator (not tasks yet):
-- (r41-operator galaxy 7) Crit label `■HV(` eaten by its nebula at the moment it turns crit: A4 T34 line above, trouble
-  labels after the nebula on a `--bg-canvas` halo.
-- (r41-operator galaxy 8) A dark box behind the banner at the overview (the far cover's ground): feather it or drop it
-  at the overview (with the feathered plates line).
-- (r41-operator fx-beacon 1, 2) Beacon is a 1 px hairline at the 3 m scale and leans: width floor in screen px (check the
-  sheath's alpha profile), billboard it screen-vertical (= r31-film-ui galaxy 6).
-- (r41-operator fx-beacon 3) Film a two-crit overview with `fx=beacon` and check the young one shows its floor.
-- (r41-operator touch 4) Tool note: `tools/r38-resume.mjs` `pick` reads `s.node?.status`, which is empty; use the nebula tone.
-- (r41-operator across) Trouble `?pace=wall` is the only film that shows tour order; operators film it. The tour plate
-  should take the sheet's hue rows (= T23).
-
-From r36-dreamer (not tasks yet):
-- (r36-dreamer galaxy 1) A calm plate carries one real-facts line in `--text-2` and the held system is framed in the
-  space the plate leaves free (the facts idea is also under For the owner; the framing = r54-film-ui 8 below).
-- (r36-dreamer galaxy 6) Banner plate feathered: the Later A4 T38 line above.
-- (r36-dreamer fx-beacon 2) Beacon billboarded screen-vertical: the r31-film-ui galaxy 6 line above.
-- (r36-dreamer across) The tour's overview takes the touch explore pose (lower pitch, wide tilted disc) and calm plates
-  the planet sheet's restraint: taste, with r31-film-ui across under For the owner.
-
-From r31-film-ui (not tasks yet):
-- (r31-film-ui galaxy 6, fx-beacon 1) Draw the beacon pillar screen-vertical (billboard on x), not leaning with perspective.
-- (r31-film-ui fx-beacon 3) Beacon white foot twice the core width over the bottom 10 %, so the foot reads as "here".
-- (r31-film-ui touch 4) A tap right after a coasting drag did nothing once: check it in the fake-clock page test (may be SwiftShader lag).
-- (r31-film-ui galaxy 5, 7; across) Calm holds leave two thirds empty, no arrival beat: covered by the r54-film-ui 8 and r15-dreamer 7 lines below.
-
-From r17-operator (not tasks yet):
-- (r17-operator galaxy 6) When stale, the tag moves to the clock's size next to the clock (`STALE 2M`, `--text-1`).
-- (r17-operator galaxy 8) The `1 crit` status line in the crit hue with its shape (the rest is T20).
-- (r17-operator galaxy 5) Crit nebula eats its own label (`■ HV(`): same as A4 T34 above, plus a test that no nebula
-  sprite is drawn over a trouble label's box.
-- (r17-operator fx-beacon 1-3) Beacon: floor at the overview, fade while its system is held, age as width: T9 and the
-  beacon Later lines; also fade the beacon out while its own system is held.
-- (r17-operator across) Add `revisitEvery` to `DEMO_TIMING` so demo films show the revisit rule; operator rounds film `?pace=wall`.
-- (r17-operator touch 1, 2) Explore mode shows a thin 60 s countdown line at the bottom edge (`--text-3`) and the
-  overview's trouble glyphs are the biggest hit targets: inputs for T13/T14 and T10.
-
-Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/`; triage decides per review):
-- (r31-touch 1, 3, 4, 7-11, fx notes; the touch design note, input for T7-T14) Hit-test in screen space over
-  `screenOf` discs of 48 css px, not raycasts: at the overview hits resolve to sites only (label counts as
-  target); in a held system pick the worst status then the nearest, a fan of name chips on a tie, trouble
-  labels join their planet's hit area; during a flight resolve at `pointerdown`, sites only, members once open
-  ≥ 0.85; one `pointerdown` on the stage, brackets within 100 ms, a ring where an empty tap lands; a 56 px
-  corner button while exploring; ignore multi-pointer or contact > 120 px, a tap is `pointerup` within 300 ms
-  and 12 px; a 60 s countdown line then the tour; ease drift to 0 over 400 ms on touch; comets take no hits and
-  a new comet waits while a finger is down; tap feedback is brackets, never brightness; next/step order =
-  `tourOrder` (trouble first).
-- (r31-touch 3) Trouble planets in a held system sit 10-25 css px apart: spread the orbit layout so trouble
-  members are at least ~48 px apart at the tour's zoom.
-- (T20, builder r42) At the warn step the fleet line has no `frame.js` cover, so the overview fit does not keep
-  sites clear of it: feed the fit the warn block too, widest seen.
-- (T3, builder r7; r8-film-ui 9) Dust grains coarse when the camera is close: point size attenuates with
-  distance, capped ~2 px.
-- (T4, builder r11) An open system with many planets reaches past the frame's bottom edge: fit the distance to
-  the open reach and the aspect, aim the held system above the far fleet block.
-- (r21-operator 7) In demo legs the caption typing starts at flight midpoint, not on arrival.
-- (r21-operator 1, 2, 3) T18's test also: with `?at=<site>` in trouble, `screenOf(lockTarget)` lies outside every
-  cover; the overview fit keeps every folded box clear of `hud.covers()`; crit nebula at least 1.5x warn.
-- (r21-operator "across") Night 1's trouble tile read better from afar than a soft glow: check the nebula against it.
-- (r21-operator 4) Trouble waited ~95 s behind calm sites: done before night 3 in `tour.js` (2e22d81); check
-  the galaxy against the new pace.
-- (r8-film-ui 5) Camera rhythm: the overview holds ~2 s at each cycle's start, a status change at the overview
-  gets a ~600 ms 5 % push-in before the leg.
-- (r8-film-ui 6) Overview composition is lopsided (sites left/low, the right third empty): spread `armPoint` or
-  offset `overviewShot`'s look-at to the sites' centroid; keep the bottom right free for the fleet line.
-- (r8-film-ui 7; = r26-skeptic 10) Folded calm systems read as lumpy spheres: one sprite below a screen-size
-  threshold; a folded cluster in trouble is its shape glyph at the site step.
-- (r8-film-ui 8; r15-dreamer 8; r26-skeptic 6) The open system is a wheel: drop the spokes, landing ring as a
-  tick at half the stem weight, orbit ring at text-3, rooms in the label face, services as dots unless in trouble.
-- (r8-film-ui 1) Type hierarchy: caption name, site name, planet name (mono lowercase, only when open); no fourth step.
-- (r15-dreamer 4) The banner becomes wallpaper: rank crits by age, the newest takes the slab, older ones the second line.
-- (r15-dreamer 6) The best flight frame says nothing: hub out of shot plus the arc over the plane (with T1, T2).
-- (r15-dreamer 7) No arrival beat in 3D: member labels fade in in orbit order, timed with the caption's typing.
-- (r15-dreamer 9) The arms do not read as arms: thin the dust between the arms, brighten along each spine (with T3).
-- (r26-skeptic 1) While a held site is in trouble, calm services and lanes are dots with no name.
-- (r26-skeptic 4; r54-film-ui 10) The sun's label: mono caps at the room step, `--text-3`, or removed (the tag names the hub).
-- (r26-skeptic 9) Clock at half size in text-3, date line gone.
-- (r26-skeptic 11) Hyperlanes grey at the dimmest weight; no status tint.
-- (r43-stranger 2-3) Plate cut mid-row and typing cursors in stills: size the bracket to the full plate before typing.
-- (r43-stranger galaxy 5, 6) Empty frames between legs; the overview is small, no counts per site.
-- (r43-stranger 4) A hub answers 404 to `POST /api/map/feeds` while map.md promises 201/409: server work, outside the Wall.
-- (r49-accessibility 2) `?motion=still|full` overriding `prefers-reduced-motion` (`still.js prefersStill`), in docs/wall.md.
-- (r49-accessibility 5; r54-film-ui 7) The status shape on a sphere is a dark cut-out: an outline in its hue at 1.6x
-  the radius; one mark per member, close members share one halo.
-- (r49-accessibility 6) In reduced motion the banner flips red ↔ amber: hold its tone for one caption rotation (12 s).
-- (r49-accessibility 8) In still mode a new crit cuts the caption rotation.
-- (r54-film-ui 4) The caption arrives before the camera: start it at flight progress ~0.9, the leader after the name typed.
-- (r54-film-ui 5) The status glyph `■` off the baseline: cap height (0.7em), on the baseline, gap 0.22em.
-- (r54-film-ui 6) Two type scales: set `--cap-*` from `type.js stepsFor` at boot (extend upward 63, 84, 112).
-- (r54-film-ui 8; r59-dreamer 6) Calm holds waste half the frame: frame a leg with the plate box its caption uses,
-  the system centred, one living thing in the hold.
-- (r54-film-ui 9) The held star is named twice: hide its label while its caption is up.
-- (r54-film-ui 12; r59-dreamer 4) The tether: 2 px, landing on the glyph's top centre with a tick, a slow travelling tick.
-- (r54-film-ui fx) `fx=beacon` dims to the open level while the camera flies close to it (after T2, T9).
-- (r59-dreamer 3) Every planet is the same grey ball: radius from what it holds, two or three greys by kind, no hue.
-- (r59-dreamer 7) A cleared crit reads as present: `--text-2`, red glyph only, one step smaller (with `afterglow`).
-- (r59-dreamer 8) Labels hit the frame's safe margin and the caption's brackets: treat them as covers (with A4 T31).
-- (r37-performance 4) `scene.js setOpen` re-places every site per call: dirty only, place once in `advance()`.
-- (r37-performance 5) Every socket message runs `galaxyLayout(nodes)` before the tree key: compute `treeKey` first.
-- (r37-performance 6) A `frameCap` in `galaxy/main.js` (60 in a flight, 30 otherwise), `budget.js` judging against it.
-- (r37-performance 7) `labels.draw` rebuilds per frame: memoise `labelSize`, reuse arrays, skip unchanged passes.
-- (r37-performance 8) Folded calm members are still meshes at the overview: hide them while `unfold === 0`.
-- (r4-film-ui galaxy 3) The banner flips subject between cuts: hold the slab for a whole tour cycle (with r15-dreamer 4 above).
-- (r4-film-ui galaxy 5) Calm member names at ~20 % contrast overlap the lock brackets: `--text-3`, no word under a bracket (with r54-film-ui 8 above).
-- (r4-film-ui galaxy 6, 8) Labels at the frame edge or on plates, the held name twice: covered by A4 T31 and r54-film-ui 9 above.
-- (r4-film-ui fx-beacon 3) The beacon doubles the red glow: pillar thin with a white core, the nebula one step down while a beacon stands (after T9).
-- fx candidates from night 2 not asked for by the owner: `blast` (r59-dreamer: red threads from a held crit to
-  what depends on it), `heat`, `realm`, `route` (research Q7), `pulse` (Q8).
-- Night 1's shared bugs that may apply (`worstGapMs` a lifetime max in `perf.js` (T39), clock and caption
-  (T57/T58)): triage decides per review.
-
-- (r40-dreamer galaxy 3) Held system framed larger (~45 % width) and lower, centred on the hero member, with a visible yaw
-  drift (~15° over 14 s); builds on T25.
-- (r40-dreamer galaxy 5) The leaving has an order: words out, camera out, banner back only once the camera moves (after T20).
-- (r40-dreamer galaxy 6) The hero member grows 1.5x and lights from inside in its status hue while it is the hero; brackets size to it.
-- (r40-dreamer 1b.2) Highlight marks use the lock's four brackets in `--text-1` and a thin leader from the note to each marked node.
-- (r40-dreamer 1c.1) Beacon screen-vertical, 6-8 px soft core with a cap, tip below the tag (the owner's keep-or-cut (d) first).
-- (r40-dreamer 1f.1) `fx=activity` ring when held at most 2.5 planet radii, keeping the slow breath.
-- (r40-dreamer 1g.1) `fx=sweep`: a silent site's name dims one step until the next sweep reaches it with news.
-- (r40-dreamer 4) Warn and crit nebulae about equally loud at 3 m without the banner (T23); the tag is unreadable at 684 px, so `STALE` would not carry from 3 m (T41 may take it).
-- (r50-skeptic 5) Extends T30: a change to anything but the hero's subject or level (a mild count) updates in place and never moves the camera or restarts the hold; seen at 42 s of `r50-fx-sweep` (plate gone, camera wide).
-- (r50-skeptic 7) Calm plate: no plate, or one fact line, never an empty frame or the star's name alone (owner's question (b)).
-- (r50-skeptic 8) Trouble plates: drop the kicker's count, the `STATUS` row and CPU/MEM; secondary lines name + age, one step smaller, never cut (= r21 6).
-- (r50-skeptic 10) Hyperlanes: remove at the overview, or give them one job (dashed when the site's feed is silent).
-- (r50-skeptic 11, 13) `+N MORE` and fleet facts flicker without meaning; the date under the clock goes (= r21 8, 12).
-- (r50-skeptic 1b.1) The sheet repeats the site and crit: kicker `SITE` only, no `STATUS` row when the hero carries the level.
-- (r50-skeptic 1b.2) The director accepts a `show` move not sent by `show.js`: take them only from `show.js` so a moved camera always has its `SHOWN BY` line.
-- (r50-skeptic 1b.3) Explore from 3 m is only the tag's 10 px `MANUAL` line (= r45 touch 1).
-- (r50-skeptic 1c.2) One show row `SHOWN BY COCKPIT ✕` that clears the whole show; per-command undo dropped.
-- (r50-skeptic 1d.1, 1g.1, 1g.2, 1h.1) Beacon hairlines tell nothing the nebula does not; `fx=activity` is invisible at the overview (one step of brightness on a working site's knot or remove; rings at most 2.5 planet radii, none in a trouble system); `fx=sweep` needs the silent site's name dim with `SILENT 4M` or it goes.
+Night 6 (README §7, planned, not this night): the alert tray, the outliner with an "all green" seal, the situation log, the
+slim top bar of fleet totals, map modes.
 
 ## For the owner
 
-- (r40-dreamer galaxy 4, direction) The overview is a photograph for ten seconds: a slow yaw (~1.5°/s, eased by the legs) like the
-  Map's `ambient`, which also serves as an "alive" signal that stops when the feed is stale. Not a task: changes the plan's overview.
-- (r40-dreamer, `fx` candidates, none asked for) `fx=streak` (a gold edge on a site's nebula after a quiet streak),
-  `fx=dispatch` (a thin line of light from the sun to a site when a command or job is sent there), `fx=handback`
-  (the camera rises to the overview with `TOUR` typed when the director gives the camera back).
-- (r21-skeptic, tooling) On this VM, from about 06:30 on 2026-10-27, Chrome's CPU throttle (`film.mjs --cpu` above 1)
-  stalls every page, `wall.html` included and the T9 commit too (1 frame in about 70 s), so `film.mjs` times out with
-  no frames. r21 filmed at `--cpu 1`. Rounds that film at 4x will hang until the VM or Chrome is looked at.
-From r21-skeptic (taste; the skeptic's answers to the open questions, not decisions): (a) remove the kicker `TARGET n / N`;
-(b) calm plate: one fact line or none; (c) keep the sun's name, tag says only `LIVE`/`STALE`; (d) remove the beacon
-unless its width grows with age. No new `fx` proposals.
-From r11-dreamer (`fx` candidates, none asked for; not tasks):
-- `fx=alert`: when a site's rollup rises, one thin ring in its hue goes out from the site across the plane, once
-  (the banner type-in is T22, not an effect).
-- `fx=lost`: a member that lost contact fades to an outline with a gap that grows with time since contact (capped).
-- `fx=recent`: on a calm hold, planet names type in by recency of last change; untouched for a day keeps no label.
+- (planner, colours) The plan says the site tints come "from tokens through `palette.js`", but the design guardrail
+  (`test/design-guardrails.test.mjs`) allows only the accent and status hues as chromatic tokens in `tokens.css` and no
+  colour literals in other sheets. Tonight the tints and the lifted ground live as one documented table in
+  `galaxy/palette.js` (T3). If you want them as `--site-tint-*` tokens, that is a guardrail change for you to make.
+- (planner, tooling) Playwright is not in `node_modules` on this VM, so the cockpit's `e2e/cockpit` specs (S-C1-01,
+  S-SCR-0x) are checked only by `ci` on the PR; rounds keep the unit tests (`test/cockpit*`, the resume and show tests) green.
+- (planner, run) Rounds 1-6 of this run ended with no work (the loop stopped on `no-progress` at 21:35, tests not green);
+  the run restarted at 22:07 with tests green (4845 pass), and this plan is round 7's.
+- (triage r10, taste/direction, not tasks) From `r10-film-ui.md`: planet labels in the plate's condensed caps face at
+  `--text-2` with a dark halo instead of lowercase mono (#6); a beat of ~0.4 s stillness between arrival and the plate typing
+  (#7, partly T5); shift the overview's galaxy 3-4 % up-right so the banner sits in free space (#8); the plate's bracket sized
+  to its text (#1).
+- (triage r10, `fx` candidates) `warp`: either one real acceleration moment in the middle 40 % of a flight, or drop it
+  (half-measure is the worst of both); `beacon`/`sweep` set the rhythm the others should copy (one motion, one direction,
+  then stillness); `afterglow` scored wow 3: decide whether to keep it.
+- (triage r15, taste/direction, not tasks) A held system carries its site's tint at calm chroma (orbit ellipse, star halo, soft
+  ground disc) so you know where you are before the name (#2); during a flight the destination's name and distance ride at the
+  frame's edge (`→ HOME · 0.4`) so calm flights are not dead air (#3); a trouble standing unchanged for hours drops one size
+  step and its age (`POOL 97% FULL · 6 H`) becomes the loud part (#7).
+- (triage r15, `fx` candidates, from "unforgettable") `scan`: on arrival a system's planet names type in, trouble members first,
+  then by load; `eclipse`: a member with no contact loses its lit side, a dark disc with a thin red rim until contact returns;
+  `dial`: a thin 24-hour ring round each star showing the last day's status as outline arcs in the old hue (afterglow with a clock).
+  None became a task (decision for the owner; `eclipse` and `dial` change what "down" and history look like).
+- (triage r20, `fx` candidates, taste) `warp`: drop it, or keep it only on a flight to a crit with the target's name in the streak's colour (scored wow 3, streaks not visible); the overview banner's second line as `1 DOWN · 3 ATTENTION · 1 WARN` in big condensed caps instead of `+4 MORE`; a beacon-style vertical mark above every crit visible from any camera, gone when it clears. No new `fx` task this review.
+- (triage r25, taste/direction, not tasks) The skeptic asks for removal: `fx=warp` (streaks not visible, wow 2), `fx=activity` (repeats `7 WORKING`, calm 3) and `fx=afterglow` unless a demo hook can show it; `fx=sweep` reduced to one outline mark on a silent site. Decision for the owner, nothing removed. Also: the galaxy's brightest lines should be the ones that carry data (outer ribbon dimmed, spokes removed, #11/#13).
+- (triage r30, idea, not a task) Steal `fx=beacon`'s idea for the pick framing: a short vertical tick over each tappable planet in an open system, so the aim point is visible even when two spheres touch. The tour hold's layout (system right, plate left, nothing under tag or Back) is the model for the pick framing's free box. No new `fx` task this review.
+- (triage r35, decision, not a task) r35 #2: every rAF renders all day with no frame cap; a kiosk on all day is the heat worst case (§2.4). Proposal: `?cap=30`, off by default (or on for the kiosk URL). Unchanged since r31; needs your call. Also unattributed: listeners 27 flat (r60 had 23), layouts ~10 a second; only the Surface's `?perf=1` can say how the iGPU fills 5 MP at 2x.
 
-From r4-film-ui (ideas, taste; not tasks):
-- Tint the lock brackets with the destination's status during a flight, so "going to the red one" shows without warp.
-- The plate's leader could rise vertically from the target like the beacon, instead of stub-and-diagonal.
-- Tour held frames with the banner should be composed like the planet sheet (plate left, system right, no banner): the
-  review's best frame of the night.
-- `fx-beacon` with body: 6-8 px core, soft glow, a cap at the tip, width with age (already in Later as the hairline
-  finding; the look is taste).
-- At 3 m a warn ▲ and crit ■ differ only by hue; shape separates them only up close.
-
-Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morning` "Needs you"):
-- (r56-performance) Leave `galaxy.html?demo=1&fx=beacon&perf=1` up for an hour on the Surface and compare the overlay's
-  memory line at start and end (10 minutes on the VM showed no growth); compare with no fx, and `&fx=warp` in flights.
-  Every fps number from the loop is SwiftShader.
-- (r46-skeptic, taste, decisions) Keep or cut: (a) `TARGET 02 / 05` in the kicker; (b) the calm plate that only types
-  the site's name (one real line such as `12 rooms · 3 working · last change 14m`, or no plate; = r11-dreamer galaxy 4);
-  (c) the sun's name or the tag's hub name, not both; (d) `fx=beacon` as the fourth mark for the same crit.
-- (Q14 research, taste) A stale feed that keeps its crit nebula red and brightest looks like live trouble. The
-  research suggests freezing all liveness motion (`freeze`, small), a slashed grey ring at the sun (`flag`), and
-  marking last-known trouble with a hatch and one step less brightness (`lastknown`). Not tasks; see
-  `nights/night-3/research/Q14-stale-feed-ideas.md`.
-- (r4-film-ui, taste) The folded trouble cluster at the overview could take the beacon's vertical silhouette, so
-  shape carries where colour does not. Not a task.
-- (r11-dreamer galaxy 9, across 2; r31-film-ui across; r36-dreamer across, taste) Hold the best accidental frame (the
-  last ~0.8 s of a trouble arrival) on purpose; calm open systems in the trouble system's composition; the tour's
-  overview at the touch explore pose's lower, wider pitch. Not tasks.
-- (`fx` candidates, none asked for) r11-dreamer: `tide`, `telemetry`, `trail`; r36-dreamer: `heartbeat`,
-  `telemetry`, `ledger` (descriptions in night 3's For the owner). README §7 Night 3 D's `storm`, `lights`, `rings`,
-  `arrive` stay unbuilt. Not tasks.
-- (planner, night 4) B, C, D and E did not fit the first 18 tasks (night 3's twelve open tasks plus the director and
-  the effects come first by the plan's order). The replan takes them next; if the night runs short, E (docs, manifest,
-  `wall.html?variant=galaxy`, the `wall.html` film) is what the merge needs most.
+- (triage r40, idea, not a task) From the stranger: borrow `fx=beacon`'s plain-mark idea for calm sites, one quiet mark that says "fine" at overview size (T42 puts the words; a mark is a look decision). The stranger would hang `galaxy` with `fx=beacon` in their hallway: the beacon is the one effect that adds meaning at overview size. No new `fx` task this review.
+- (builder r48, T23, decision) r10-film-ui #3 asked for the banner at one-line size at **any** hold. Built for crit holds
+  (one line) and calm holds (one step down, still above the name); a warn hold keeps the crit banner at its 3 m size, as
+  night 3 T30 decided, because README §2.1 says trouble stays the loudest thing. If you want the film reviewer's "one hero"
+  over a warn hold too, it is one rule in `wall.css` (`[data-hold="warn"]`) and the T30 css test.
+- (triage r45, idea, not a task) Across variants, from the accessibility reviewer: every fx should copy `beacon`'s honesty (one steady shape meaning trouble without colour or motion); the card should borrow the plate's `■ 1 CRIT  ▲ 2 ATTENTION` status line (T44 does the header); the plate should get the card's real named buttons for `+N MORE`. No new `fx` task this review.
 
 ## Reviews
 
-- r11 dreamer → reviews/r11-dreamer.md. 8 galaxy + 2 beacon + 2 warp + 3 touch findings + 3 fx proposals; 3 became
-  tasks (T22 banner type-in on a rise, T23 crit vs warn nebula, T24 label eaten by cluster). Dropped as covered:
-  galaxy 3 (T17), galaxy 4 (T9, T20), beacon 1-2 (Later), warp 1 (T15). Rest in Later; the 3 fx proposals under For the owner.
-- r4 film-ui → reviews/r4-film-ui.md. 8 galaxy + 2 beacon + 3 warp + touch findings; 3 became tasks (T19 banner size
-  while held, T20 orphaned leader, T21 warp cone). Dropped as covered: box over the galaxy (T10), grey crit glyph (T6),
-  calm warp streaks (T15). Rest in Later (hold rhythm, cursor, label steps, plate grid, beacon fade, BACK box) or
-  For the owner (ideas).
-- r16 operator → reviews/r16-operator.md. 10 galaxy + 2 beacon + 2 warp + 2 touch findings; 3 became tasks (T25 held
-  crit framing, T26 grey hyperlanes, T27 tag as label cover). Dropped as covered: galaxy 1 (T8), 3 (T23), 5 (T22),
-  7 (T24), warp 1 (T21); galaxy 6 and touch 2 (no fix). Rest in Later; no fx proposals.
-
-- r21 skeptic → reviews/r21-skeptic.md. 13 galaxy + 1 beacon + 2 warp + 3 touch findings; 3 became tasks (T28 one
-  ranking for banner and tour, T29 crit member stays red, T30 held crit updates in place). Dropped as covered: galaxy 13
-  (T24), tag overlap in 9 (T27), warp 1-2 (T15, T21), touch 3 (no fix). Rest in Later; questions (a)-(d) answers under For the owner.
-- r26 touch → reviews/r26-touch.md. 11 galaxy + 2 beacon + 1 warp findings; 3 became tasks (T31 pinch loses the
-  galaxy, T32 palm wakes, T33 sheet rows under 48 px). Dropped: galaxy 6, 9, 10 (praise/no change), galaxy 11 (T19),
-  beacon and warp (T2, T15). Rest in Later; no fx proposals.
-- r31 performance → reviews/r31-performance.md. 7 galaxy + 2 touch + 4 fx findings; 3 became tasks (T34 folded planets as
-  dots at the overview, T35 fan writes only changes, T36 wake without forced layouts). Dropped: touch 1 (no fix),
-  fx-beacon/afterglow/comets/twinkle (no fix; T17 removes the last two). Galaxy 2 is the owner's `?cap=30` (Later). Rest in
-  Later; no fx proposals. Note: the review corrects T12's "13k at the overview, 205 with HV1 open": the overview is the heavy frame.
-- r35 film-ui → reviews/r35-film-ui.md. 8 galaxy + 2 beacon + 2 warp + 2 afterglow + 2 activity + 3 touch findings; 3 became
-  tasks (T47 afterglow ring read as live trouble, T48 kicker `n / n`, T49 lone cursor). Dropped as covered: galaxy 1 (T19,
-  T28), 2 (T20), 8 (T37-T39), warp 1 (T21), warp 3 (T15). Rest in Later; no new fx proposals (the lock-tint idea already
-  stands under For the owner).
-- r40 dreamer → reviews/r40-dreamer.md. 8 galaxy + 4 show + 1 beacon + 1 warp + 1 afterglow + 2 activity + 2 sweep findings
-  + 3 fx proposals; 3 became tasks (T50 CLEARED beat, T51 the show takes the caption plate, T52 show cards and banner echo).
-  Dropped as covered: galaxy 2 (T19), 5 in part (T20), 7 (T48), 8 (T27), warp 1 (T21), afterglow label (T24); beacon
-  (owner's keep-or-cut), warp 2 and activity 2 and afterglow praise (no change). Rest in Later; the overview's slow turn
-  and the 3 fx proposals under For the owner.
-- r45 operator → reviews/r45-operator.md. 10 galaxy + 2 touch + 1 beacon + 1 warp + 1 afterglow + 1 activity + 1 sweep
-  findings; 3 became tasks (T54 camera leaves a crit under its plate, T55 banner corner never empty during an echo, T56 scene
-  countdown quiet). Dropped as covered: galaxy 1 (T30), 4 (T19), 5 (T28), 6 (T50), 7 (T48), 8 (T23), 9 (T25, T27), warp 1
-  (T21), afterglow 1 (T47); touch 2 (praise, no fix). Rest in Later; no fx proposals.
-- r50 skeptic → reviews/r50-skeptic.md. 13 galaxy + 4 touch + 3 show + 1 beacon + 1 warp + 1 afterglow + 2 activity + 1 sweep
-  findings; 3 became tasks (T57 one countdown, not on a trouble plate nor twice, T58 `LATE` in words, T59 pinned card
-  outlives its fact). Dropped as covered: galaxy 4 (T29), 6 (T55), 9 (T28), 12 (T27), show 3 (T51, T52), warp 1 (taste),
-  afterglow 1 (T47), touch 4 (no fix). Rest in Later; no fx proposals.
-- r55 touch → reviews/r55-touch.md. 11 galaxy + 6 fx notes (beacon, warp, afterglow, activity, sweep) findings; 3 became
-  tasks (T60 a touch must not wipe pins and highlights, T61 fan keeps off trouble, T62 the silent wake). Dropped as
-  covered: galaxy 2 (T32), 3 (T31), 5 (T33), 10 (T27), 11 (T55); beacon, warp, afterglow, sweep (no touch finding).
-  Rest in Later; no fx proposals.
-- r60 performance → reviews/r60-performance.md. 7 galaxy + 2 touch + 5 fx findings (beacon, warp, afterglow, activity,
-  sweep); 2 became tasks (T63 the show works only when something is due, T64 `siteNews` without stringify). Dropped as
-  covered: galaxy 1 (T34), galaxy 4 fan half (T35), galaxy 5 wake layouts (T36), touch (no fix), beacon and warp (no fix).
-  Rest in Later (recolour layout, garbage, the unexplained gap, the owner's frame cap); no fx proposals.
+- r10-film-ui.md: 12 galaxy findings + 5 fx + 3 m check; 3 became tasks (T23, T24, T25); #9 dropped (covered by T9), #1/#2 covered by T1b, the rest under `## Later` or `## For the owner`.
+- r15-dreamer.md: 9 galaxy findings + 5 fx + 3 unforgettable + 3 m check; 3 became tasks (T26, T27, T28); #1 is night 4's T23 raised, #6 is night 4's T29 raised, #2/#3 and the three proposals to the owner, #5/#7/#8/#9 and fx notes under `## Later`.
+- r20-operator.md: 10 galaxy findings + 5 fx + 3 m check; 3 became tasks (T29 = #1+#2, T30 = #4, T31 = #3); #8 crit size covered by T26, #5/#6/#7 need fenced `tour.js` (patch notes under `## Later`), #9/#10 and fx notes under `## Later`, proposals under `## For the owner`.
+- r25-skeptic.md: 15 galaxy findings + 5 fx + 3 m check; 3 became tasks (T32 = #1+#9, T33 = #12, T34 = #6); #15 covered by T9 (test note under `## Later`), #3 covered by the card (T18) and r10 #10, the rest and the fx notes under `## Later`, removals under `## For the owner`.
+- r30-touch.md: 11 galaxy findings + 5 fx (one each) + 3 m check; 3 became tasks (T35 = #2, T36 = #3 second half, T37 = #5); #1 covered by T12 and #3 first half by T13 (notes added under `## Later`), #11 dropped (no fault), the rest and the fx notes under `## Later`, the beacon-tick idea under `## For the owner`.
+- r35-performance.md: 8 galaxy findings + fx notes + 3 m check (yes); 3 became tasks (T38 = #1, T39 = #3, T40 = #6); #2 (frame cap) under `## For the owner`, #4/#5/#7/#8 and the fx notes under `## Later`.
+- r40-stranger.md: 12 galaxy findings + 5 fx + 3 m check (yes); 3 became tasks (T41 = #1, T42 = #4, T43 = #6); #3 (empty card) folded into T18, #5 (clipped line) folded into T24, #7 dropped (by design since T12, docs are T21's), #2/#8/#9/#10/#11/#12 and the fx notes under `## Later`, the calm-mark idea under `## For the owner`.
+- r45-accessibility.md: 9 galaxy findings + 5 fx + 3 m check (yes for normal sight, borderline low vision); 3 became tasks (T44 = #2, T45 = #3, T46 = #4); #1 (focus, Esc) is T20's, added there with the measurement; #5-#9 and the fx notes under `## Later`, the cross-variant steals under `## For the owner`.
+- r50-film-ui.md: 9 galaxy findings + 5 fx + 3 m check (yes); 3 became tasks (T47 = #1, T48 = #4+#5, T49 = #2); #8 covered by T34 and #9 by T29 (dropped, duplicate), #3/#6/#7 and the fx notes under `## Later` (#7 is already an owner idea, #6 waits on the owner's warn-size call).
 
 ## Scores
 
-| round | persona | overview | legibility | status | touch | wow | calm | performance |
-|---|---|---|---|---|---|---|---|---|
-| 4 | film-ui (galaxy) | 7 | 6 | 7 | 6 | 6 | 5 | 6 |
-| 4 | film-ui (fx-beacon) | - | - | - | - | 5 | 7 | - |
-| 4 | film-ui (fx-warp) | - | - | - | - | 7 | 3 | - |
-| 11 | dreamer (galaxy) | 7 | 6 | 6 | 6 | 6 | 5 | 6 |
-| 11 | dreamer (fx-beacon) | - | - | - | - | 4 | 7 | - |
-| 11 | dreamer (fx-warp) | - | - | - | - | 6 | 4 | - |
-| 16 | operator (galaxy) | 6 | 7 | 5 | 6 | 6 | 5 | 6 |
-| 16 | operator (fx-beacon) | - | - | - | - | 4 | 7 | - |
-| 16 | operator (fx-warp) | - | - | - | - | 6 | 3 | - |
-| 21 | skeptic (galaxy) | 7 | 7 | 5 | 6 | 6 | 4 | 6 |
-| 21 | skeptic (fx-beacon) | - | - | - | - | 4 | 6 | - |
-| 21 | skeptic (fx-warp) | - | - | - | - | 6 | 3 | - |
-| 26 | touch (galaxy) | 7 | 7 | 7 | 6 | 7 | 5 | 6 |
-| 26 | touch (fx-beacon) | - | - | - | - | 5 | 6 | - |
-| 26 | touch (fx-warp) | - | - | - | - | 6 | 4 | - |
-| 31 | performance (galaxy) | 7 | 7 | 7 | 7 | 6 | 6 | 6 |
-| 31 | performance (fx-beacon) | - | - | - | - | 5 | 6 | - |
-| 31 | performance (fx-warp) | - | - | - | - | 6 | 5 | - |
-| 31 | performance (fx-afterglow) | - | - | - | - | 5 | 7 | - |
-| 31 | performance (fx-comets) | - | - | - | - | 3 | 6 | - |
-| 31 | performance (fx-twinkle) | - | - | - | - | 3 | 6 | - |
-| 35 | film-ui (galaxy) | 7 | 7 | 7 | 6 | 7 | 6 | 6 |
-| 35 | film-ui (fx-beacon) | - | - | - | - | 4 | 6 | - |
-| 35 | film-ui (fx-warp) | - | - | - | - | 6 | 3 | - |
-| 35 | film-ui (fx-afterglow) | - | - | - | - | 5 | 7 | - |
-| 35 | film-ui (fx-activity) | - | - | - | - | 4 | 5 | - |
-| 40 | dreamer (galaxy) | 7 | 7 | 6 | 6 | 6 | 5 | 6 |
-| 40 | dreamer (fx-beacon) | - | - | - | - | 3 | 7 | - |
-| 40 | dreamer (fx-warp) | - | - | - | - | 7 | 3 | - |
-| 40 | dreamer (fx-afterglow) | - | - | - | - | 7 | 9 | - |
-| 40 | dreamer (fx-activity) | - | - | - | - | 5 | 7 | - |
-| 40 | dreamer (fx-sweep) | - | - | - | - | 6 | 8 | - |
-| 45 | operator (galaxy) | 7 | 7 | 6 | 7 | 6 | 6 | 6 |
-| 45 | operator (fx-beacon) | - | - | - | - | 4 | 5 | - |
-| 45 | operator (fx-warp) | - | - | - | - | 6 | 3 | - |
-| 45 | operator (fx-afterglow) | - | - | - | - | 6 | 8 | - |
-| 45 | operator (fx-activity) | - | - | - | - | 4 | 6 | - |
-| 45 | operator (fx-sweep) | - | - | - | - | 5 | 8 | - |
-| 50 | skeptic (galaxy) | 7 | 7 | 5 | 7 | 6 | 5 | 6 |
-| 50 | skeptic (fx-beacon) | - | - | - | - | 3 | 5 | - |
-| 50 | skeptic (fx-warp) | - | - | - | - | 6 | 4 | - |
-| 50 | skeptic (fx-afterglow) | - | - | - | - | 5 | 8 | - |
-| 50 | skeptic (fx-activity) | - | - | - | - | 3 | 6 | - |
-| 50 | skeptic (fx-sweep) | - | - | - | - | 4 | 8 | - |
-| 55 | touch (galaxy) | 7 | 7 | 6 | 6 | 7 | 5 | 6 |
-| 55 | touch (fx-beacon) | - | - | - | - | 4 | 6 | - |
-| 55 | touch (fx-warp) | - | - | - | - | 6 | 4 | - |
-| 55 | touch (fx-afterglow) | - | - | - | - | 5 | 8 | - |
-| 55 | touch (fx-activity) | - | - | - | - | 4 | 6 | - |
-| 55 | touch (fx-sweep) | - | - | - | - | 5 | 8 | - |
-| 60 | performance (galaxy) | 7 | 7 | 7 | 7 | 6 | 6 | 6 |
-| 60 | performance (fx-beacon) | - | - | - | - | 4 | 6 | - |
-| 60 | performance (fx-warp) | - | - | - | - | 6 | 5 | - |
-| 60 | performance (fx-afterglow) | - | - | - | - | 5 | 7 | - |
-| 60 | performance (fx-activity) | - | - | - | - | 4 | 6 | - |
-| 60 | performance (fx-sweep) | - | - | - | - | 5 | 8 | - |
+| round | persona | variant | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|---|---|
+| 10 | film-ui | galaxy | 7 | 6 | 8 | 6 | 7 | 6 | 7 |
+| 10 | film-ui | fx-beacon | | | | | 5 | 6 | |
+| 10 | film-ui | fx-warp | | | | | 4 | 6 | |
+| 10 | film-ui | fx-afterglow | | | | | 3 | 8 | |
+| 10 | film-ui | fx-activity | | | | | 4 | 5 | |
+| 10 | film-ui | fx-sweep | | | | | 6 | 7 | |
+| 15 | dreamer | galaxy | 7 | 6 | 6 | 5 | 6 | 5 | 7 |
+| 15 | dreamer | fx-beacon | | | | | 5 | 6 | |
+| 15 | dreamer | fx-warp | | | | | 6 | 6 | |
+| 15 | dreamer | fx-afterglow | | | | | 2 | 7 | |
+| 15 | dreamer | fx-activity | | | | | 4 | 3 | |
+| 15 | dreamer | fx-sweep | | | | | 5 | 6 | |
+| 20 | operator | galaxy | 7 | 6 | 5 | 5 | 6 | 6 | 7 |
+| 20 | operator | fx-beacon | | | | | 5 | 6 | |
+| 20 | operator | fx-warp | | | | | 3 | 7 | |
+| 20 | operator | fx-afterglow | | | | | 2 | 7 | |
+| 20 | operator | fx-activity | | | | | 3 | 3 | |
+| 20 | operator | fx-sweep | | | | | 4 | 5 | |
+| 25 | skeptic | galaxy | 7 | 6 | 6 | 5 | 6 | 5 | 7 |
+| 25 | skeptic | fx-beacon | | | | | 5 | 6 | |
+| 25 | skeptic | fx-warp | | | | | 2 | 7 | |
+| 25 | skeptic | fx-afterglow | | | | | 2 | 7 | |
+| 25 | skeptic | fx-activity | | | | | 3 | 3 | |
+| 25 | skeptic | fx-sweep | | | | | 4 | 5 | |
+| 30 | touch | galaxy | 7 | 6 | 6 | 5 | 6 | 6 | 7 |
+| 30 | touch | fx-beacon | | | | | 5 | 6 | |
+| 30 | touch | fx-warp | | | | | 3 | 7 | |
+| 30 | touch | fx-afterglow | | | | | 2 | 7 | |
+| 30 | touch | fx-activity | | | | | 3 | 4 | |
+| 30 | touch | fx-sweep | | | | | 4 | 6 | |
+| 35 | performance | galaxy | 7 | 6 | 7 | 6 | 7 | 6 | 7 |
+| 35 | performance | fx-beacon | | | | | 5 | 6 | |
+| 35 | performance | fx-warp | | | | | 3 | 6 | |
+| 35 | performance | fx-afterglow | | | | | 2 | 7 | |
+| 35 | performance | fx-activity | | | | | 3 | 4 | |
+| 35 | performance | fx-sweep | | | | | 4 | 6 | |
+| 40 | stranger | galaxy | 8 | 7 | 8 | 5 | 8 | 7 | 7 |
+| 40 | stranger | fx-beacon | | | | | 8 | 7 | |
+| 40 | stranger | fx-warp | | | | | 6 | 5 | |
+| 40 | stranger | fx-afterglow | | | | | 3 | 8 | |
+| 40 | stranger | fx-activity | | | | | 5 | 5 | |
+| 40 | stranger | fx-sweep | | | | | 4 | 8 | |
+| 45 | accessibility | galaxy | 7 | 6 | 8 | 6 | 7 | 7 | 7 |
+| 45 | accessibility | fx-beacon | | | | | 7 | 7 | |
+| 45 | accessibility | fx-warp | | | | | 6 | 4 | |
+| 45 | accessibility | fx-afterglow | | | | | 3 | 8 | |
+| 45 | accessibility | fx-activity | | | | | 5 | 5 | |
+| 45 | accessibility | fx-sweep | | | | | 4 | 8 | |
+| 50 | film-ui | galaxy | 8 | 6 | 7 | 6 | 7 | 6 | 8 |
+| 50 | film-ui | fx-beacon | | | | | 6 | 6 | |
+| 50 | film-ui | fx-warp | | | | | 5 | 5 | |
+| 50 | film-ui | fx-afterglow | | | | | 2 | 8 | |
+| 50 | film-ui | fx-activity | | | | | 4 | 4 | |
+| 50 | film-ui | fx-sweep | | | | | 6 | 7 | |
 
 ## Morning
 
-Night 4, final report (round 62, 2026-10-27 14:10 Europe/Zurich). Shots live in `$RUN_DIR` = the run's own directory on the VM.
+Night 5, final report (round 52, 2026-10-29 04:03 Europe/Zurich). Shots are in `$RUN_DIR` = the run's own directory on the VM.
 
-- **Done:** 32 of 64 tasks. All of the plan's 0a (night 3's twelve leftovers and `MANUAL · TOUR IN 0:40`), A (the
-  director), 0b (`lanes` removed, `afterglow`, `activity` in place of comets and twinkle, `sweep`, calm flights quiet),
-  B (show commands, transport, `?show=demo`), C (`countdown`), D (half a screen, `?role`) and E (`docs/wall.md`,
-  manifest, `wall.html?variant=galaxy`, the `wall.html` film), then three panel fixes (T19-T21). Tests: 4260 pass, 0 fail.
-- **Not done:** 32 panel tasks are open (T22-T36, T47-T52, T54-T64, none blocked). Most are about status and calm:
-  moments for a new or cleared trouble, crit vs warn, the banner's ranking, the countdown's place, the show's manners
-  under a finger, and the overview's cost.
-- **Why it stopped:** the loop used its round budget (stop reason `rounds`) at 14:10, about 22 h before the 12:00
-  deadline. The script left no owner-notes file (`$RUN_DIR/owner-notes` does not exist).
+- **Done:** 25 of 51 tasks. All of the plan's A (your sketch picks as defaults, T1-T5), B (system room, nested moons,
+  the pick shot, T6-T10), C (touch and mouse, T11-T16) and D (the node card, T17-T20), plus two panel fixes (T23 one
+  hero per held frame, T24 the plate's text never cut). Tests: 4972 pass, 0 fail.
+- **Not done:** E (T21 `docs/wall.md`, T22 the cockpit's handover list) and 24 panel tasks (T25-T49, none blocked).
+  Most are about the banner's size and subject, the pick shot's framing, and the card's and labels' legibility.
+- **Why it stopped:** the 7-day usage window reached 85 % (stop reason `7d-window`) at 04:03, about 32 h before the
+  12:00 deadline, after 51 rounds (notional $87). The script left no owner-notes file (`$RUN_DIR/owner-notes` does not exist).
 
 ### The directions side by side
 
-The galaxy is still the only direction. The panel scored the galaxy (touch as its `touch` column) and the five effects
-behind `?fx=`, all off by default (D9). The show, countdowns, half screen and `?role` were reviewed inside the galaxy's
-findings and not scored on their own.
+The galaxy is still the only direction. Nine reviews (r10-r50) scored the galaxy, with touch as its `touch` column, and
+the five effects behind `?fx=`, all off by default. The card, moons and turning were judged inside the galaxy's findings.
 
-**galaxy** (`galaxy.html`, also `wall.html?variant=galaxy` since T45): the spiral of sites round the hub, a tour that
-goes trouble first, a lock and a typed plate on each hold, one far line naming the worst thing. New tonight: one camera
-director (touch > show > tour, every hand-over eased), feathered grounds instead of dark boxes (T10), and one top
-step of type while a site is held (T19). *Loved:* the overview is the steadiest score of the night (7 in eleven of
-twelve reviews). The two-crit banner `■ 2 CRIT · HV1 · HV2` is "the one line that does not change subject with the
-camera" (r50). At 3 m the crit banner is the largest thing in the frame (r60). The half-screen plate (r47) is
-narrower and reads better than the full one. *Hated:* status is still the weakest axis. The camera can leave a
-crit while its plate still names it (T54). The banner corner goes empty during a crit hold (T55), and the banner names a
-different place on each glance (T28). A cleared crit just turns grey with no moment (T22, T50). Crit and warn nebulae
-are the same size at 3 m (T23). The kicker counts itself, `TARGET 02 / 02` (T48). Calm stays at 5-6 because
-of retypes, the `+N MORE` flicker and a seconds counter on a trouble plate (T57).
+**galaxy** (`galaxy.html`, also `wall.html?variant=galaxy`): your sketch's look is now the default. That means the
+tighter rosette, size by what a body carries, quiet site tints on a blue-black ground, depth haze and the slower
+2800 ms open. New tonight: moons (services, lanes, sessions) that open onto a ring when you tap their planet, a pick
+shot 45 % closer with the planet left, and a node card in place of the sheet. *Loved:* overview is the best score of
+the five nights (7.2; 8 from the stranger and from r50). At 3 m, `■ 2 CRIT · HV1 · HV2` is still the first thing you read
+(r50). The stranger would hang it in their hallway. Performance rose to 7.1 because the moons cost draw calls only
+while a ring is open. *Hated:* legibility (6.1) is now the weakest axis. Map names and card labels are 11 px, about 2 mm
+on the Surface (T46). Yellow labels sit on yellow halos at 2:1 (T45). The banner's size follows the length of its
+text, not its rank (T47). The banner repeats the plate word for word, and its `+N MORE` flips with the camera (T32).
+At a held card the banner or the clock outshouts the thing you touched (T49).
 
-**touch** (the galaxy's `touch` column): wake, drag, pinch, tap, sheet, back, and the tour comes back about a minute
-later. Explore now reads `MANUAL · TOUR IN 0:40` (T5), BACK keeps your pose (T4), the sheet no longer lets taps
-through (T1), and `?role=explore` makes a person's screen that never tours by itself (T42). *Loved:* "every step works
-with no cut" (r50, 7), and no gesture costs more than the tour (r60). *Hated:* a first touch wipes everything the agent
-showed, including the card you reached for (r55, T60). A palm still wakes the page (T32). A pinch can lose the galaxy
-(T31). Sheet rows are under 48 px (T33). The wake shows nothing for over a second (T62). `MANUAL` is too small to read
-at 3 m (Later).
+**touch** (the galaxy's `touch` column, 5.4, down from night 4's 6.3): a finger gets a 48 px target and a mouse
+28 px, with the nearest centre winning and no fan. A drag inside a system turns it round its own star. Back goes one
+step at a time (right-click, double tap or the control), and the overview turn has a short follow and a coast.
+*Loved:* every step of the walk works with no cut (`r38-t16-walk`, `r50-walk`), and moons are tappable without a
+picker. *Hated:* the pick shot pushes the system to the right edge under the card's long leader, and the star can sit
+under Back (T35, T48). A third Back tap starts the tour (T36). A 450 ms press is lost, and a press shows nothing until
+lift (T37). `MANUAL · TOUR IN 0:58` cannot be read from the hallway (T43).
 
-**show** (`?show=demo`, B, new): `flyTo`, `highlight`, `pin`, `clear` through `BroadcastChannel('laneboard.show')` or
-origin-checked `postMessage`. On screen they read `SHOWN BY COCKPIT` with an undo row per command. The demo flies to
-STORAGE, pins `POOL 97% FULL`, rises to the overview and highlights what the pool feeds. *Loved:* it works
-end to end, with 0 console errors, and it is the video's second half. *Hated:* one conversation makes four corner rows
-in tag-size mono that cannot be read at 3 m. r50 wants one `SHOWN BY COCKPIT ✕` row. A pinned card outlives its fact
-(T59), and the note sits on the site's name (T52). What the agent says is not on screen at all (r40: give the show the
-plate, T51).
+**fx-beacon:** a red pillar over each crit. *Loved:* the stranger's pick (wow 8). Every reviewer from r30 on says it is
+the one effect that adds meaning at overview size, and the others should copy its one steady mark. *Hated:* the pillar
+is uncapped and runs to the frame's edge "like a laser sight" in a flight (r50). It can steal a finger's tap in an open system (r30).
 
-**fx-beacon:** a red pillar over each crit cluster. *Loved:* little by now; it is the one mark that finds a crit by
-shape. *Hated:* "two hairlines, leaning different ways, telling nothing the nebula does not" (r50, wow 3). It is the
-fourth mark for one crit and vanishes at 3 m. It was the lowest-wow effect in every review after r40.
+**fx-warp:** streaks toward a trouble target in flight. *Loved:* the streaks finally show (r50) and wow rose late (6 at
+r40/r45). *Hated:* wow averaged 4.2. It is the most expensive effect (26.9 fps, worst gap 306 ms), and the skeptic and
+operator ask to drop it, or keep it only on a flight to a crit.
 
-**fx-warp:** in flights to trouble, a 30° cone of streaks toward the target with hued tips (T21). Calm flights are
-quiet (T15). *Loved:* the highest wow of the effects (6-7 all night), and the feedback a tapped flight needs.
-After T21 it costs nothing at rest and only fill rate in flight (r60). *Hated:* the lowest calm (3-5). It repeats the
-banner's subject, so the skeptic calls it "taste, not information", earning its place only in explore.
+**fx-afterglow:** a fading ring where a crit cleared. *Loved:* calm (7.4). *Hated:* wow 2.3, the lowest of the night,
+because the films rarely catch a clear. Its closed ring reads as "selected" to a finger (r30). The skeptic asks to drop it unless a demo hook can show it.
 
-**fx-afterglow** (new): a cleared crit leaves a fading ring where it was. *Loved:* the best-liked effect, and
-"the only effect that adds information nothing else shows" (r50). It peaked at wow 7, calm 9 (r40). *Hated:* the ring
-can read as live trouble (T47: dashed, starting amber). Several films caught no clear at all (film with
-`at=overview` or `--every 6000`).
+**fx-activity:** rings and brightness on working planets. *Loved:* little. *Hated:* the lowest calm (4.0). It repeats
+`7 WORKING`, and its rings read as selection too (r25, r30).
 
-**fx-activity** (new, replaces comets and twinkle): rings and brightness on working planets, no hue (Q18). *Loved:*
-it is quiet. *Hated:* at the overview it cannot be told from the plain galaxy (r50, wow 3), which fails its own brief.
-At the site step its rings look like locks next to a red lock (Later: at most 2.5 planet radii, none in a trouble system).
+**fx-sweep:** one wedge of light per tour cycle, and a silent site does not answer. *Loved:* the rhythm the others should
+copy, one motion then stillness (r10, r50). Calm reached 8 from the stranger and r45. *Hated:* its one job, "this site
+went silent", still does not show at 3 m.
 
-**fx-sweep** (new): once per tour cycle a wedge of light from the sun pings each site. A site that went silent does
-not answer. *Loved:* the calmest effect (calm 8 in every review). *Hated:* its one job, "this site went silent", does
-not show at 3 m (r50). The fix is in Later (the silent name drops to `--text-3` with `SILENT 4M`). `siteNews` stringifies
-every node each model frame (T64).
-
-**wall.html** (radial, still the default page): filmed once tonight (T46). Three breaks were fixed: piled names (the
-shared Map's new `labelClear`, off by default), names over the tag and clock, and the far line repeating the plate's hero.
-
-Averages over every review this night (`## Scores`; galaxy, beacon and warp 12 reviews, afterglow 7, activity 6,
-sweep 5; comets and twinkle once, at r31, before T17 removed them):
+Averages over the nine reviews (`## Scores`):
 
 | variant | overview | legibility | status | touch | wow | calm | performance |
 |---|---|---|---|---|---|---|---|
-| galaxy | 6.9 | 6.8 | 6.2 | 6.3 | 6.2 | 5.2 | 6.0 |
-| fx-beacon | - | - | - | - | 4.1 | 6.2 | - |
-| fx-warp | - | - | - | - | 6.2 | 3.7 | - |
-| fx-afterglow | - | - | - | - | 5.4 | 7.7 | - |
-| fx-activity | - | - | - | - | 4.0 | 6.0 | - |
-| fx-sweep | - | - | - | - | 5.0 | 8.0 | - |
-| fx-comets (removed) | - | - | - | - | 3.0 | 6.0 | - |
-| fx-twinkle (removed) | - | - | - | - | 3.0 | 6.0 | - |
+| galaxy | 7.2 | 6.1 | 6.8 | 5.4 | 6.7 | 6.0 | 7.1 |
+| fx-beacon | - | - | - | - | 5.7 | 6.2 | - |
+| fx-warp | - | - | - | - | 4.2 | 5.9 | - |
+| fx-afterglow | - | - | - | - | 2.3 | 7.4 | - |
+| fx-activity | - | - | - | - | 3.8 | 4.0 | - |
+| fx-sweep | - | - | - | - | 4.6 | 6.4 | - |
 
-Against night 3's averages, the galaxy rose on every axis (overview 6.4 → 6.9, status 5.7 → 6.2, touch 4.3 → 6.3).
-Calm stayed at 5.2. Performance is still a VM guess. The page's own JavaScript takes about 1-2.4 ms a frame
-unthrottled, and the 10-16 fps is SwiftShader's fill rate. In a 10-minute probe with every effect and the show
-on, the heap after GC stayed between 6.8 and 7.6 MB (r60).
+Compared with night 4: overview 6.9 → 7.2, status 6.2 → 6.8, wow 6.2 → 6.7, calm 5.2 → 6.0, performance 6.0 → 7.1.
+Two axes fell: legibility 6.8 → 6.1 and touch 6.3 → 5.4. Touch fell because reviewers now judge picking moons, the pick
+shot and the card. Night 4 only had a sheet.
 
-Newest filmstrips. To see one live, run `node test/tools/demo-fleet.mjs --port 7795 --size large` and open the URL on
-`http://127.0.0.1:7795/`. `wall.html?variant=galaxy&…` now forwards every switch to `galaxy.html`. Add `&quality=0`
-on a weak GPU and `&pace=wall` for the real tour speed:
-- galaxy (tour): `$RUN_DIR/shots/r60-galaxy/sheet.png`, live `wall.html?variant=galaxy&demo=1`.
-- fx-beacon, fx-warp, fx-afterglow, fx-activity, fx-sweep: `$RUN_DIR/shots/r60-fx-<name>/sheet.png`, live
-  `wall.html?variant=galaxy&demo=1&fx=<name>`. For afterglow, add `&at=overview` to catch a clear.
-- touch: stills `$RUN_DIR/shots/r55-touch/` (`00-tour.png` … `25-fan.png`, with the show runs 20-23) and the sheet
-  `$RUN_DIR/shots/r45-touch-sheet.png`; live `wall.html?variant=galaxy&demo=1` and touch it.
-- show: `$RUN_DIR/shots/r42-show-demo/sheet.png`, live `wall.html?variant=galaxy&demo=1&show=demo` (within the first
-  2.5 minutes of a fresh demo fleet, while STORAGE is crit).
-- half a screen: `$RUN_DIR/shots/r47-galaxy/sheet.png` (684 × 912) and stills `r47-half-e/`. Explore: `r48-galaxy/sheet.png`,
-  live `…&role=explore`.
-- wall.html (radial): `$RUN_DIR/shots/r54-radial/sheet.png`, live `wall.html?demo=1`.
-- 3 m check: `$RUN_DIR/shots/r60-3m.png` (the overview shrunk to 342 px).
+Newest filmstrips (live: start the demo fleet with `--size large`, then open the URL):
+- galaxy, the tour: `$RUN_DIR/shots/r49-galaxy/sheet.png`, live `galaxy.html?demo=1` (or `wall.html?variant=galaxy&demo=1`).
+- galaxy, the touch walk (tap, ring, card, turn, Back, overview): `$RUN_DIR/shots/r50-walk/sheet.png`, the 12 frames
+  next to it, `03-hv1-open.png` and `04-ba-card.png` first.
+- fx: `$RUN_DIR/shots/r40-fx-<name>/sheet.png` for `beacon`, `warp`, `afterglow`, `activity`, `sweep`, live
+  `galaxy.html?demo=1&fx=<name>`. The effect code is unchanged since T5, so r45 and r50 reviewed these same films.
+- 3 m: `$RUN_DIR/shots/r50-3m.png`.
 
 ### Tasks
 
-Done (32): T1 54e7f96, T2 20ec4f8, T3 a5e46b6, T4 fa7611b, T5 7e9255e, T6 9ec5cff, T7 eaae256, T8 3dbe1c7,
-T9 2b7cca8, T10 c80e8a9, T11 2ca8017, T12 9eac184, T13 d28aeac, T14 915dc43, T15 ec72e04, T16 c691da6, T17 202011b,
-T18 7cb92f3, T37 f61e23d + 0eb72cb, T38 5dc9618, T39 ba6e478, T40 b91bb9f, T53 09ebee7, T41 e9fd647, T42 a34674e,
-T43 36735ee, T44 8c602ff, T45 655e1d9, T46 a7751f7, T19 f36f10f, T20 dac5cad, T21 169f692.
-Open (32, from the panel, none blocked):
-- Status and moments: T22 new trouble is a moment, T23 crit vs warn beyond hue, T24 label eaten by a cluster,
-  T25 held crit not at the edge, T28 one ranking for banner and tour, T29 a crit member stays red, T30 held crit
-  updates in place, T50 CLEARED beat, T54 the camera does not leave a crit under its plate, T55 banner corner never empty.
-- Look: T26 grey hyperlanes, T27 the tag covers labels, T47 the afterglow ring is not live trouble, T48 the kicker's
-  `n / n`, T49 lone cursor.
-- Countdown: T56 quiet in the scene, T57 one countdown and never on a trouble plate, T58 `LATE` in words.
-- Show: T51 the agent takes the plate, T52 cards and banner keep out of the way, T59 a pinned card outlives its fact,
-  T60 a touch must not wipe the show.
-- Touch: T31 pinch, T32 palm, T33 sheet rows 48 px, T61 the fan keeps off trouble, T62 the silent wake.
-- Performance: T34 the overview's triangles, T35 the fan writes only changes, T36 a wake without forced layout,
-  T63 the show works only when something is due, T64 `siteNews` without stringify.
+Done: T1 (6d278d7), T1b (deecadd), T2 (ac22fb0), T3 (117cfbd), T4 (6255bf1), T5 (36bfcb4), T6 (1cca98f),
+T6b (5cf9de0), T7 (df9eae4, 2da817b), T8 (a756402, 6bdc125), T9 (c39f2dc), T10 (942eac2), T11 (81dac29),
+T12 (d33e1c8), T13 (23a511b), T14 (9a49689), T15 (d4bcca4), T16 (7126a88), T17 (8537e71, e424189), T18 (5ad5a89),
+T19 (5fc2b76), T19b (f3b1b2c), T20 (42ce20f), T23 (17fd358), T24 (a795344).
 
-Tests now: 4260 pass, 0 fail (after round 61).
+Open, none blocked: T21 and T22 (the plan's E) and the panel's T25-T49. By theme:
+- banner and plate: T25, T30, T31, T32, T34, T42, T47;
+- status on the map: T26, T27, T29, T33, T41;
+- pick shot and touch: T35, T36, T37, T43, T48;
+- card and type: T44, T45, T46, T49;
+- cost: T28, T38, T39, T40.
+
+Tests now: 4972 pass, 0 fail (`npm test` after round 51). `e2e/cockpit` (Playwright) was never run on this VM and is
+checked only by `ci` on the PR.
 
 **Needs you, worst first.**
 
-1. **Your pick for night 4: keep, drop or more for each `fx`, and does touch feel right?** The panel's case:
-   - *beacon: drop, or finish once* (wow 4.1, falling). For: the only mark that finds a crit by shape. Against: a
-     hairline that vanishes at 3 m and the fourth mark for one crit. The skeptic says remove it unless its width grows
-     with age (Later has the screen-vertical width floor).
-   - *warp: keep* (wow 6.2, the best; calm 3.7, the worst). For: the feedback a tapped flight needs, cheap since T21.
-     Against: it repeats the banner. It is taste, not information, outside explore.
-   - *afterglow: keep, more* (wow 5.4, calm 7.7). For: the only effect that shows something nothing else does. Against:
-     the ring can read as live trouble until T47 lands.
-   - *activity: more or drop* (wow 4.0). For: hue-free, quiet, cheap. Against: invisible at the overview, which was its
-     brief, and lock-like rings at the site step. The fix would be one brightness step on a working site's knot.
-   - *sweep: keep, more* (calm 8.0). For: the calmest effect, and liveness without fake motion. Against: a silent site
-     does not show yet (Later: `SILENT 4M` on the name and the tag).
-   - *touch: does it feel right?* For: every gesture works on the VM and costs nothing extra. Explore is marked and
-     `?role=explore` exists. Against: nobody has touched it on the Surface yet, a palm still wakes it, a pinch can lose
-     the galaxy, and a touch wipes the agent's show. Please try `wall.html?variant=galaxy&demo=1&show=demo` on the
-     tablet: wake, drag, pinch, tap HV2, BACK, then wait a minute; once more while a show card is up.
-   My pick: keep warp, afterglow and sweep. Give activity one more round (the overview brightness step), then drop it
-   if it still fails 3 m. Drop beacon. Then T60, T31-T33 before any more effects.
-2. **A show decision builders took, which the panel disputes** (T37, T42, r55-touch 1). Today any first touch drops
-   everything the agent showed, and every show command is refused `busy` while a finger, or the explore role, drives.
-   r55 asks that a touch keep pins and highlights and drop only the camera (T60, open). This sets how a person and the
-   agent share a screen in the cockpit, so it is yours to say.
-3. **Before merging, look at** (381 commits on `run/wall-n4` since `main`, about 95 tonight). What reaches outside the
-   galaxy:
-   - `server/map.mjs` `feedExtras` accepts a new feed field, `countdown: { at, label }`. Label is at most 32
-     characters, and an ISO `at` is kept as epoch ms. The app's Map ignores it. `docs/map.md` says so.
-   - The shared Map: `public/js/views/map/render.js` and `index.js` get `labelClear` (off by default; only radial turns
-     it on). The fenced Map tests pass unchanged.
-   - `public/css/tokens.css`: `--tex-plate` and `--tex-plate-corner` (T10, 76 lines). The comment says only `wall.css`
-     uses them. Night 3's `--tex-vignette` is still there too.
-   - `wall.html` behaviour: `?variant=galaxy` leaves for `galaxy.html` with `location.replace`. An unknown variant shows a
-     grey note under the tag. The no-WebGL fallback now lands on `islands-tiles`; before, it silently fell back to radial.
-     Radial's far line now steps down under a crit plate as the galaxy's does. The shared `caption.js` has a
-     narrow-stage plate width.
-   - `public/galaxy.webmanifest`, scoped to `/galaxy.html` alone, and README's views and docs rows.
-   - Read first: `docs/wall.md` (the whole Wall in one page), then `galaxy/director.js`, `show.js` and `transport.js`
-     (the only code that takes outside messages: same-origin channel, exact-origin `postMessage`, none on `file:`).
-4. **Frame cap: needs your OK** (r60-performance galaxy 2, unchanged from night 3). Every frame still renders at the
-   display rate all day. The proposal is `?cap=30`, off by default, as you said. r60 asks for T34, the overview's
-   triangles, first. That one needs no decision.
-5. **An hour on the Surface.** Leave `galaxy.html?demo=1&fx=beacon&perf=1` up for an hour and compare the overlay's
-   memory line at the start and the end, then try `&fx=warp` in flights. r60 also asks to watch `fx=beacon` with two
-   crits standing (its 337 ms gap). Every fps number from the loop is SwiftShader.
-6. **Taste decisions still open** (r46, r21's answers under For the owner): (a) the kicker `TARGET 02 / 05`. r21 says
-   remove it; T48 would fix its `n / n` self-count either way. (b) Calm plate: one fact line or none. (c) The sun's name
-   or the tag's hub name, not both. Also the r40 slow overview yaw and the fx candidates (`alert`, `lost`, `recent`,
-   `streak`, `dispatch`, `handback`), none asked for.
-7. **Unverified on a device:** the manifest's install prompt and the kiosk recipes in `docs/wall.md` (Edge kiosk,
-   Android pinning, iPad Guided Access) come from general knowledge. No tablet was reachable from here.
-8. **Fenced files:** none requested this night.
-9. **Housekeeping:** `$RUN_DIR` holds about 60 stale `*.pid` files from film and demo scripts. None pointed at a live
-   process at 14:10. Early on 2026-10-27, Chrome's CPU throttle stalled films (r21). Later rounds filmed at ×4 again,
-   but r54 saw the same build give 1.8-11.6 fps back to back, so read no fps trend into the films.
+1. **Your pick for tonight: does touch feel right, and keep, drop or more for each fx.** Turn a system on the Surface
+   (`galaxy.html` on the large demo: tap HV1, tap BA, drag, Back ×3) and watch `r50-walk`. For each option below, the
+   first line is the panel's case for it and the second the case against.
+   - *touch:* every gesture works with no cut, and moons need no picker.
+     Against: the pick shot crowds the system right under the card's leader, a third Back starts the tour, and slow presses are lost (T35-T37, T48 are ready to build).
+   - *beacon, keep and grow it:* it is the only effect that means something at overview size, and the stranger would hang it.
+     Against: cap the pillar's length, and let calm sites get a quiet "fine" mark in the same style.
+   - *warp, drop it:* the skeptic and operator want it gone, it averages wow 4.2 and it is the most expensive effect.
+     The alternative is to keep it only on a flight to a crit, with the target's name in the streak's colour.
+   - *afterglow, drop it unless it gets a demo hook:* it scored wow 2.3 because a clear is almost never seen.
+     Against dropping: it is the only effect that shows history; `dial` (a 24-hour ring per star) is the same idea with a clock.
+   - *activity, drop it:* its calm is 4.0, it repeats `7 WORKING` and its rings read as selection.
+     Nobody argued to keep it.
+   - *sweep, keep it as is:* it has the rhythm everyone wants copied, with calm up to 8.
+     Its silent-site cue is still invisible at 3 m (`## Later`).
+2. **The cockpit handover was not written (T22), and nothing was written under `patches/`.** The commits above changed
+   the shared `galaxy/main.js`, `galaxy/touch.js`, `galaxy/director.js` and `public/css/wall.css` while C1b works on the same files.
+   Before merging, run `git log main..run/wall-n5 -- public/js/galaxy/main.js public/js/galaxy/touch.js
+   public/js/galaxy/director.js public/css/wall.css` and check it against C1b's branch. Also check that `ci` runs
+   `e2e/cockpit` (S-C1-01, S-SCR-0x) green: it never ran here. B237 and B239 are pinned by unit tests that stayed green.
+3. **`docs/wall.md` does not describe tonight's work (T21).** It lacks moons, the card, right-click and double-tap Back, and
+   drag-to-turn. A stranger who reads the docs will not find the gestures.
+4. **Warn-hold banner size (T23's decision).** A warn hold keeps the banner at its 3 m size (README §2.1: trouble stays
+   loudest). r10 and r50 want one hero at every hold. If you agree, it is one `[data-hold="warn"]` rule in `wall.css` and
+   the T30 css test. r50 #6 waits on this too.
+5. **A frame cap for the kiosk (r35 #2).** Every rAF renders all day, which is the heat worst case. The proposal is
+   `?cap=30`, off by default or on for the kiosk URL. It has been open since r31.
+6. **Fenced `tour.js`/`show.js` work is queued, with no patch written.** It covers a tour hold scaled by severity, real
+   `DEMO_TIMING` ratios and one ranking for banner and tour (r20 #5-#7, night 4's T28/T48), plus the show items
+   (night 4's T51/T52/T59/T60/T63). Say whether the cockpit or the Wall should write these.
+7. **Site tints as tokens (planner, colours).** They live as a documented table in `galaxy/palette.js` because the
+   design guardrail allows only accent and status hues in `tokens.css`. `--site-tint-*` tokens would need a guardrail change, which is yours to make.
+8. **Taste ideas waiting for a yes or no** (`## For the owner`): planet labels in the plate's condensed caps (r10 #6), a
+   held system in its site's tint (r15 #2), the destination's name riding the frame edge in flight (r15 #3), a tick over
+   each tappable planet (r30), and three new fx (`scan`, `eclipse`, `dial`; r15).
 
 ### Research
 
-- Q16 the show message: one envelope `{ v: 1, ch: 'laneboard.show', id, src, type, ttl?, data }` over
-  `BroadcastChannel` and exact-origin `postMessage` (never `*`, none on `file:`). The screen says who drives it, and every
-  command is undone by `✕`, its `ttl` or `clear` (built in T37, T38).
-- Q17 a countdown at 3 m: minutes at a distance (`in 4 min`), `m:ss` only when held or in the last minutes, signed
-  `+m:ss` after zero, tabular figures. No published legibility numbers for countdowns were found (built in T40, T53).
-- Q18 busy vs idle without hue: brightness, form and slow local motion carry state. Idle is the quiet default, and a
-  failed job is an absence, not a flash. The game sources were thin; ISA-101 practice is the firmest (used in T17).
-- Open questions: none in `## Research questions`. Open measurements: real fps, GPU time and memory over an hour on
-  the Surface, and the install prompt and kiosk modes on a real tablet.
+- Q19 (moons and nested selection, `research/Q19-moons-nested-selection.md`): the space maps it could read do not fan
+  small bodies out. They change which level is shown (SpaceEngine's zoom levels), step down by centring on a body and
+  back up by a key or button, and keep labels in check by importance weights (Celestia). No source gives a hit radius,
+  so T8's ring, T11's 48/28 px targets and T13's Back levels are the Wall's own choices.
+- Q20 (node card placement, `research/Q20-node-card-placement.md`): anchor the card beside its body with a leader and
+  dock it at the edge when there is no room, then close on an empty tap or Esc. This became T17/T20. The Apple HIG page
+  did not load, so that part is a summary only.
+- No open research questions.

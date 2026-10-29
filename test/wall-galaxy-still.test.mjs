@@ -132,7 +132,7 @@ test('breathWave holds its peak when still; dustTurn stops', () => {
   assert.ok(Math.abs(breathWave(650, 2600) - 1) < 1e-9);
   for (const t of [0, 650, 1300, 99999]) assert.equal(breathWave(t, 2600, true), 1);
   assert.equal(dustTurn(250000, true), 0);
-  assert.ok(dustTurn(250000) > 0.9);
+  assert.ok(dustTurn(250000) > 0.5, 'it turns (0.6 rad by 250 s, night 5 A6)');
 });
 
 // --- the scene ---------------------------------------------------------------

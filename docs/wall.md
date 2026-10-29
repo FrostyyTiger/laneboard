@@ -50,8 +50,9 @@ needs you, red for crit and down, amber for warn. A light's own colour
 - **One finger** turns the galaxy; **a pinch** (or the wheel) zooms between
   the overview and a close system. Both coast to rest.
 - **Tap a site** to fly there and open its sheet: every problem, worst first.
-  In an open system, tap a planet for its own sheet. Where several planets
-  sit under one finger they fan out as rows; tap the one you want.
+  In an open system, tap a planet for its own sheet. There is no picker: the
+  nearest planet, moon or site wins, within 48 px of a finger (28 px of a
+  mouse pointer).
 - **Tap the fleet line** to open what it names.
 - **Back** (`‹ BACK`, top right) or a tap on empty sky goes one step back:
   planet, system, overview. The plate, the fleet line and the clock are not

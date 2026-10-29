@@ -29,8 +29,13 @@ import { countdownText } from './countdown.js';
 /** Never more lines than this under the name (README §3: 3-6). */
 export const MAX_LINES = 6;
 
-/** A value longer than this is cut with an ellipsis, so the plate keeps its width. */
-export const MAX_TEXT = 40;
+/**
+ * A value longer than this is cut with an ellipsis: a guard against a runaway
+ * feed string, not the plate's width. The plate wraps a long line instead of
+ * cutting it (night 5 T24, r10-film-ui 4); this many letters still fit in a
+ * few lines at the facts' step.
+ */
+export const MAX_TEXT = 96;
 
 /** The Map's shapes as type (overlays.js SHAPE_CODE; docs/design.md status language). */
 export const GLYPH = Object.freeze({ square: '■', tri: '▲', diamond: '◆', ring: '○' });
@@ -43,8 +48,12 @@ const FACT_ORDER = ['hardware', 'where', 'uptime'];
  * about 1.6 from the key up; `hero` is the trouble word's largest size (a
  * 20' cap at 3 m on the 12.3" tablet, research Q3: ~180 device px), shrunk
  * to fit the plate's width but never under `heroMin`, a step above the name.
+ * A plate in trouble reads on three levels (night 5 T24, r10-film-ui 4: the
+ * review's 1.0 / 0.42 / 0.28): the word, then `subject` (its why and the
+ * site's name, one size), then `fact` (the count and the next problems).
+ * `why` is the banner's one-line size under a crit plate (frame.js).
  */
-export const STEPS = Object.freeze({ key: 1.7, line: 2.7, why: 4.3, name: 6.9, heroMin: 9, hero: 14 });
+export const STEPS = Object.freeze({ key: 1.7, line: 2.7, fact: 3.6, why: 4.3, subject: 5.6, name: 6.9, heroMin: 9, hero: 14 });
 
 // The trouble word's width in em, in the label face's caps with the plate's
 // tracking (0.43 em a letter plus 0.04 em), the shape and its gap ahead of it.
@@ -294,42 +303,92 @@ export function captionLines(node, model, index = null, count = null) {
 /**
  * The plate's vertical rhythm in vmin (wall.css sets the same heights, so
  * the layout is this sum and not the fonts' metrics): its padding, the
- * kicker, the trouble word (a fraction of its size) and its why, the name,
- * and each row by its step with the gaps between them. Adjacent margins
- * collapse, so the hero and the name share the larger of their two.
+ * kicker, the trouble word (a fraction of its size) and its why, the name
+ * (at the subject's step under a trouble word, T24), and each row by its
+ * step with the gaps between them. Adjacent margins collapse, so the hero
+ * and the name share the larger of their two. A wrapped line (T24) is a
+ * whole multiple of its line's height: every line height below is its
+ * text's line height too.
  */
 export const PLATE = Object.freeze({
   padTop: 2.4, padBottom: 2.64, kicker: 1.7,
-  heroAbove: 1.2, heroLead: 0.86, subGap: 0.9, sub: 4.3, heroBelow: 1.4,
+  heroAbove: 1.2, heroLead: 0.86, subGap: 0.9, sub: STEPS.subject, heroBelow: 1.4,
   nameAbove: 0.9, nameLead: 0.92, nameBelow: 1.6,
-  rowGap: 0.9, smallGap: 1.6, rows: Object.freeze({ trouble: STEPS.why, line: 3.2, small: 2.3 }),
+  rowGap: 0.9, smallGap: 1.6, rows: Object.freeze({ trouble: STEPS.fact, line: 3.2, small: 2.3 }),
 });
+
+// How many lines a part of the plate takes: `wraps[key]` (a row's from `wraps.rows`), 1 when not known.
+const linesOf = (v) => (Number.isFinite(v) && v >= 1 ? Math.round(v) : 1);
 
 /**
  * The plate's height in vmin with the first `shown` rows in (T23: the plate
  * grows with its lines, it does not open at its full height with empty rows
  * under the name). `cap` is `captionLines`' answer; the trouble line is the
- * hero, in with the plate, so it is always counted, at `heroVmin`.
+ * hero, in with the plate, so it is always counted, at `heroVmin`. `wraps`
+ * says how many lines each part was laid out on (T24: a long one wraps, it
+ * is never cut): `{ hero, sub, name, rows: [n, …] }`, any of them missing
+ * is one line.
  */
-export function plateHeight(cap, shown = Infinity, heroVmin = STEPS.hero) {
+export function plateHeight(cap, shown = Infinity, heroVmin = STEPS.hero, wraps = null) {
   const all = Array.isArray(cap?.lines) ? cap.lines : [];
   const lead = all.find((l) => l.step === 'hero');
   const rows = all.filter((l) => l.step !== 'hero');
   const n = Math.max(0, Math.min(rows.length, Number.isFinite(shown) ? Math.floor(shown) : rows.length));
+  const w = wraps ?? {};
   let h = PLATE.padTop + PLATE.kicker;
   if (lead) {
-    h += PLATE.heroAbove + heroVmin * PLATE.heroLead + (lead.sub ? PLATE.subGap + PLATE.sub : 0);
+    h += PLATE.heroAbove + heroVmin * PLATE.heroLead * linesOf(w.hero) + (lead.sub ? PLATE.subGap + PLATE.sub * linesOf(w.sub) : 0);
     h += Math.max(PLATE.heroBelow, PLATE.nameAbove);
   } else {
     h += PLATE.nameAbove;
   }
-  h += STEPS.name * PLATE.nameLead + PLATE.nameBelow;
+  h += (lead ? STEPS.subject : STEPS.name) * PLATE.nameLead * linesOf(w.name) + PLATE.nameBelow;
   for (let i = 0; i < n; i++) {
     const step = PLATE.rows[rows[i].step] ? rows[i].step : 'line';
     if (i) h += PLATE.rowGap + (step === 'small' && rows[i - 1].step !== 'small' ? PLATE.smallGap : 0);
-    h += PLATE.rows[step];
+    h += PLATE.rows[step] * linesOf(w.rows?.[i]);
   }
   return Math.round((h + PLATE.padBottom) * 100) / 100;
+}
+
+/**
+ * The room a plate has, top to bottom (T24, r40-stranger 5): from its top
+ * (8vh) down to the frame's clock, which stands `clockVmin` tall over the
+ * bottom margin (8vh). `plateRoom(width, height)` is that in vmin, Infinity
+ * when the stage is not known.
+ */
+export const PLATE_FIT = Object.freeze({ topVh: 8, bottomVh: 8, clockVmin: 11 });
+
+export function plateRoom(width, height) {
+  const w = Number(width);
+  const h = Number(height);
+  const vmin = Math.min(w, h) / 100;
+  if (!(vmin > 0)) return Infinity;
+  return (h * (1 - (PLATE_FIT.topVh + PLATE_FIT.bottomVh) / 100)) / vmin - PLATE_FIT.clockVmin;
+}
+
+/**
+ * The rows a plate keeps when they would run past its room (T24): whole rows
+ * from the end give way (facts and counts are last, `captionLines`' order)
+ * and a `+N MORE` row at the key's step says so, so no line is ever cut
+ * through its letters. `cap` with its rows as laid out, `wraps` as for
+ * `plateHeight`, `room` in vmin. Returns `{ cap, wraps, dropped }`. Pure.
+ */
+export function fitPlate(cap, heroVmin, wraps, room) {
+  const lead = cap.lines.filter((l) => l.step === 'hero');
+  const rows = cap.lines.filter((l) => l.step !== 'hero');
+  const rowWraps = wraps?.rows ?? [];
+  const at = (k) => {
+    const kept = rows.slice(0, k);
+    const more = rows.length - k;
+    const lines = more ? [...kept, { kind: 'more', step: 'small', label: '', text: `+${more} MORE` }] : kept;
+    return { cap: { ...cap, lines: [...lead, ...lines] }, wraps: { ...wraps, rows: [...rowWraps.slice(0, k), ...(more ? [1] : [])] }, dropped: more };
+  };
+  for (let k = rows.length; k > 0; k--) {
+    const fit = at(k);
+    if (!(plateHeight(fit.cap, Infinity, heroVmin, fit.wraps) > room)) return fit;
+  }
+  return at(0);
 }
 
 /** Normal speed: the sequence starts when the camera is there (research Q1: arrive, then type). */
@@ -585,8 +644,12 @@ export function createCaption(root, {
 
   // The plate's height follows its rows (plateHeight), eased as each comes in.
   let heroVmin = STEPS.hero;
+  // The caption as laid out for this leg (T24): its rows after the fit to the room, and how many
+  // lines each part wrapped onto. Measured once in `build`, from the layout it reads anyway.
+  let laid = null;
+  let wraps = null;
   const grow = (cap, shown, ms) => {
-    const to = `${plateHeight(cap, shown, heroVmin)}vmin`;
+    const to = `${plateHeight(laid ?? cap, shown, heroVmin, wraps)}vmin`;
     const from = plate.style.height;
     plate.style.height = to;
     if (ms && from && from !== to && typeof plate.animate === 'function') {
@@ -624,6 +687,34 @@ export function createCaption(root, {
     list.replaceChildren(...rows.map((l) => lineEl(l, t, counts)));
     plate.dataset.status = cap.status;
     plate.style.height = '';
+    // How many lines each part took (T24: a long one wraps, never cut), from the plate laid out
+    // whole; rows that would run past the room give way at the end, `+N MORE` in their place.
+    const vminPx = Math.min(Number(root.clientWidth), Number(root.clientHeight)) / 100;
+    // Each box is its step's height times `--lines` (wall.css), so the text that wraps out of it is read
+    // as its scroll height, and the box then takes its whole lines.
+    const lines = (e, vmin) => {
+      if (!e) return 1;
+      e.style.removeProperty?.('--lines');
+      const k = Number(e.scrollHeight) / (vmin * vminPx);
+      const n = Number.isFinite(k) && k > 0 ? Math.max(1, Math.round(k)) : 1;
+      if (n > 1) e.style.setProperty('--lines', String(n));
+      return n;
+    };
+    const measured = {
+      hero: lead ? lines(heroWord, heroVmin * PLATE.heroLead) : 1,
+      sub: lead?.sub ? lines(heroSub, PLATE.sub) : 1,
+      name: lines(name, (lead ? STEPS.subject : STEPS.name) * PLATE.nameLead),
+      rows: rows.map((l, i) => lines(list.children[i], PLATE.rows[l.step] ?? PLATE.rows.line)),
+    };
+    const fit = fitPlate(cap, heroVmin, measured, plateRoom(root.clientWidth, root.clientHeight));
+    laid = fit.cap;
+    wraps = fit.wraps;
+    if (fit.dropped) {
+      const kept = rows.length - fit.dropped;
+      const keep = [...list.children].slice(0, kept);
+      counts = counts.filter((c) => keep.includes(c.li));
+      list.replaceChildren(...keep, lineEl(fit.cap.lines[fit.cap.lines.length - 1], t));
+    }
     // Where the plate stands once every row is in, read once a leg: the map's
     // names keep clear of all of it from the start, so none pops out from
     // under a row as it wipes in.

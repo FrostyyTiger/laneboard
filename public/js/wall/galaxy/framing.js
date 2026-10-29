@@ -12,11 +12,14 @@
 /**
  * Room kept between a cover and the free box (css px); the reach's margin
  * (fitDistance); `inward`: a system whose reach is over this share of its
- * distance from the hub is shot from outside looking in (scene.js siteShot):
- * on the large demo `lab` (0.41) is, `hv2` (0.26) is not; that camera
- * stands `inwardRise` up for each unit back (the sun-side one 0.75).
+ * distance from the hub is shot from the side (scene.js siteShot): on the
+ * large demo `lab` (0.41) is, `hv2` (0.26) is not; `aside` is that camera's
+ * bearing from the star, in radians from the sunward one (-65°): the sun
+ * stays off the tablet frame's right edge over the whole sway, for any
+ * caption plate over about 500 px wide (night 5 T1b; looking in from
+ * outside, as nights 2-4 did, put it on the tag).
  */
-export const FRAMING = Object.freeze({ gap: 24, margin: 1.25, inward: 0.33, inwardRise: 1.4 });
+export const FRAMING = Object.freeze({ gap: 24, margin: 1.25, inward: 0.33, aside: (-65 * Math.PI) / 180 });
 
 /**
  * The largest box of a `W`×`H` frame (css px) that meets no cover

@@ -217,7 +217,8 @@ test('galaxy/main.js wires the first touch: tour stopped, the camera fit in TOUC
   // T13: the way out to the overview is shared with the back control.
   assert.match(wake, /toOverview\(\)/);
   const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
-  assert.match(out, /finger\.fit\(\{ ms: TOUCH\.fitMs \}\)/);
+  assert.match(out, /out = \{ ms: TOUCH\.fitMs \}/, 'the wake eases out in TOUCH.fitMs');
+  assert.match(out, /finger\.fit\(out\)/);
   assert.match(out, /hud\.release\(\)/);
   // A new model does not start a stopped tour again (T14 brings it back).
   assert.match(js, /if \(!park && touch\?\.mode\(\) === 'tour' && director\.driver\(\) === 'tour'\) tour\.start\(\);/);
@@ -378,7 +379,7 @@ test('pointer events on the page: a one-finger drag turns the camera round the g
   p.tick();
   const coasted = orbitOf(p.cam.pose()).yaw;
   assert.ok(turned(lifted.yaw, coasted) < 0, 'it keeps turning after the lift');
-  p.run(4000);
+  p.run(ORBIT.tauMs * 8); // a capped fling rests within τ ln(maxVel / rest) ≈ 4.3 s (night 5 C4)
   assert.ok(!p.gestures.busy(), 'and comes to rest');
   const rest = orbitOf(p.cam.pose()).yaw;
   p.run(1000);
@@ -639,10 +640,10 @@ test('the hud opens a tapped site with its brackets at once and its plate when t
 test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flies there and opens it', () => {
   const js = read('js/wall/galaxy/main.js');
   assert.match(js, /createTaps\(touch, \{/);
-  assert.match(js, /hitTest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, labels\.shown\(\), beams\), x - o\.left, y - o\.top\)/);
+  assert.match(js, /hitNearest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, names, beams\), x - o\.left, y - o\.top, reach\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /finger\.focus\(id, TIMING\.zoom\)/);
-  assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \|\| reduced \? 0 : FLIGHT\.ms \}\)/, 'a cut (reduced motion, T14) has its plate at once');
+  assert.match(open, /pickCard\(id, id\);/, 'its card (night 5 T19b), which waits for the landing; a cut (reduced motion, T14) has it at once');
 });
 
 test('memberPoints (T11): the members of an open system only, at their drawn points, in their own tone', () => {
@@ -670,7 +671,7 @@ test('pointer events on the page: in an open system a tap on a planet opens the 
   createTaps(p.touch, {
     clock: p.now,
     pick,
-    // As main.js: a planet's sheet where the camera is; a site flies.
+    // A planet's sheet, a site flies (the camera's flight on to a planet, night 5 T9: wall-galaxy-pick).
     tap: (hit) => { if (hit?.site) opened.push(['planet', hit.id]); else if (hit) { p.cam.focus(hit.id, DEMO_TIMING.zoom); opened.push(['site', hit.id]); } },
   });
   p.run(200);
@@ -686,18 +687,17 @@ test('pointer events on the page: in an open system a tap on a planet opens the 
   p.run(FLIGHT.ms + 500);
   const planet = p.cam.screenOf('cloud-a');
   assert.ok(planet && planet.x > 0 && planet.x < 1600 && planet.y > 0 && planet.y < 900, 'the planet is on screen');
-  const want = p.cam.want();
   tapAt(32, planet);
   assert.deepEqual(opened.at(-1), ['planet', 'cloud-a']);
-  assert.deepEqual(p.cam.want(), want, 'the camera stays where it is');
 });
 
-test('galaxy/main.js wires planet taps (T11): members asked before sites, a planet opens where the camera is', () => {
+test('galaxy/main.js wires planet taps (T11): members asked before sites, a planet\'s card at once (night 5 T17; its camera: night 5 T9, wall-galaxy-pick)', () => {
   const js = read('js/wall/galaxy/main.js');
-  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  const pick = js.slice(js.indexOf('pick: (x, y, ev) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('memberPoints(') >= 0 && pick.indexOf('memberPoints(') < pick.indexOf('tapPoints('), 'members first');
-  assert.match(js, /const openPlanet = \(id, site\) => \{\s*hud\.open\(\{ id, arriveMs: 0 \}\);/);
-  assert.match(js, /if \(hit\?\.covered\) return; if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); else goBack\(\);/);
+  assert.match(js, /const openPlanet = \(id, site\) => \{\s*left\.leave\(place, cam\);\s*pickCard\(id, site\);/);
+  // Night 5 T12: a tap on empty sky does nothing (no `else goBack()`); T20: it closes an open card, as a second tap on its node does.
+  assert.match(js, /if \(hit\?\.covered\) return;\s*\/\/[^\n]*\n\s*if \(card\?\.shown\(\) && \(hit == null \|\| hit\.id === card\.selected\(\)\)\) \{ card\.close\(\); return; \}\s*if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); \/\/ empty sky: nothing/);
 });
 
 // ---- T13: back ----
@@ -775,7 +775,9 @@ function backPage(words = null) {
     pick: (x, y) => (words ? coverHit(words.covers, words.rows, p.galaxy.world.sites, x, y, place.site) : null)
       ?? hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), x, y)
       ?? hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), x, y),
-    tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
+    // As main.js (night 5 T12, T13): empty sky once is nothing; a double tap or a right-click is Back.
+    tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); },
+    back: () => goBack(),
   });
   const tick = (ms) => { const r = p.tick(ms); back.show(backShown(p.touch.mode(), place)); return r; };
   const run = (ms) => { for (let t = 0; t < ms; t += 16) tick(16); };
@@ -822,25 +824,28 @@ test('pointer events on the page: the back control walks planet → system → o
   assert.ok(!p.gestures.busy(), 'pressing the control never turned the galaxy');
 });
 
-test('pointer events on the page: a tap on empty sky walks planet → system → overview, then does nothing', () => {
+test('pointer events on the page: a double tap on empty sky walks planet → system → overview (night 5 T13), a single one does nothing', () => {
   const p = backPage();
   p.into();
   const sky = { x: 5, y: 5 };
   assert.equal(hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), sky.x, sky.y), null, 'the corner is empty sky');
   assert.equal(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), sky.x, sky.y), null);
-  p.tapAt(51, sky);
+  const double = (id) => { p.tapAt(id, sky); p.tick(100); p.tapAt(id + 1, sky); p.tick(16); };
+  p.tapAt(50, sky);
   p.tick(16);
+  assert.deepEqual([p.place().level, p.sheets.at(-1)], ['planet', 'cloud-a'], 'one empty tap: nothing');
+  p.run(TAP.doubleMs + 50);
+  double(51);
   assert.deepEqual([p.place().level, p.sheets.at(-1)], ['site', 'cloud']);
   assert.equal(p.cam.want().id, 'cloud');
-  p.tapAt(52, sky);
-  p.tick(16);
+  p.run(TAP.doubleMs + 50);
+  double(53);
   assert.equal(p.place(), AT_OVERVIEW);
   assert.equal(p.cam.want().kind, 'overview');
   p.run(TOUCH.fitMs + 200);
   const n = p.sheets.length, want = p.cam.want();
-  p.tapAt(53, sky);
-  p.tick(16);
-  assert.equal(p.sheets.length, n, 'at the overview empty sky does nothing');
+  double(55);
+  assert.equal(p.sheets.length, n, 'at the overview a double tap does nothing');
   assert.deepEqual(p.cam.want(), want);
 });
 
@@ -849,7 +854,7 @@ test('pointer events on the page: back from a system the finger turned away from
   p.into();
   // Drag: the camera's pose is the finger's now, the system folds.
   p.drag(61, [[800, 450], [830, 450], [900, 460], [960, 470]]);
-  p.run(2000);
+  p.run(ORBIT.tauMs * 8);
   assert.equal(p.cam.want().kind, 'free');
   p.press();
   p.tick(16);
@@ -879,12 +884,12 @@ test('galaxy/main.js wires back (T13): the control and an empty-sky tap step bac
   assert.match(js, /back\?\.show\(backControl\(m, place\)\);/, 'back away from the overview, ▶ TOUR at it (night 4 T5)');
   const go = js.slice(js.indexOf('const goBack = '), js.indexOf('};', js.indexOf('const goBack = ')));
   assert.match(go, /backStep\(place\)/);
-  assert.match(go, /openSite\(next\.site\)/);
-  assert.match(go, /toOverview\(left\.pose\(\)\)/, 'to the pose the finger left (night 4 T4), else the fit');
+  assert.match(go, /backToSite\(next\.site\)/, 'a planet steps to its system (night 5 T13)');
+  assert.match(go, /toOverview\(left\.pose\(\), ZOOM_OUT\)/, 'to the pose the finger left (night 4 T4), else the fit');
   const wake = js.slice(js.indexOf('wake: () => {'), js.indexOf('},', js.indexOf('wake: () => {')));
   assert.match(wake, /toOverview\(\)/);
   const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
-  for (const rx of [/finger\.fit\(\{ ms: TOUCH\.fitMs \}\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/]) assert.match(out, rx);
+  for (const rx of [/finger\.fit\(out\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/]) assert.match(out, rx);
 });
 
 // ---- night 4 T1: the words are not sky ----
@@ -945,10 +950,10 @@ test('pointer events on the page: with a sheet up a tap on the plate over a star
 
 test('galaxy/main.js wires the words (night 4 T1): coverHit before the scene, a covered hit opens nothing', () => {
   const js = read('js/wall/galaxy/main.js');
-  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  const pick = js.slice(js.indexOf('pick: (x, y, ev) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('coverHit([...hud.covers(), ...touchCovers()], rows,') >= 0 && pick.indexOf('coverHit(') < pick.indexOf('memberPoints('), 'the words first');
   assert.match(pick, /hud\.targets\(\)/);
-  assert.match(js, /tap: \(hit\) => \{[^}]*\}\s*fan\?\.hide\(\);\s*if \(hit\?\.covered\) return;/);
+  assert.match(js, /tap: \(hit\) => \{\s*if \(hit\?\.covered\) return;/);
 });
 
 // ---- night 4 T2: the loudest thing is a target ----
@@ -1054,7 +1059,7 @@ test('fx=beacon: a finger on the pillar\'s top hits its site, past the star\'s o
 
 test('galaxy/main.js wires the fleet line and the pillar (night 4 T2): rows keep their step, beams only with fx=beacon', () => {
   const js = read('js/wall/galaxy/main.js');
-  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  const pick = js.slice(js.indexOf('pick: (x, y, ev) =>'), js.indexOf('tap: (hit)'));
   assert.match(pick, /\.\.\.r, box:/, 'a row keeps its step');
   assert.match(pick, /coverHit\(\[\.\.\.hud\.covers\(\), \.\.\.touchCovers\(\)\], rows, galaxy\.world\?\.sites, x - o\.left, y - o\.top, place\.site\)/);
   assert.match(pick, /fx\.has\('beacon'\) \? beamSegments\(galaxy\.beams\?\.\(\), cam\.screenAt\) : \[\]/);

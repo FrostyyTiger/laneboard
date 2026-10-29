@@ -30,7 +30,8 @@
 //   builder-a  lanes in working / waiting (permission + question) / review-ready
 //              states, an open approval, a budget warning
 //   builder-b  a stuck session (tool loop), a danger finding, a lane on a
-//              branch whose CI is red on main, a disk health warning
+//              branch whose CI is red on main, a disk health warning, a lane
+//              with two sessions (deps bump, deps audit)
 //   builder-c  a quiet builder that the script takes down and brings back
 //              (stale, then down, then up again)
 //   repo `acme` with packages web/api/docs, a red `api-test` job on main and
@@ -299,10 +300,12 @@ const DEMO = {
       session('ci retry', { lane: 'ci-retry', state: 'working', stuck: { rule: 'tool-loop', reason: 'same tool call 14x in 6m', since: T0 - 6 * MIN, evidence: [{ rule: 'tool-loop', detail: 'Bash(npm test) repeated' }], rules: ['tool-loop'] }, activity: { tool: 'Bash', toolInput: 'npm test', lastUserPrompt: 'make the api tests pass', lastAssistant: 'Running the tests again.', lastAssistantAt: T0 - MIN }, lines: ['  Bash(npm test)', '  ✖ api-test: 3 failing', '  Bash(npm test)', '  ✖ api-test: 3 failing'] }),
       session('deps bump', { lane: 'deps-bump', state: 'working', activity: { tool: 'Read', toolInput: 'package.json', lastUserPrompt: 'bump the minor versions', lastAssistant: '', lastAssistantAt: null } }),
       session('cleanup job', { state: 'waiting_permission', danger: { kind: 'guard', reason: 'delete outside the worktree' }, lines: ['  Bash(rm -rf ../shared-cache)', '', '  Do you want to proceed?'] }),
+      // A second session on deps-bump, so the Map hangs sessions under this builder's lane too (the galaxy's moons, Wall night 5 T7).
+      session('deps audit', { lane: 'deps-bump', state: 'idle', lines: ['  No known advisories in web/package-lock.json.', '', '❯ '] }),
     ],
     lanes: [
       lane('ci-retry', ['ci retry']),
-      lane('deps-bump', ['deps bump']),
+      lane('deps-bump', ['deps bump', 'deps audit']),
     ],
     branches: [
       ['ci-retry', '4', ['api/tests/test_search.py', 'api/search.py']],

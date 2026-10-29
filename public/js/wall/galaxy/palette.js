@@ -1,15 +1,18 @@
 // The galaxy's colours (Wall plan night 2 T3), read from laneboard's tokens:
 // WebGL needs numbers, the tokens are CSS strings (oklch, and the Wall's
 // brighter steps are color-mix of them), so this turns one into the other.
-// The status hues are the only colours (docs/design.md: grey unless
-// something needs you): crit --p1, warn --p2, low --p3; everything calm,
-// the sun and the dust included, is a step of the greys.
+// The status hues are the only loud colours (docs/design.md: grey unless
+// something needs you): crit --p1, warn --p2, low --p3. Since night 5 A4
+// (the owner's pick) calm things carry a few quiet hues from one frozen
+// table here (LOOK): a site's tint, stone greys, a blue-black ground, a
+// warm sun, every one far under the status hues' chroma.
 //
 // Pure: `paletteFrom(readVar)` takes a lookup of custom properties
 // (`getComputedStyle(root).getPropertyValue` in the page), so
 // test/wall-galaxy-palette.test.mjs runs it without a browser.
 
 import { statusStyle } from '../../views/map/overlays.js';
+import { TIGHT } from './layout.js';
 
 /** The tokens' dark values, when a property is missing (as render.js's FALLBACK). */
 const FALLBACK = Object.freeze({
@@ -30,13 +33,14 @@ export const TONES = Object.freeze(['calm', 'low', 'warn', 'crit']);
  * A nebula per tone: how strong (additive opacity), how big (world units
  * across; the layout keeps stars MIN_SITE_GAP apart so these never meet)
  * and whether it breathes. Calm is a faint grey haze; trouble is the
- * loudest thing on screen, crit the only one that moves.
+ * loudest thing on screen, crit the only one that moves. Night 5 A1: at
+ * TIGHT.neb (0.64x) of nights 1-4's, with the tighter arms.
  */
 export const NEBULA = Object.freeze({
-  calm: Object.freeze({ opacity: 0.2, size: 520, breathes: false }),
-  low: Object.freeze({ opacity: 0.4, size: 560, breathes: false }),
-  warn: Object.freeze({ opacity: 0.7, size: 640, breathes: false }),
-  crit: Object.freeze({ opacity: 0.85, size: 680, breathes: true }),
+  calm: Object.freeze({ opacity: 0.2, size: 520 * TIGHT.neb, breathes: false }),
+  low: Object.freeze({ opacity: 0.4, size: 560 * TIGHT.neb, breathes: false }),
+  warn: Object.freeze({ opacity: 0.7, size: 640 * TIGHT.neb, breathes: false }),
+  crit: Object.freeze({ opacity: 0.85, size: 680 * TIGHT.neb, breathes: true }),
 });
 
 /** A status word (or a node) to the galaxy's tone, by the Map's statusStyle. */
@@ -61,6 +65,81 @@ export function nebulaFor(status) {
  * never reads as a node (T26, reviews/r26-skeptic.md 5).
  */
 export const DUST_INK = Object.freeze({ in: 0.4, out: 0.68 });
+
+/**
+ * Night 5 A4, the owner's picks from the sketch (`sk_tint=2 sk_pal=1
+ * sk_sun=1`), as OKLCH numbers. They live here, not in tokens.css: the
+ * design guardrail keeps tokens.css's chromatic values to the accent and
+ * status hues (see PROGRESS `## For the owner`).
+ * - `tints`: a site's quiet hue `[H, C]` by its place in the layout,
+ *   teal, indigo, plum, sage (the sketch's warm set: no amber, which
+ *   would read as warn). Drawn at lightness `tintL`; a calm nebula takes
+ *   `nebula`x the chroma, the dust near a site `dust`x within `dustReach`
+ *   (the sketch's 3.2 put indigo dust past --p3's chroma; 2.6 keeps it under).
+ * - `lift`: calm text and bodies a step lighter (stone, not mid-grey) on a
+ *   deep blue-black ground instead of near black ("some stuff is drowned
+ *   out by the black"); set as the page's tokens (`applyLift`) before the
+ *   palette is read, so the names over the canvas lift with the bodies.
+ * - `sun`: its light an off-white warm (hue 65, far under warn's 0.16 at
+ *   95), its core and halo a softer warm stone.
+ */
+export const LOOK = Object.freeze({
+  tints: Object.freeze([[180, 0.045], [275, 0.05], [335, 0.045], [145, 0.04]].map(Object.freeze)),
+  tintL: 0.7,
+  nebula: 2,
+  dust: 2.6,
+  dustReach: 700 * TIGHT.arm,
+  lift: Object.freeze({
+    '--text-3': Object.freeze([0.76, 0.012, 75]),
+    '--text-2': Object.freeze([0.87, 0.01, 75]),
+    '--bg-canvas': Object.freeze([0.14, 0.024, 262]),
+  }),
+  sun: Object.freeze({ light: Object.freeze([0.95, 0.018, 65]), core: Object.freeze([0.8, 0.03, 68]) }),
+});
+
+/** `[L, C, H]` as a CSS `oklch()` string. */
+export const oklchCss = ([L, C, H]) => `oklch(${+(L * 100).toFixed(2)}% ${C} ${H})`;
+
+/** A lookup of custom properties with the lift's tokens over it (what `applyLift` makes the page read). */
+export const lifted = (readVar = unset) => (name) => (LOOK.lift[name] ? oklchCss(LOOK.lift[name]) : readVar(name));
+
+/** Sets the lift's tokens on `root` (the page's html element), one property at a time. */
+export function applyLift(root) {
+  if (!root?.style?.setProperty) return;
+  for (const [name, lch] of Object.entries(LOOK.lift)) root.style.setProperty(name, oklchCss(lch));
+}
+
+/** Site `index`'s tint as `[H, C]` (neighbours differ; any integer, negative too). */
+export function tintOf(index) {
+  const n = LOOK.tints.length;
+  return LOOK.tints[(((Math.trunc(Number(index)) || 0) % n) + n) % n];
+}
+
+/** Site `index`'s tint at `tintL` with `k`x its chroma, as sRGB 0..1. */
+export function siteTint(index, k = 1) {
+  const [h, c] = tintOf(index);
+  return oklchToRgb(LOOK.tintL, c * k, h);
+}
+
+/** A calm nebula's colour for site `index`. */
+export const nebulaTint = (index) => siteTint(index, LOOK.nebula);
+
+/**
+ * A dust grain `rgb` near site `index`, `w` (0..1) of the way into its
+ * tint: the grain's brightness kept, its hue the site's (sRGB 0..1).
+ */
+export function tintGrain(rgb, index, w, ratio = grainRatio(index)) {
+  return rgb.map((x, i) => x * (1 + (ratio[i] - 1) * w));
+}
+
+/** What a grain's channels are multiplied by at the full tint of site `index` (tintGrain). */
+export function grainRatio(index) {
+  const grey = oklchToRgb(LOOK.tintL, 0, 0), t = siteTint(index, LOOK.dust);
+  return t.map((x, i) => x / grey[i]);
+}
+
+/** How much a grain `d2` (squared distance in the plane) from a site's star takes its tint. */
+export const dustTintWeight = (d2) => Math.exp(-d2 / LOOK.dustReach ** 2);
 
 /** A lookup that knows no property. */
 const unset = () => '';
@@ -107,7 +186,7 @@ function mixPart(s) {
 }
 
 /** sRGB 0..1 back to OKLCH, for mixing the way color-mix(in oklch) does. */
-function rgbToOklch([r, g, b]) {
+export function rgbToOklch([r, g, b]) {
   const lin = [r, g, b].map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
   const l = Math.cbrt(0.4122214708 * lin[0] + 0.5363325363 * lin[1] + 0.0514459929 * lin[2]);
   const m = Math.cbrt(0.2119034982 * lin[0] + 0.6806995451 * lin[1] + 0.1073969566 * lin[2]);
@@ -192,8 +271,10 @@ export function paletteFrom(readVar = unset) {
     calm: t3,
     bright: t2,
     sun: t1,
-    // The sun's own disc and halo: a step down from the light it gives (r8-film-ui 2).
-    sunCore: t2,
+    // The light the sun gives (night 5 A4): an off-white warm.
+    sunLight: oklchToRgb(...LOOK.sun.light),
+    // The sun's own disc and halo: a step down from the light it gives (r8-film-ui 2), warm and soft (A4).
+    sunCore: oklchToRgb(...LOOK.sun.core),
     // The sun once the data is old (night 3 T6): cold, the text-3 grey, never a trouble hue.
     sunCold: t3,
     bg,
