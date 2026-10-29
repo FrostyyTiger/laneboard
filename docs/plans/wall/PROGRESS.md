@@ -420,11 +420,27 @@ Notes for every builder round (planner, round 7):
   `r37-galaxy` (`?demo=1`, cpu 4x) 33.2 fps, worst gap 182 ms, 0 errors, the tour unchanged. **Seen:** a free overview
   turn can carry the crit site (HV2) under the plate (`07-fling-4500ms`): the plate's corner is fixed while a finger
   turns the galaxy anywhere (for triage, near T23/T30/T35).
-- [ ] T16 (§7 Night 5 C, done-when) [ui] [variant:galaxy] The night's touch walk as one page test and one film: tap site →
+- [x] T16 (§7 Night 5 C, done-when) [ui] [variant:galaxy] The night's touch walk as one page test and one film: tap site →
   tap planet (moons open) → drag-turn (system stays open, star stays put) → empty tap (nothing) → tap moon → Back ×3 →
   overview, with the flight durations asserted (`test/wall-galaxy-walk.test.mjs`); then a CDP touch film of the same walk
   on the large demo — done when: the test passes on a fake clock and the film's sheet shows each step (frames named in the
-  notes).
+  notes). (commit 7126a88)
+  Notes (builder, round 38): `test/wall-galaxy-walk.test.mjs` (1 page test, fake clock, large demo): tap lab → flies
+  FLIGHT.ms (2250 ± 32) and opens; tap builder-a → FLIGHT.ms, its ring open; a 165 px drag → turned round lab's star,
+  the star < 2 px off through the drag and 8τ of coast, still held, open, ring open; an empty tap → no step, no move, the
+  pose exact; a calm moon on the ring → moon picked, no move (0 ms); Back with the control ×3 → planet (0 ms, ring open),
+  system (0 ms, moons fold, the turned pose exact), overview (want `overview` 3000 soft, flew 3000 ± 32) → the fit (no
+  explore pose was left), lab folded, the control ▶ TOUR. T13's page harness moved verbatim into
+  `test/helpers/galaxy-page.mjs` (one copy of main.js's wiring for both; `wall-galaxy-back` imports it, its tests and its
+  main.js source pins unchanged). No app change. Film (`$RUN_DIR/shots/r38-t16-walk/sheet.png`, CDP touch only, Back by a
+  touch on the control's rect, `$RUN_DIR/tools/r38-t16.mjs`): `00-tour` → `01-explore` (first touch wakes) → `02-site-flying`
+  (k 0.47 at 1.1 s) → `03-site-held` → `04-planet-moons` (BA, ring open) → `05-turning` / `06-turned` (star 872.2,684.2 →
+  872.1,684.2) → `07-empty-tap` (pose kept) → `08-moon` (feat-search, pose kept) → `09-back-planet` (BA's plate, ring open,
+  pose kept) → `10-back-system` (HV1's plate, folded, star unmoved) → `11-out-0.75s` k 0.24, `12-out-1.5s` 0.59,
+  `13-out-2.25s` 0.94, `14-out-3.2s` landed → `15-overview` (▶ TOUR); 0 console errors. `r38-galaxy` (`?demo=1`, cpu 4x)
+  33.8 fps, worst gap 192 ms, 0 errors, the tour unchanged. **Seen:** `08-moon` the plate truncates (`WAITING ON A PER…`,
+  T24); `05`-`10` CLOUD's label sits against the Back control and the tag after the turn (T35's family); `03-site-held`
+  the plate names the trouble FEAT-SEARCH large while the held site is HV1 (T32/T24's hierarchy).
 - [ ] T17 (§7 Night 5 D1) [ui] [variant:galaxy] The card's place: a new `galaxy/card.js` with a pure `cardPlace` (beside the
   selected node with a visible leader line; docked to the right edge when it does not fit beside the node or would cover the
   open system's planets; never over the fleet line or the tag, `hud.covers()`) and the DOM shell `main.js` creates under the
