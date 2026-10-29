@@ -128,6 +128,8 @@ test('createCard: a labelled region with a 48 px ×; its pointers never reach th
   });
   assert.equal(card.el.hidden, true);
   card.open({ id: 'room:vm-a', name: 'vm-a', kind: 'room', tone: 'crit' });
+  assert.equal(card.el.hidden, true, 'placed on the next frame, not at the tap');
+  card.draw();
   assert.equal(card.el.hidden, false);
   assert.equal(card.el.getAttribute('role'), 'region');
   assert.match(card.el.getAttribute('aria-label'), /vm-a/);
@@ -144,6 +146,23 @@ test('createCard: a labelled region with a 48 px ×; its pointers never reach th
   assert.match(rule, /height: 48px;/);
   assert.match(rule, /touch-action: manipulation;/);
   assert.match(css, /\.galaxy-card-x:active \{/, 'a visible pressed state');
+});
+
+test('createCard: a new card waits for the camera to land, then stays put on its side through later moves', () => {
+  let flying = true, at = { x: 300, y: 400, r: 10 };
+  const card = createCard(listening('main'), {
+    screenOf: () => at, size: () => ({ W, H }), flying: () => flying, doc: { createElement: (t) => listening(t) },
+  });
+  card.open({ id: 'a', name: 'a', kind: 'room' });
+  card.draw();
+  assert.deepEqual([card.el.hidden, card.leaderEl.hidden, card.place()], [true, true, null], 'nothing while it flies in');
+  flying = false;
+  card.draw();
+  assert.deepEqual([card.el.hidden, card.leaderEl.hidden, card.place().side], [false, false, 'right']);
+  flying = true;
+  at = { x: 720, y: 400, r: 10 }; // past the middle: a new card would take the left
+  card.draw();
+  assert.deepEqual([card.el.hidden, card.place().side], [false, 'right'], 'shown and on its side while the camera moves again');
 });
 
 test('the page: a tapped planet gets a card, no sheet, its leader joining card and node; its system\'s step closes it', () => {

@@ -644,6 +644,7 @@ export function boot() {
     covers: () => [...hud.covers(), ...touchCovers(), ...showCovers()],
     bodies: (id) => cardBodies(galaxy.world, place.site, id, cam.screenOf),
     ring: (id) => cardRing(galaxy.world, place.site, id, cam.screenOf),
+    flying: () => cam.flight() != null,
     onClose: () => card.close(),
   }) : null;
   if (card) cam.onDraw(card.draw);

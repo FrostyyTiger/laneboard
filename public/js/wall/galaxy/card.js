@@ -1,7 +1,8 @@
 // The node card's place (Wall plan night 5 T17, README §7 Night 5 D1): a tapped
 // planet or moon gets a card beside it, joined to it by a thin leader, instead
 // of the left-hand sheet the plate used to become. The card stands beside the
-// node, on the side away from the nearer screen edge first; it docks to the
+// node, level with it and past its open ring of moons, on the side away from
+// the nearer screen edge first; it comes as the camera lands; it docks to the
 // right edge when it fits on neither side or would cover a planet of the open
 // system (the thing it describes stays in sight, research Q20); it never
 // stands over the fleet line, the tag or the touch controls (`covers`).
@@ -23,7 +24,7 @@
  * cover and planet, `bodyPx` the least radius a planet counts with, `spot`
  * the leader's ring round the node.
  */
-export const CARD = Object.freeze({ w: 360, h: 200, gap: 16, hitPx: 24, edge: 16, pad: 8, bodyPx: 10, spot: 14 });
+export const CARD = Object.freeze({ w: 360, h: 200, gap: 24, hitPx: 24, edge: 16, pad: 8, bodyPx: 10, spot: 14 });
 
 import { toneOf } from './palette.js';
 
@@ -166,11 +167,12 @@ export function cardRing(world, site, id, screenOf) {
  * off, `bodies(id)` the open system's other planets and moons, `ring(id)`
  * its own open ring's reach (cardRing), `onClose()`
  * when its × is pressed. `open({ id, name, kind, tone })`, `close()`,
+ * `flying()` true while the camera flies (a new card waits for the landing),
  * `draw()` (each frame, after the camera), `shown()`, `selected()` (the id),
  * `cover()` (its box, for the names) and `place()` (the last cardPlace).
  */
 export function createCard(root, opts = {}) {
-  const o = { covers: () => [], bodies: () => [], ring: () => 0, onClose: () => {}, doc: globalThis.document, ...opts };
+  const o = { covers: () => [], bodies: () => [], ring: () => 0, flying: () => false, onClose: () => {}, doc: globalThis.document, ...opts };
   const make = (tag, cls, text) => {
     const e = o.doc.createElement(tag);
     if (cls) e.className = cls;
@@ -225,13 +227,14 @@ export function createCard(root, opts = {}) {
     card.dataset.kind = info.kind ?? '';
     card.dataset.tone = info.tone ?? 'calm';
     card.setAttribute('aria-label', `${info.name ?? info.id}, ${info.kind ?? 'node'}`);
-    if (!same) last = null; // a new node: its side is chosen afresh
-    show(card, true);
-    measured = null; // its content changed: measured again on the next draw
-    draw();
+    if (!same) { last = null; show(card, false); show(leader, false); show(spot, false); } // a new node: its side afresh
+    measured = null; // its content changed: measured again on the next draw (after the camera's request)
   };
   const draw = () => {
     if (!sel) return;
+    // It comes as the camera lands (as the plate did): no card placed for a node still flying in, then jumping.
+    if (!last && o.flying()) return;
+    show(card, true);
     if (!measured) {
       const w = card.offsetWidth, h = card.offsetHeight;
       measured = { w: w > 0 ? w : CARD.w, h: h > 0 ? h : CARD.h };

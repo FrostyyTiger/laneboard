@@ -79,6 +79,7 @@ export function page() {
     screenOf: cam.screenOf, size: galaxy.size, covers: () => WORDS.slice(1),
     bodies: (id) => cardBodies(galaxy.world, place.site, id, cam.screenOf),
     ring: (id) => cardRing(galaxy.world, place.site, id, cam.screenOf),
+    flying: () => cam.flight() != null,
     onClose: () => card.close(), doc: { createElement: (t) => listening(t) },
   });
   cam.onDraw(card.draw);
