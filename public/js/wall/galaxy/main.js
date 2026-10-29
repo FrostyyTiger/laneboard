@@ -114,7 +114,7 @@ import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
 import { FIT, createGalaxyCamera, fitPose, showFlightMs } from './camera.js';
-import { cardBodies, cardRing, createCard, describe } from './card.js';
+import { cardBodies, cardRing, cardTint, createCard, describe } from './card.js';
 import { createHud } from './hud.js';
 import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
@@ -571,7 +571,7 @@ export function boot() {
   // joining them, instead of the left-hand sheet; the plate goes, the fleet line and the tag stay.
   const pickCard = (id, site) => {
     hud.release();
-    card?.open(describe({ id, site }, galaxy.world));
+    card?.open({ ...describe({ id, site }, galaxy.world), tint: cardTint(galaxy.world, site) }); // its site's tint on its top edge (T20)
   };
   // A card's action (night 5 T19, card.js cardActions): it counts as a touch (the card's presses never
   // reach the stage); `Open` flies into a site (from its own card after a turn, back to its hold: T19b),
@@ -665,6 +665,10 @@ export function boot() {
     onClose: () => card.close(),
     onPick: (id) => openPlanet(id, place.site), // a Below chip (T18): that node, as a tap on it
     onAct: (act, id) => cardAct(act, id), // its actions (T19)
+    // Its manners (T20): the dim under the frame's words, focus back to the Back control after a canvas tap.
+    under: document.getElementById('galaxy-show-veil'),
+    focusBack: () => backEl,
+    reduced,
   }) : null;
   if (card) cam.onDraw(card.draw);
   const taps = touch ? createTaps(touch, {
@@ -686,7 +690,10 @@ export function boot() {
       return member ?? hitNearest(tapPoints(galaxy.world?.sites, cam.screenOf, names, beams), x - o.left, y - o.top, reach);
     },
     tap: (hit) => {
-      if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); // empty sky: nothing (T12)
+      if (hit?.covered) return;
+      // The card's node tapped again, or empty sky, closes the card and nothing else (night 5 T20; T12: no step).
+      if (card?.shown() && (hit == null || hit.id === card.selected())) { card.close(); return; }
+      if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); // empty sky: nothing (T12)
     },
     back: () => goBack(), // a right-click, a double tap on empty sky (night 5 T13)
   }) : null;

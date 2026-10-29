@@ -205,7 +205,7 @@ test('galaxy/main.js makes the card under the stage, a tapped site, planet or mo
   assert.match(js, /covers: \(\) => \[\.\.\.hud\.covers\(\), \.\.\.touchCovers\(\), \.\.\.showCovers\(\)\]/);
   assert.match(js, /if \(card\) cam\.onDraw\(card\.draw\);/);
   const pick = js.slice(js.indexOf('const pickCard = '), js.indexOf('\n  };', js.indexOf('const pickCard = ')));
-  assert.match(pick, /hud\.release\(\);\s*card\?\.open\(describe\(\{ id, site \}, galaxy\.world\)\);/);
+  assert.match(pick, /hud\.release\(\);\s*card\?\.open\(\{ \.\.\.describe\(\{ id, site \}, galaxy\.world\), tint: cardTint\(galaxy\.world, site\) \}\);/);
   assert.match(js, /onPick: \(id\) => openPlanet\(id, place\.site\),/, 'a Below chip opens its node as a tap on it would');
   const site = js.slice(js.indexOf('const openSite = '), js.indexOf('\n  };', js.indexOf('const openSite = ')));
   assert.match(site, /pickCard\(id, id\);/, 'a site\'s card (T19b), not its sheet');

@@ -3,7 +3,8 @@
 // renderer, stage and clock; the touch, gestures, taps (a member first, then
 // a site), Back control, director and camera; main.js's toOverview,
 // openSite, openPlanet, pickCard, backToSite and goBack copied (and pinned against its
-// source in test/wall-galaxy-back.test.mjs); the node card (night 5 T17) as main.js makes it.
+// source in test/wall-galaxy-back.test.mjs); the node card (night 5 T17) as main.js makes it,
+// with its manners (T20: the close taps, the resume, focus on a fake document).
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { OPEN_MS } from '../../public/js/wall/galaxy/layout.js';
@@ -12,7 +13,7 @@ import { createGalaxyScene } from '../../public/js/wall/galaxy/scene.js';
 import { createGalaxyCamera, FLIGHT } from '../../public/js/wall/galaxy/camera.js';
 import { ZOOM_OUT, createDirector } from '../../public/js/wall/galaxy/director.js';
 import { freeRect } from '../../public/js/wall/galaxy/framing.js';
-import { cardBodies, cardRing, createCard, describe } from '../../public/js/wall/galaxy/card.js';
+import { cardBodies, cardRing, cardTint, createCard, describe } from '../../public/js/wall/galaxy/card.js';
 import {
   AT_OVERVIEW, TAP, TOUCH, backControl, backStep, canGoBack, createBack, createGestures, createReturn, createTaps, createTouch,
   hitNearest, memberHit, memberPoints, moonsAt, orbitLimits, placeOf, tapPoints,
@@ -52,8 +53,11 @@ export function listening(tag) {
   return el;
 }
 
-/** The page on the large demo in `explore`, wired as main.js (night 5 T13). */
-export function page() {
+/**
+ * The page on the large demo in `explore`, wired as main.js (night 5 T13). `role` the touch's
+ * (T20): `tour` is the Wall's own, where the first touch wakes it and a minute untouched resumes it.
+ */
+export function page({ role = 'explore' } = {}) {
   let now = 50_000;
   const galaxy = createGalaxyScene({ clientWidth: W, clientHeight: H }, {
     palette: paletteFrom(), doc: fakeDoc, clock: () => now,
@@ -66,8 +70,15 @@ export function page() {
   director.onMove((m) => moves.push(m));
   const finger = director.as('touch');
   const stage = listening('main');
-  const button = listening('button');
-  const touch = createTouch(stage, { clock: () => now, role: 'explore' });
+  // The document as far as the card's focus goes (T20): what has focus, and the keys Esc comes on.
+  const doc = { activeElement: null, body: null };
+  const focusable = (e) => { e.focus = () => { doc.activeElement = e; }; e.blur = () => { if (doc.activeElement === e) doc.activeElement = null; }; return e; };
+  doc.createElement = (t) => focusable(listening(t));
+  const keys = listening('body');
+  const button = focusable(listening('button'));
+  // main.js's resume (T14): a minute untouched, the card goes and the tour has the overview.
+  const touch = createTouch(stage, { clock: () => now, role, resume: () => { resumed += 1; hud.release(); card.close(); place = AT_OVERVIEW; } });
+  let resumed = 0;
   const sheets = [];
   const hud = { open: ({ id }) => sheets.push(id), release: () => sheets.push(null) };
   let place = AT_OVERVIEW;
@@ -81,7 +92,7 @@ export function page() {
     ring: (id) => cardRing(galaxy.world, place.site, id, cam.screenOf),
     flying: () => cam.flight() != null,
     onClose: () => card.close(), onPick: (id) => openPlanet(id, place.site), onAct: (act, id) => cardAct(act, id),
-    doc: { createElement: (t) => listening(t) },
+    doc, keys, focusBack: () => button, clock: () => now,
   });
   // main.js's cardAct (night 5 T19), as written there.
   const cardAct = (act, id) => {
@@ -96,7 +107,7 @@ export function page() {
   cam.onDraw(card.draw);
   const pickCard = (id, site) => {
     hud.release();
-    card.open(describe({ id, site }, galaxy.world));
+    card.open({ ...describe({ id, site }, galaxy.world), tint: cardTint(galaxy.world, site) });
   };
   // main.js's, as written there.
   const toOverview = (pose = null, out = { ms: TOUCH.fitMs }) => {
@@ -163,7 +174,11 @@ export function page() {
       return memberHit(memberPoints(galaxy.world.sites, cam.screenOf), x, y, reach)
         ?? hitNearest(tapPoints(galaxy.world.sites, cam.screenOf), x, y, reach);
     },
-    tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); },
+    tap: (hit) => {
+      if (hit?.covered) return;
+      if (card.shown() && (hit == null || hit.id === card.selected())) { card.close(); return; } // T20
+      if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id);
+    },
     back: () => goBack(),
   });
   const tick = (ms = 16) => {
@@ -220,7 +235,7 @@ export function page() {
     && hitNearest(tapPoints(galaxy.world.sites, cam.screenOf), sp.x, sp.y) == null;
   return {
     galaxy, cam, touch, button, stage, card, sheets, moves, run, tick, tapAt, rightClick, doubleTap, press, drag, toBuilder, isSky,
-    place: () => place, picks: () => picks, now: () => now,
+    doc, keys, place: () => place, picks: () => picks, now: () => now, resumed: () => resumed,
   };
 }
 

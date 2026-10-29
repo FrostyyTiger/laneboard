@@ -1370,3 +1370,22 @@ html.wall body {
   text-transform: uppercase;
 }
 .galaxy-card-note[hidden] { display: none; }
+/* The card's manners (night 5 T20, README §7 Night 5 D5-D6). Its site's tint
+   only as the 2 px top edge (the colour from palette.js's table, set on the
+   card by card.js: no literal here); the galaxy a step darker behind it, the
+   dim under the frame's words so the trouble stays as loud; the fade (150 ms)
+   is card.js's, on the frame clock. A closing card takes no press. Focus
+   lands on the heading without a ring (it is no tab stop); the buttons keep
+   theirs. */
+.galaxy-card[data-tinted] { border-top-color: var(--galaxy-card-tint); }
+.galaxy-card[data-leaving],
+.galaxy-card-leader[data-leaving],
+.galaxy-card-spot[data-leaving] { pointer-events: none; }
+.galaxy-card-name:focus { outline: none; }
+.galaxy-card-dim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in oklch, var(--bg-canvas) 30%, transparent);
+}
+.galaxy-card-dim[hidden] { display: none; }

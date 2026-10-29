@@ -25,7 +25,13 @@
 // `/#/diff…`) or is absent, never a dead button; a fleet action (restart,
 // pause, ack, snooze) and Pin are outline buttons tagged `later` that say so
 // on a tap and do nothing else. No card button calls the network. Its
-// manners (fade, the dim, the ways it closes) are T20's.
+// manners (T20, README §7 Night 5 D5-D6): grey glass, the site's tint only as
+// its 2 px top edge (`cardTint`, from palette.js's table), a 150 ms fade in
+// and out, the galaxy dimmed slightly behind it (under the frame's words: the
+// trouble stays as loud). It closes on ×, Esc, a sideways swipe on it
+// (`CARD_SWIPE`), and main.js closes it on an empty tap, a second tap on its
+// node and the idle minute's hand-back. Focus moves to its heading when it
+// shows and back to the opener (or the Back control) when it closes.
 
 /**
  * The card's numbers, css px: `w` its width (`h` the height assumed until it
@@ -40,7 +46,7 @@ import { GLYPH } from '../caption.js';
 import { BUILDER_ID_RX, isFkey } from '../../core/keys.js';
 import { SEVERITY, TROUBLE } from '../../views/map/model.js';
 import { statusStyle } from '../../views/map/overlays.js';
-import { toneOf, worseTone } from './palette.js';
+import { LOOK, oklchCss, tintOf, toneOf, worseTone } from './palette.js';
 
 /**
  * What the card holds at most: `stats` key numbers, `problems` named below
@@ -48,6 +54,26 @@ import { toneOf, worseTone } from './palette.js';
  * before a `+N`.
  */
 export const CARD_SAYS = Object.freeze({ stats: 4, problems: 3, below: 6 });
+
+/**
+ * The card's manners (T20): `fadeMs` its fade in and out (README D5's
+ * 150 ms; wall.css draws it, the card hides once it has run), a sideways
+ * swipe on it closes it once it ran `swipePx` across and at least `slope`
+ * times as far across as down.
+ */
+export const CARD_SWIPE = Object.freeze({ fadeMs: 150, swipePx: 64, slope: 2 });
+
+/**
+ * Site `site`'s tint for the card's 2 px top edge (T20, palette.js `LOOK`:
+ * its `[H, C]` at `tintL`), a CSS colour, or null for a site the world
+ * does not have. Pure.
+ */
+export function cardTint(world, site) {
+  const s = world?.byId?.get(site);
+  if (s?.index == null) return null;
+  const [h, c] = tintOf(s.index);
+  return oklchCss([LOOK.tintL, c, h]);
+}
 
 const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 const rectAt = (x, y, w, h) => ({ left: x, top: y, right: x + w, bottom: y + h });
@@ -376,16 +402,24 @@ export function cardRing(world, site, id, screenOf) {
  * screen point, `size()` the stage's `{ W, H }`, `covers()` the boxes it keeps
  * off, `bodies(id)` the open system's other planets and moons, `ring(id)`
  * its own open ring's reach (cardRing), `onClose()`
- * when its × is pressed, `onPick(id)` when a Below chip is (select it, fly
+ * when its ×, Esc (on `keys`, the document) or a sideways swipe asks, `onPick(id)` when a Below chip is (select it, fly
  * there), `onAct(act, id, action)` when an action is (`open`, `fly` the
  * page's to do; `below`, `more` and the `later` notes the card's own; a link
  * opens its view by itself). `open(info)` (`describe`'s, or a bare `{ id, name, kind, tone }`), `close()`,
  * `flying()` true while the camera flies (a new card waits for the landing),
  * `draw()` (each frame, after the camera), `shown()`, `selected()` (the id),
  * `cover()` (its box, for the names) and `place()` (the last cardPlace).
+ * T20: `under` the stage child the dim goes before (the frame's words stay
+ * over it), `focusBack()` where focus goes on close when its opener is gone
+ * (the Back control), `clock()` the page's time (the fade out), `reduced`
+ * no fade; `open(info)` takes `info.tint` (cardTint) for the top edge.
  */
 export function createCard(root, opts = {}) {
-  const o = { covers: () => [], bodies: () => [], ring: () => 0, flying: () => false, onClose: () => {}, onPick: () => {}, onAct: () => {}, doc: globalThis.document, ...opts };
+  const o = {
+    covers: () => [], bodies: () => [], ring: () => 0, flying: () => false, onClose: () => {}, onPick: () => {}, onAct: () => {},
+    doc: globalThis.document, keys: opts.doc ?? globalThis.document, under: null, focusBack: () => null,
+    clock: () => globalThis.performance?.now() ?? Date.now(), reduced: false, ...opts,
+  };
   const make = (tag, cls, text) => {
     const e = o.doc.createElement(tag);
     if (cls) e.className = cls;
@@ -399,6 +433,10 @@ export function createCard(root, opts = {}) {
   const dot = make('span', 'galaxy-card-dot');
   dot.setAttribute('aria-hidden', 'true');
   const name = make('span', 'galaxy-card-name');
+  // The heading focus moves to on open (T20, r45-accessibility #1): not a tab stop of its own.
+  name.setAttribute('role', 'heading');
+  name.setAttribute('aria-level', '2');
+  name.setAttribute('tabindex', '-1');
   const kind = make('span', 'galaxy-card-kind');
   const x = make('button', 'galaxy-card-x', '×');
   x.type = 'button';
@@ -536,47 +574,140 @@ export function createCard(root, opts = {}) {
   // The leader: a 1 px span scaled along its length from its left end (as the lock's), and a ring on the node.
   const leader = make('span', 'galaxy-card-leader');
   const spot = make('span', 'galaxy-card-spot');
-  for (const e of [leader, spot]) { e.hidden = true; e.setAttribute('aria-hidden', 'true'); }
+  // The dim (T20): the galaxy a step darker behind the card, under the frame's words (`under`).
+  const dim = make('div', 'galaxy-card-dim');
+  dim.setAttribute('aria-hidden', 'true');
+  for (const e of [leader, spot, dim]) { e.hidden = true; e.setAttribute('aria-hidden', 'true'); }
+  if (o.under && (o.under.parentNode ?? o.under.parent) === root) root.insertBefore(dim, o.under);
+  else root.append(dim);
   root.append(leader, spot, card);
   const keep = (ev) => ev.stopPropagation?.();
   for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'click', 'dblclick', 'contextmenu', 'wheel']) {
     card.addEventListener(type, keep);
   }
   x.addEventListener('click', (ev) => { ev.stopPropagation?.(); o.onClose(); });
+  // A sideways swipe on the card closes it (T20): decided on the move, before the browser may take
+  // the gesture, and the click that may follow the lift is swallowed (no button pressed by a swipe).
+  let swipe = null, swiped = false;
+  card.addEventListener('pointerdown', (ev) => { swipe = { id: ev.pointerId, x: ev.clientX, y: ev.clientY }; swiped = false; });
+  const swipeMove = (ev) => {
+    if (!swipe || ev.pointerId !== swipe.id || !sel) return;
+    const dx = Math.abs(ev.clientX - swipe.x), dy = Math.abs(ev.clientY - swipe.y);
+    if (dx >= CARD_SWIPE.swipePx && dx >= CARD_SWIPE.slope * dy) {
+      swipe = null;
+      swiped = true;
+      o.onClose();
+    }
+  };
+  card.addEventListener('pointermove', swipeMove);
+  card.addEventListener('pointerup', (ev) => { swipeMove(ev); swipe = null; });
+  card.addEventListener('pointercancel', () => { swipe = null; });
+  card.addEventListener('click', (ev) => {
+    if (!swiped) return;
+    swiped = false;
+    ev.stopPropagation?.();
+    ev.preventDefault?.();
+  }, true);
+  // Esc closes it (T20, README D6), wherever focus is.
+  o.keys?.addEventListener?.('keydown', (ev) => {
+    if (ev.key !== 'Escape' || !sel) return;
+    ev.preventDefault?.();
+    o.onClose();
+  });
 
-  let sel = null, measured = null, last = null, wrote = {};
+  // Focus (T20): into the heading when the card shows, back to what had it (or the Back control) on close.
+  const within = (e) => { for (let n = e; n; n = n.parentNode ?? n.parent) if (n === card) return true; return false; };
+  const active = () => o.doc?.activeElement ?? null;
+  let opener = null, focusIn = false;
+  const focus = (e) => e?.focus?.({ preventScroll: true });
+  const giveBack = () => {
+    const a = active();
+    if (a && a !== o.doc?.body && !within(a)) return; // focus went elsewhere meanwhile: leave it there
+    const to = opener && opener.isConnected !== false && !opener.hidden ? opener : o.focusBack();
+    opener = null;
+    if (to && !to.hidden) focus(to);
+    else a?.blur?.();
+  };
+
+  let sel = null, measured = null, last = null, wrote = {}, leaving = null, shownAt = null, alpha = 0, from = 1;
   const put = (e, key, prop, v) => {
     if (wrote[key] === v) return;
     wrote[key] = v;
     e.style[prop] = v;
   };
   const show = (e, on) => { if (e.hidden === on) e.hidden = !on; };
+  // The fade (T20, README D5's 150 ms): an opacity on the frame clock, eased out, written only on
+  // change (the app's sheets keep CSS transitions to 120 ms and animations to its one flash).
+  const parts = [card, leader, spot, dim];
+  const fadeTo = (a) => {
+    alpha = a;
+    const v = a >= 1 ? '' : a.toFixed(2);
+    for (const e of parts) put(e, `fade:${parts.indexOf(e)}`, 'opacity', v);
+  };
+  const hideAll = () => {
+    leaving = null;
+    shownAt = null;
+    for (const e of parts) { delete e.dataset.leaving; show(e, false); }
+    fadeTo(0);
+    card.removeAttribute('inert');
+  };
+  // Closed at once for the page and assistive tech (no selection, inert); faded out over
+  // CARD_SWIPE.fadeMs, then hidden on a draw (at once with reduced motion, or when it never showed).
   const close = () => {
     if (!sel) return;
     sel = null;
     last = null;
-    show(card, false);
-    show(leader, false);
-    show(spot, false);
+    const had = focusIn;
+    focusIn = false;
+    if (card.hidden || o.reduced) hideAll();
+    else {
+      leaving = o.clock();
+      from = alpha;
+      for (const e of parts) if (!e.hidden) e.dataset.leaving = '1';
+      card.setAttribute('inert', '');
+    }
+    if (had) giveBack(); // only focus the card took is given back
+    opener = null;
   };
   const open = (info) => {
     if (!info?.id) { close(); return; }
     const same = sel?.id === info.id;
+    if (!sel) {
+      // Opened afresh: remember where focus was (a button, a chip; nothing after a canvas tap).
+      const a = active();
+      opener = a && a !== o.doc?.body && !within(a) ? a : null;
+    }
+    if (leaving != null) hideAll(); // a card fading out gives way to the new one at once
     sel = { ...info };
+    if (info.tint) {
+      card.style.setProperty('--galaxy-card-tint', info.tint);
+      card.dataset.tinted = '1';
+    } else delete card.dataset.tinted;
     name.textContent = info.name ?? info.id;
     kind.textContent = info.chip ?? String(info.kind ?? '').toUpperCase();
     say(info);
     card.dataset.kind = info.kind ?? '';
     card.dataset.tone = info.tone ?? 'calm';
     card.setAttribute('aria-label', `${info.name ?? info.id}, ${info.kind ?? 'node'}`);
-    if (!same) { last = null; show(card, false); show(leader, false); show(spot, false); } // a new node: its side afresh
+    if (!same) { last = null; focusIn = false; shownAt = null; show(card, false); show(leader, false); show(spot, false); show(dim, false); } // a new node: its side afresh
     measured = null; // its content changed: measured again on the next draw (after the camera's request)
   };
   const draw = () => {
+    const now = o.clock();
+    if (leaving != null) {
+      const k = (now - leaving) / CARD_SWIPE.fadeMs;
+      if (k >= 1) hideAll();
+      else fadeTo(from * (1 - k) * (1 - k));
+    }
     if (!sel) return;
     // It comes as the camera lands (as the plate did): no card placed for a node still flying in, then jumping.
     if (!last && o.flying()) return;
     show(card, true);
+    show(dim, true);
+    shownAt ??= now;
+    const k = o.reduced ? 1 : Math.min(1, (now - shownAt) / CARD_SWIPE.fadeMs);
+    fadeTo(1 - (1 - k) * (1 - k));
+    if (!focusIn) { focusIn = true; focus(name); }
     if (!measured) {
       const w = card.offsetWidth, h = card.offsetHeight;
       measured = { w: w > 0 ? w : CARD.w, h: h > 0 ? h : CARD.h };
@@ -602,5 +733,7 @@ export function createCard(root, opts = {}) {
     place: () => last,
     el: card,
     leaderEl: leader,
+    dimEl: dim,
+    heading: name,
   };
 }

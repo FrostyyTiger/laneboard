@@ -696,8 +696,8 @@ test('galaxy/main.js wires planet taps (T11): members asked before sites, a plan
   const pick = js.slice(js.indexOf('pick: (x, y, ev) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('memberPoints(') >= 0 && pick.indexOf('memberPoints(') < pick.indexOf('tapPoints('), 'members first');
   assert.match(js, /const openPlanet = \(id, site\) => \{\s*left\.leave\(place, cam\);\s*pickCard\(id, site\);/);
-  // Night 5 T12: a tap on empty sky does nothing (no `else goBack()`).
-  assert.match(js, /if \(hit\?\.covered\) return; if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); \/\/ empty sky: nothing/);
+  // Night 5 T12: a tap on empty sky does nothing (no `else goBack()`); T20: it closes an open card, as a second tap on its node does.
+  assert.match(js, /if \(hit\?\.covered\) return;\s*\/\/[^\n]*\n\s*if \(card\?\.shown\(\) && \(hit == null \|\| hit\.id === card\.selected\(\)\)\) \{ card\.close\(\); return; \}\s*if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); \/\/ empty sky: nothing/);
 });
 
 // ---- T13: back ----
