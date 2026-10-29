@@ -518,6 +518,25 @@ Notes for every builder round (planner, round 7):
   at `pointerdown` a 48 px ring under the finger fills while it stays down and fades on lift (a tappable's pressed state,
   `wall.css` rule added, no colour literal) — done when: a test finds a 450 ms press with under 12 px of travel picking the
   member, a 650 ms press picking nothing, and the ring present from `pointerdown` to lift; a touch film frame shows the ring.
+- [ ] T38 (triage, r35-performance #1; night 4's T34 raised) [ui] [variant:galaxy] The overview is the cheapest frame it can
+  be: `?at=overview&quality=0` still draws 84.3k triangles (an open HV1 33.7k) because `scene.js place()` gives every folded
+  member its L0 planet sphere, 2-6 px on screen. While `s.unfold < 0.05` swap a member's geometry to `geo.dot` and hide halos
+  under 1 px; swap back as the system opens past `MOON.from`/the opening starts, with no pop — done when: a test counts
+  `renderer.info.render.triangles` after one `frame()` on the large fixture at the overview and finds at most 25k, and a
+  system opening shows no geometry jump (same member radius before and after the swap); before/after in the notes.
+- [ ] T39 (triage, r35-performance #3) [ui] [variant:galaxy] An open moon ring allocates and uploads nothing while the camera
+  holds still (about +1 ms script per frame and +50 KB/s retained): in `scene.js` write the ring's points straight into the
+  array (no `at()` array per segment), keep one pose object per host with its `moons` array reused, upload the `moonLines`
+  buffer only when `camera.matrixWorld` elements or the ring's `e` changed; in `camera.js pickedShot` cache the host and moon
+  count per `want.member` — done when: a page test on the fake clock holds a picked planet with the camera still and, after
+  the opening settles, finds no `moonLines` position upload over 30 frames, and the ring's points equal the old ones to 1e-6
+  at a moving camera; the moon-ring and pick tests green.
+- [ ] T40 (triage, r35-performance #6; goes with T28) [ui] [variant:galaxy] Big carried bodies keep their roundness at the
+  lowest quality level: at L2 HV1's star (carry 1.6x) shows a flat polygon edge and `dns`/`git-mirror` corners
+  (`r35-perf/moons-open.png`) because `budget.js LEVELS[2].seg` cuts segments in proportion. In `scene.js sphereSegs` floor
+  `planet` and `bigStar` at 20x14 at every level and take the saving from dust and far stars — done when: a test pins the
+  floor at L2 for planet and bigStar and that L2's overview triangles stay at or under night 4's L2 number plus a few hundred
+  (or lower after T38); a still of `?at=hv1&open=1&quality=2` shows round bodies.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -616,6 +635,14 @@ From `r30-touch.md` (past the 3-task limit):
 - r30 fx: beacon pillar a target only within 24 px of base and tip; warp no streak in the first 300 ms after a tap; afterglow ring dashed, never closed or lock-sized; activity never draws a closed ring; sweep ends at `pointerdown`.
 - r30 3 m: `HV2`/`HOME` calm names do not read at a quarter width; the tag and the manual line not at all.
 
+From `r35-performance.md` (past the 3-task limit):
+- r35 #4 Memoise `framing.js freeRect` on a key of W, H, gap and each cover's four numbers (`main.js freeBox`/`pickBox`; 13 % of all bytes allocated).
+- r35 #5 A status change re-runs `galaxyLayout` (`scene.js:1410`; 10.6 % of bytes): compare the tree key first and only `recolour` on the same tree (r60 #6).
+- r35 #7 Read `frame.cover()` once in `freeBox`; mark `hud.js tagCover` dirty from `frame.update`/`live` instead of rebuilding its key each frame.
+- r35 #8 `flightPose` resamples its arc every flight frame (cache `extra`/`scale` per want); night 4 r60 #7 list unchanged (`director.tick` event, `heldDust()` spread, `drawJobs` filter).
+- r35 fx: none filmed but beacon; afterglow/sweep key strings per slot per frame (r60 note stands).
+- r35 #1 is T38, #3 is T39, #6 is T40; night 4's T34 is now T38.
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -653,6 +680,7 @@ slim top bar of fleet totals, map modes.
 - (triage r20, `fx` candidates, taste) `warp`: drop it, or keep it only on a flight to a crit with the target's name in the streak's colour (scored wow 3, streaks not visible); the overview banner's second line as `1 DOWN · 3 ATTENTION · 1 WARN` in big condensed caps instead of `+4 MORE`; a beacon-style vertical mark above every crit visible from any camera, gone when it clears. No new `fx` task this review.
 - (triage r25, taste/direction, not tasks) The skeptic asks for removal: `fx=warp` (streaks not visible, wow 2), `fx=activity` (repeats `7 WORKING`, calm 3) and `fx=afterglow` unless a demo hook can show it; `fx=sweep` reduced to one outline mark on a silent site. Decision for the owner, nothing removed. Also: the galaxy's brightest lines should be the ones that carry data (outer ribbon dimmed, spokes removed, #11/#13).
 - (triage r30, idea, not a task) Steal `fx=beacon`'s idea for the pick framing: a short vertical tick over each tappable planet in an open system, so the aim point is visible even when two spheres touch. The tour hold's layout (system right, plate left, nothing under tag or Back) is the model for the pick framing's free box. No new `fx` task this review.
+- (triage r35, decision, not a task) r35 #2: every rAF renders all day with no frame cap; a kiosk on all day is the heat worst case (§2.4). Proposal: `?cap=30`, off by default (or on for the kiosk URL). Unchanged since r31; needs your call. Also unattributed: listeners 27 flat (r60 had 23), layouts ~10 a second; only the Surface's `?perf=1` can say how the iGPU fills 5 MP at 2x.
 
 ## Reviews
 
@@ -661,6 +689,7 @@ slim top bar of fleet totals, map modes.
 - r20-operator.md: 10 galaxy findings + 5 fx + 3 m check; 3 became tasks (T29 = #1+#2, T30 = #4, T31 = #3); #8 crit size covered by T26, #5/#6/#7 need fenced `tour.js` (patch notes under `## Later`), #9/#10 and fx notes under `## Later`, proposals under `## For the owner`.
 - r25-skeptic.md: 15 galaxy findings + 5 fx + 3 m check; 3 became tasks (T32 = #1+#9, T33 = #12, T34 = #6); #15 covered by T9 (test note under `## Later`), #3 covered by the card (T18) and r10 #10, the rest and the fx notes under `## Later`, removals under `## For the owner`.
 - r30-touch.md: 11 galaxy findings + 5 fx (one each) + 3 m check; 3 became tasks (T35 = #2, T36 = #3 second half, T37 = #5); #1 covered by T12 and #3 first half by T13 (notes added under `## Later`), #11 dropped (no fault), the rest and the fx notes under `## Later`, the beacon-tick idea under `## For the owner`.
+- r35-performance.md: 8 galaxy findings + fx notes + 3 m check (yes); 3 became tasks (T38 = #1, T39 = #3, T40 = #6); #2 (frame cap) under `## For the owner`, #4/#5/#7/#8 and the fx notes under `## Later`.
 
 ## Scores
 
@@ -696,5 +725,11 @@ slim top bar of fleet totals, map modes.
 | 30 | touch | fx-afterglow | | | | | 2 | 7 | |
 | 30 | touch | fx-activity | | | | | 3 | 4 | |
 | 30 | touch | fx-sweep | | | | | 4 | 6 | |
+| 35 | performance | galaxy | 7 | 6 | 7 | 6 | 7 | 6 | 7 |
+| 35 | performance | fx-beacon | | | | | 5 | 6 | |
+| 35 | performance | fx-warp | | | | | 3 | 6 | |
+| 35 | performance | fx-afterglow | | | | | 2 | 7 | |
+| 35 | performance | fx-activity | | | | | 3 | 4 | |
+| 35 | performance | fx-sweep | | | | | 4 | 6 | |
 
 ## Morning
