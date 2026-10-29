@@ -241,6 +241,7 @@ test('galaxy/main.js: the gestures turn round the held site\'s star (pivot), an 
   const g = js.slice(js.indexOf('const gestures = touch && !reduced ? createGestures('), js.indexOf('}) : null;', js.indexOf('const gestures = touch')));
   assert.match(g, /pivot: \(\) => \{/);
   assert.match(g, /w\.kind === 'site' \? galaxy\.world\?\.byId\.get\(w\.id\)\?\.home/);
-  const tap = js.slice(js.indexOf('tap: (hit) =>'), js.indexOf('}) : null;', js.indexOf('tap: (hit) =>')));
+  const tap = js.slice(js.indexOf('tap: (hit) =>'), js.indexOf('back: () =>', js.indexOf('tap: (hit) =>')));
   assert.doesNotMatch(tap, /goBack/, 'empty sky is not a step back');
+  assert.match(js, /back: \(\) => goBack\(\), \/\/ a right-click, a double tap/, 'a double tap is (night 5 T13)');
 });

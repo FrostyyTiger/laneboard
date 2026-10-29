@@ -54,6 +54,16 @@ export const IDLE = Object.freeze({ ms: 60000 });
  */
 export const HANDOVER = Object.freeze({ fitMs: 1500, flyMs: TIMING.flyMs });
 
+/**
+ * A finger's Back that zooms out (night 5 T13, README §7 Night 5 C3, the
+ * sketch's `SOFT.backMs`): a planet's shot out to its system's hold, a system
+ * out to the overview, in `ms` on smootherstep (`soft`: camera.js eases the
+ * move with layout.js `smoother`, no jerk at either end). "Moving out is way
+ * too quick": twice the wake's ease out, which stays `fitMs` (B237's minute
+ * counts from it).
+ */
+export const ZOOM_OUT = Object.freeze({ ms: 3000, soft: true });
+
 /** The overview as a move's target. */
 export const OVERVIEW = Object.freeze({ kind: 'overview' });
 
@@ -96,11 +106,11 @@ export const initialDirector = (driver = 'tour', now = null) => (driver === 'tou
   ? { driver, since: now, last: now, show: null }
   : { driver: 'tour', since: null, last: null, show: null });
 
-function moveOf(source, from, to, ms, still) {
+function moveOf(source, from, to, ms, still, soft = false) {
   if (!to || to.kind === 'stay') return null;
   return still
     ? { source, from: from ?? null, to, ms: 0, cut: true, fadeMs: CUT.fadeMs }
-    : { source, from: from ?? null, to, ms, cut: false };
+    : { source, from: from ?? null, to, ms, cut: false, ...(soft ? { soft: true } : {}) };
 }
 
 const result = (state, extra = {}) => ({ state, move: null, wake: false, resume: false, refused: null, ...extra });
@@ -109,13 +119,13 @@ const result = (state, extra = {}) => ({ state, move: null, wake: false, resume:
  * The next state after `event` at `now` (ms). `state` is `{ driver, since,
  * last, show }` (`last`: the last touch or show command, ms; `show`: the
  * command that drives, `{ id, to }`). `event` is an object:
- * - `{ type: 'touch', to?, ms?, pose? }`: a finger did something. The first touch
+ * - `{ type: 'touch', to?, ms?, soft?, pose? }`: a finger did something. The first touch
  *   while the tour drives takes the camera (`wake`) and eases it out to the
  *   overview; a touch while a show drives takes it without a wake (the page
  *   already explores); later touches with a `to` (a tap, back) move it there
  *   (in `ms`, else `flyMs`: back to the overview takes the wake's fitMs);
  *   without a `to` (a drag, the wheel: the gesture is its own motion) they
- *   only count as a touch.
+ *   only count as a touch. `soft` (a Back's ZOOM_OUT, T13) rides on the move.
  * - `{ type: 'handback' }`: `▶ TOUR`, the idle minute or an undo back to the
  *   tour: the tour at once.
  * - `{ type: 'show', id, to, ms?, pose? }`: a show command's camera move, in
@@ -152,7 +162,7 @@ export function directorStep(state, event, now, opts = {}) {
       return result({ driver: 'touch', since: now, last: now, show: null }, { move: moveOf('touch', pose, event.to, ms, o.still) });
     }
     const ms = Number.isFinite(event.ms) ? event.ms : o.flyMs;
-    return result({ ...s, last: Math.max(s.last ?? now, now) }, { move: moveOf('touch', pose, event.to, ms, o.still) });
+    return result({ ...s, last: Math.max(s.last ?? now, now) }, { move: moveOf('touch', pose, event.to, ms, o.still, event.soft === true) });
   }
 
   if (type === 'handback') {
@@ -226,7 +236,7 @@ export function createDirector(cam, opts = {}) {
   const play = (move) => {
     const { source, to, ms } = move;
     // The tour's legs are camera.js's own (its fit and focus fly FLIGHT.ms), as tour.js always called them.
-    const timed = ms > 0 && source !== 'tour' ? { ms } : undefined;
+    const timed = ms > 0 && source !== 'tour' ? { ms, ...(move.soft ? { soft: true } : {}) } : undefined;
     if (to.kind === 'overview') call(source, 'fit', timed);
     // A show's free pose (fitNodes, setCamera, an undo) is camera.js's `place`: any page, a cut in still mode.
     else if (to.kind === 'free' && source === 'show') call(source, 'place', to.pose, move.cut || to.cut ? { cut: true } : timed);
@@ -234,7 +244,8 @@ export function createDirector(cam, opts = {}) {
     // A planet in it (night 5 B3, camera.js PICK): `{ member }` after the zoom, only when there is one.
     else if (to.kind === 'site' && (move.cut || to.cut) && source !== 'tour') call(source, 'cut', to.id, to.zoom, ...picked(to));
     // A show flies in its own time (c4 §2, D68); a finger's tap and the tour's leg keep camera.js's.
-    else if (to.kind === 'site' && source === 'show' && timed) call(source, 'focus', to.id, to.zoom, { ...timed, ...picked(to)[0] });
+    // A finger's Back out to a system (T13) too: ZOOM_OUT's time and ease.
+    else if (to.kind === 'site' && (source === 'show' || move.soft) && timed) call(source, 'focus', to.id, to.zoom, { ...timed, ...picked(to)[0] });
     else if (to.kind === 'site') call(source, 'focus', to.id, to.zoom, ...picked(to));
   };
   const step = (event) => {
@@ -252,14 +263,15 @@ export function createDirector(cam, opts = {}) {
   const views = new Map();
   const as = (source) => {
     if (views.has(source)) return views.get(source);
-    const ev = (to, ms) => ({ type: source, to, ...(Number.isFinite(ms) ? { ms } : {}) });
+    const ev = (to, ms, soft) => ({ type: source, to, ...(Number.isFinite(ms) ? { ms } : {}), ...(soft === true ? { soft } : {}) });
     const view = {
       ...cam,
-      // `{ member }`: a planet in the site (night 5 B3), camera.js's focus/cut option.
-      focus: (id, zoom, fo) => { step(ev(site(id, zoom, false, fo?.member))); },
+      // `{ member }`: a planet in the site (night 5 B3), camera.js's focus/cut option; `{ ms, soft }`
+      // a finger's Back out to it (T13, ZOOM_OUT).
+      focus: (id, zoom, fo) => { step(ev(site(id, zoom, false, fo?.member), fo?.ms, fo?.soft)); },
       cut: (id, zoom, fo) => { step(ev(site(id, zoom, true, fo?.member))); },
-      fit: (fo) => { step(ev(OVERVIEW, fo?.ms)); },
-      fly: (pose, fo) => { if (pose) step(ev({ kind: 'free', pose }, fo?.ms)); },
+      fit: (fo) => { step(ev(OVERVIEW, fo?.ms, fo?.soft)); },
+      fly: (pose, fo) => { if (pose) step(ev({ kind: 'free', pose }, fo?.ms, fo?.soft)); },
       steer: (pose, so) => {
         // A finger steers once it has the page: its own explore, or a show's (it takes the camera from it).
         // `{ hold: true }` (night 5 T12): a turn round a held system's star keeps that system held.

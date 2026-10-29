@@ -33,7 +33,7 @@
 // `createGalaxyCamera` is the small part that moves the scene's camera.
 
 import * as THREE from '../../../vendor/three/three.module.js';
-import { ease, OPEN_MS } from './layout.js';
+import { ease, OPEN_MS, smoother } from './layout.js';
 import { moonRingPx, overviewShot, siteShot, SIZE, FOV } from './scene.js';
 import { TIMING } from '../tour.js';
 import { flight as mapFlight } from '../../core/motion.js';
@@ -403,7 +403,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     const pbox = typeof pickFree === 'function' ? pickFree() : null;
     pickNow = pbox ? blendRect(pickNow, pbox, pickNow && !still ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
     const p = from ? (now - want.t0) / (want.ms > 0 ? want.ms : flight.ms) : 1;
-    const k = from ? ease(p) : 1;
+    // A finger's Back out (night 5 T13, director.js ZOOM_OUT) eases on smootherstep, every other move cubic.
+    const k = from ? (want.soft ? smoother(p) : ease(p)) : 1;
     flying = from && p < 1 ? { k: p, to: want.kind === 'site' ? want.id : null } : null;
     const to = target(now);
     pose = from && k < 1 ? flightPose(from, to, k, flight, { ...view(), ends: [fromEnd, endFor(to, [starOf(want)])], avoid: avoid() }) : to;
@@ -469,15 +470,16 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   };
 
   const memberOf = (opts) => (opts?.member != null ? { member: opts.member } : {});
+  const softOf = (opts) => (opts?.soft === true ? { soft: true } : {}); // T13: a Back out, on smootherstep
 
   return {
     // `{ ms }`: a show's flight in its own time (c4 §2, showFlightMs); the tour's and a tap's are FLIGHT.ms.
     // `{ member }` (B3): on to that planet in it (a moon: its planet), PICK.
-    focus: (id, zoom, opts) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, ...(opts?.ms > 0 ? { ms: opts.ms } : {}), ...memberOf(opts) }); },
+    focus: (id, zoom, opts) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, ...(opts?.ms > 0 ? { ms: opts.ms } : {}), ...memberOf(opts), ...softOf(opts) }); },
     // No flight, no drift: on the site's shot from the next frame, its system open (T14, reduced motion).
     cut: (id, zoom, opts) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, cut: true, ...memberOf(opts) }); },
     // `{ ms }` flies there in its own time (a first touch, night 3 T7, touch.js); the tour's is FLIGHT.ms.
-    fit: (opts) => go({ kind: 'overview', ...(opts?.ms > 0 ? { ms: opts.ms } : {}) }),
+    fit: (opts) => go({ kind: 'overview', ...(opts?.ms > 0 ? { ms: opts.ms } : {}), ...softOf(opts) }),
     frame,
     drawn: () => { for (const cb of drawCbs) cb(); },
     onDraw: (cb) => {
@@ -531,7 +533,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     // A flight to a finger's pose (night 4 T4: back to the pose it left the overview in), held there.
     fly: (p, opts) => {
       if (!steer || still || !p) return;
-      go({ kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, ...(opts?.ms > 0 ? { ms: opts.ms } : {}) });
+      go({ kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, ...(opts?.ms > 0 ? { ms: opts.ms } : {}), ...softOf(opts) });
     },
   };
 }

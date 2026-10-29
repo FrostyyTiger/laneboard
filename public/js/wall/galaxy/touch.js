@@ -34,10 +34,11 @@
 // on a planet (T11, `memberPoints`, asked before the sites) opens its own
 // sheet (hud.js `sheetCaption`).
 //
-// Back (T13, README §7 Night 3 C4): a big control (`createBack`, BACK.hitPx)
-// and a tap on empty sky each go one step back (`backStep`): a planet → its
-// system → the overview. The control shows only while exploring away from
-// the overview.
+// Back (T13, README §7 Night 3 C4; night 5 T13, README §7 Night 5 C3): a big
+// control (`createBack`, BACK.hitPx), a right-click and a double tap (or
+// double-click) on empty sky each go one step back (`backStep`): a moon → its
+// planet → its system → the overview. A single tap on empty sky does nothing
+// (night 5 T12). The control shows only while exploring away from the overview.
 //
 // The tour resumes (T14, README §7 Night 3 C5): IDLE.ms after the last
 // touch (any pointer on the stage, the wheel, a press on the back control:
@@ -514,6 +515,7 @@ export function createGestures(stage, touch, cam, opts = {}) {
     const now = o.clock();
     if (ev.type === 'pointerdown') {
       if (mode !== 'explore') return;
+      if (ev.button > 0) return; // a right-click is Back (T13), never a turn
       pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       vel = { x: 0, y: 0, zoom: 0 }; // a finger down catches a coast
       if (!take()) return;
@@ -603,9 +605,11 @@ export function createGestures(stage, touch, cam, opts = {}) {
  * drag's slop: what turns the galaxy is never a tap); `radiusPx` the finger's
  * reach round a thing's drawn centre, a disc 54 px across (night 1's Q6: 10 mm
  * is 53 css px on the tablet; above night 2's 48 px floor); `palmPx` a contact
- * wider or taller than this is a palm, not a finger.
+ * wider or taller than this is a palm, not a finger. A second tap on empty
+ * sky within `doubleMs` of the first's lift and `doublePx` of where it
+ * landed is a double tap (night 5 T13: one step back; the sketch's 450 ms, 40 px).
  */
-export const TAP = Object.freeze({ ms: 300, slopPx: ORBIT.slopPx, radiusPx: 27, palmPx: 120, fingerPx: 48, mousePx: 28 });
+export const TAP = Object.freeze({ ms: 300, slopPx: ORBIT.slopPx, radiusPx: 27, palmPx: 120, fingerPx: 48, mousePx: 28, doubleMs: 450, doublePx: 40 });
 
 /**
  * The reach of a tap in screen space (night 5 T11, README §7 Night 5 C1):
@@ -811,24 +815,32 @@ function rowHit(row, sites, open) {
 export const isPalm = (ev, palmPx = TAP.palmPx) => (Number(ev?.width) || 0) > palmPx || (Number(ev?.height) || 0) > palmPx;
 
 /**
- * Taps (T10). `createTaps(touch, { pick, tap, clock })`: `touch` is
+ * Taps (T10). `createTaps(touch, { pick, tap, back, clock })`: `touch` is
  * createTouch's; `pick(x, y, ev)` says what is under a finger (hitNearest over
  * the page's points, its reach by `ev.pointerType`), asked at the `pointerdown` so a thing that drifts under
  * the finger is not lost by the lift; `tap(hit, { x, y })` hears a tap that
  * landed, with `hit` null on empty sky. Only in `explore`; a finger that
  * moves past the slop, stays down past `TAP.ms`, is a palm or has company (a
- * second finger at any time while it is down) is no tap. Returns `{ stop() }`.
+ * second finger at any time while it is down) is no tap.
+ * Back (night 5 T13): `back({ x, y, kind })` hears a right-click (`kind`
+ * `right`: the secondary button down and up within the slop, however long,
+ * never a pick nor a tap) and a double tap on empty sky (`double`: the second
+ * of two empty taps within TAP.doubleMs and TAP.doublePx, told instead of its
+ * `tap(null)`; the first is told as any). Returns `{ stop() }`.
  */
 export function createTaps(touch, opts = {}) {
-  const o = { pick: () => null, tap: () => {}, clock: () => performance.now(), ...opts };
-  const downs = new Map(); // id → { x, y, t, hit, ok }
+  const o = { pick: () => null, tap: () => {}, back: () => {}, clock: () => performance.now(), ...opts };
+  const downs = new Map(); // id → { x, y, t, hit, ok, right }
+  let empty = null; // the last tap on empty sky: `{ x, y, t }` (its lift), for a double tap
   const onPointer = (ev, mode) => {
     if (ev.type === 'pointerdown') {
       if (mode !== 'explore') return;
       const crowd = downs.size > 0;
       for (const d of downs.values()) d.ok = false; // a second finger: a pinch, nobody's tap
       const ok = !crowd && !isPalm(ev);
-      downs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, t: o.clock(), ok, hit: ok ? o.pick(ev.clientX, ev.clientY, ev) : null });
+      // The secondary button (a right-click, a pen's barrel button) is Back, never a pick (T13).
+      const right = ev.button === 2;
+      downs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, t: o.clock(), ok, right, hit: ok && !right ? o.pick(ev.clientX, ev.clientY, ev) : null });
       return;
     }
     const d = downs.get(ev.pointerId);
@@ -839,8 +851,16 @@ export function createTaps(touch, opts = {}) {
     }
     downs.delete(ev.pointerId);
     if (ev.type !== 'pointerup' || !d.ok || mode !== 'explore') return;
-    if (o.clock() - d.t > TAP.ms || Math.hypot(ev.clientX - d.x, ev.clientY - d.y) >= TAP.slopPx) return;
-    o.tap(d.hit ?? null, { x: d.x, y: d.y });
+    if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) >= TAP.slopPx) return;
+    if (d.right) { empty = null; o.back({ x: d.x, y: d.y, kind: 'right' }); return; }
+    const now = o.clock();
+    if (now - d.t > TAP.ms) return;
+    const hit = d.hit ?? null;
+    if (hit != null) { empty = null; o.tap(hit, { x: d.x, y: d.y }); return; }
+    const double = empty && now - empty.t <= TAP.doubleMs && Math.hypot(d.x - empty.x, d.y - empty.y) < TAP.doublePx;
+    if (double) { empty = null; o.back({ x: d.x, y: d.y, kind: 'double' }); return; }
+    empty = { x: d.x, y: d.y, t: now };
+    o.tap(null, { x: d.x, y: d.y });
   };
   const off = touch.onPointer(onPointer);
   return { stop: () => off() };
@@ -853,20 +873,25 @@ export function createTaps(touch, opts = {}) {
  */
 export const BACK = Object.freeze({ hitPx: 80 });
 
-/** Where a finger has taken the page: the whole galaxy, a site's system, or a planet in it. */
+/** Where a finger has taken the page: the whole galaxy, a site's system, a planet in it, or one of its moons. */
 export const AT_OVERVIEW = Object.freeze({ level: 'overview', site: null, planet: null });
 
-/** The place a tapped site (`placeOf(site)`) or planet (`placeOf(site, planet)`) is. Pure. */
-export const placeOf = (site = null, planet = null) => (site == null
-  ? AT_OVERVIEW
-  : Object.freeze({ level: planet == null ? 'site' : 'planet', site, planet: planet ?? null }));
+/**
+ * The place a tapped site (`placeOf(site)`), planet (`placeOf(site, planet)`)
+ * or moon (`placeOf(site, planet, moon)`, night 5 T13: `planet` its host) is. Pure.
+ */
+export const placeOf = (site = null, planet = null, moon = null) => {
+  if (site == null) return AT_OVERVIEW;
+  if (planet != null && moon != null) return Object.freeze({ level: 'moon', site, planet, moon });
+  return Object.freeze({ level: planet == null ? 'site' : 'planet', site, planet: planet ?? null });
+};
 
 /**
  * The planet (or moon) whose moons stand open at `place` (night 5 T8,
- * scene.js openMoons): a picked planet's, null at a system or the overview,
- * so every step away folds them. Pure.
+ * scene.js openMoons): a picked planet's, a picked moon's planet's, null at
+ * a system or the overview, so every step away folds them. Pure.
  */
-export const moonsAt = (place) => (place?.level === 'planet' ? place.planet ?? null : null);
+export const moonsAt = (place) => (place?.level === 'planet' || place?.level === 'moon' ? place.planet ?? null : null);
 
 /**
  * The place after a show's camera move `to` (night 5 T10): a moon's (`{ kind:
@@ -881,7 +906,7 @@ export function showPlace(to, place, byShow = null) {
 }
 
 /** Whether there is a step back from `place` (anywhere but the overview). */
-export const canGoBack = (place) => place?.level === 'site' || place?.level === 'planet';
+export const canGoBack = (place) => place?.level === 'site' || place?.level === 'planet' || place?.level === 'moon';
 
 /** Whether the back control shows: only while a finger explores (never in the tour) and there is a step back. */
 export const backShown = (mode, place) => mode === 'explore' && canGoBack(place);
@@ -900,10 +925,11 @@ export const BACK_WORDS = Object.freeze({
 });
 
 /**
- * One step back (T13): a planet → its system, a system → the overview; the
- * overview stays. Pure.
+ * One step back (T13; night 5 T13): a moon → its planet, a planet → its
+ * system, a system → the overview; the overview stays. Pure.
  */
 export function backStep(place) {
+  if (place?.level === 'moon' && place.site != null) return placeOf(place.site, place.planet);
   if (place?.level === 'planet' && place.site != null) return placeOf(place.site);
   return AT_OVERVIEW;
 }

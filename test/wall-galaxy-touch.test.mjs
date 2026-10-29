@@ -217,7 +217,8 @@ test('galaxy/main.js wires the first touch: tour stopped, the camera fit in TOUC
   // T13: the way out to the overview is shared with the back control.
   assert.match(wake, /toOverview\(\)/);
   const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
-  assert.match(out, /finger\.fit\(\{ ms: TOUCH\.fitMs \}\)/);
+  assert.match(out, /out = \{ ms: TOUCH\.fitMs \}/, 'the wake eases out in TOUCH.fitMs');
+  assert.match(out, /finger\.fit\(out\)/);
   assert.match(out, /hud\.release\(\)/);
   // A new model does not start a stopped tour again (T14 brings it back).
   assert.match(js, /if \(!park && touch\?\.mode\(\) === 'tour' && director\.driver\(\) === 'tour'\) tour\.start\(\);/);
@@ -774,7 +775,9 @@ function backPage(words = null) {
     pick: (x, y) => (words ? coverHit(words.covers, words.rows, p.galaxy.world.sites, x, y, place.site) : null)
       ?? hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), x, y)
       ?? hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), x, y),
-    tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
+    // As main.js (night 5 T12, T13): empty sky once is nothing; a double tap or a right-click is Back.
+    tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); },
+    back: () => goBack(),
   });
   const tick = (ms) => { const r = p.tick(ms); back.show(backShown(p.touch.mode(), place)); return r; };
   const run = (ms) => { for (let t = 0; t < ms; t += 16) tick(16); };
@@ -821,25 +824,28 @@ test('pointer events on the page: the back control walks planet → system → o
   assert.ok(!p.gestures.busy(), 'pressing the control never turned the galaxy');
 });
 
-test('pointer events on the page: a tap on empty sky walks planet → system → overview, then does nothing', () => {
+test('pointer events on the page: a double tap on empty sky walks planet → system → overview (night 5 T13), a single one does nothing', () => {
   const p = backPage();
   p.into();
   const sky = { x: 5, y: 5 };
   assert.equal(hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), sky.x, sky.y), null, 'the corner is empty sky');
   assert.equal(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), sky.x, sky.y), null);
-  p.tapAt(51, sky);
+  const double = (id) => { p.tapAt(id, sky); p.tick(100); p.tapAt(id + 1, sky); p.tick(16); };
+  p.tapAt(50, sky);
   p.tick(16);
+  assert.deepEqual([p.place().level, p.sheets.at(-1)], ['planet', 'cloud-a'], 'one empty tap: nothing');
+  p.run(TAP.doubleMs + 50);
+  double(51);
   assert.deepEqual([p.place().level, p.sheets.at(-1)], ['site', 'cloud']);
   assert.equal(p.cam.want().id, 'cloud');
-  p.tapAt(52, sky);
-  p.tick(16);
+  p.run(TAP.doubleMs + 50);
+  double(53);
   assert.equal(p.place(), AT_OVERVIEW);
   assert.equal(p.cam.want().kind, 'overview');
   p.run(TOUCH.fitMs + 200);
   const n = p.sheets.length, want = p.cam.want();
-  p.tapAt(53, sky);
-  p.tick(16);
-  assert.equal(p.sheets.length, n, 'at the overview empty sky does nothing');
+  double(55);
+  assert.equal(p.sheets.length, n, 'at the overview a double tap does nothing');
   assert.deepEqual(p.cam.want(), want);
 });
 
@@ -878,12 +884,12 @@ test('galaxy/main.js wires back (T13): the control and an empty-sky tap step bac
   assert.match(js, /back\?\.show\(backControl\(m, place\)\);/, 'back away from the overview, ▶ TOUR at it (night 4 T5)');
   const go = js.slice(js.indexOf('const goBack = '), js.indexOf('};', js.indexOf('const goBack = ')));
   assert.match(go, /backStep\(place\)/);
-  assert.match(go, /openSite\(next\.site\)/);
-  assert.match(go, /toOverview\(left\.pose\(\)\)/, 'to the pose the finger left (night 4 T4), else the fit');
+  assert.match(go, /backToSite\(next\.site\)/, 'a planet steps to its system (night 5 T13)');
+  assert.match(go, /toOverview\(left\.pose\(\), ZOOM_OUT\)/, 'to the pose the finger left (night 4 T4), else the fit');
   const wake = js.slice(js.indexOf('wake: () => {'), js.indexOf('},', js.indexOf('wake: () => {')));
   assert.match(wake, /toOverview\(\)/);
   const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
-  for (const rx of [/finger\.fit\(\{ ms: TOUCH\.fitMs \}\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/]) assert.match(out, rx);
+  for (const rx of [/finger\.fit\(out\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/]) assert.match(out, rx);
 });
 
 // ---- night 4 T1: the words are not sky ----

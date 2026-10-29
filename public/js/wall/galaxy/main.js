@@ -40,8 +40,13 @@
 // site's sheet (T11, hud.js sheetCaption: every line, worst first); in an
 // open system a tap on a planet shows the planet's sheet where the camera is.
 // Back (T13, touch.js backStep): the big control top right (only while
-// exploring away from the overview) goes one step back, planet → system →
-// overview, the sheet going with its step. A tap on empty sky does nothing
+// exploring away from the overview), a right-click or a double tap (double-click)
+// on empty sky goes one step back, moon → planet → system → overview (night 5
+// T13, README §7 Night 5 C3), the sheet going with its step. From a moon the
+// camera stays (a moon's shot is its planet's); from a planet its moons fold
+// and the camera stays where the finger turned it, else it eases out to the
+// system's hold; from a system out to the overview. A zoom-out is
+// director.js ZOOM_OUT (3000 ms on smootherstep). A tap on empty sky does nothing
 // (night 5 T12, README §7 Night 5 C2). In a held system a drag turns it round
 // its own star (touch.js orbitRound), the star staying where it is on
 // screen and the system held and open.
@@ -116,7 +121,7 @@ import { applyLift, paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
-import { IDLE, OVERVIEW, STAY, createDirector, showNode, showTarget } from './director.js';
+import { IDLE, OVERVIEW, STAY, ZOOM_OUT, createDirector, showNode, showTarget } from './director.js';
 import { SHOW, createFingerWatch, createShow } from './show.js';
 import { createTransport, showOrigins } from './transport.js';
 import { createShowDemo, wantsShowDemo } from './showdemo.js';
@@ -465,10 +470,11 @@ export function boot() {
   // The pose a finger left the overview in (night 4 T4): back flies there, not to the fit.
   const left = createReturn();
   // Out to the whole galaxy in TOUCH.fitMs (or to the pose it was left in): the plate and the lock go.
-  const toOverview = (pose = null) => {
+  // `out` the move's time (and ease): the wake's TOUCH.fitMs, a Back's ZOOM_OUT (night 5 T13).
+  const toOverview = (pose = null, out = { ms: TOUCH.fitMs }) => {
     cutAway();
-    if (pose && !reduced) finger.fly(pose, { ms: TOUCH.fitMs }); // reduced motion has no free poses to fly to: a cut to the fit
-    else finger.fit({ ms: TOUCH.fitMs });
+    if (pose && !reduced) finger.fly(pose, out); // reduced motion has no free poses to fly to: a cut to the fit
+    else finger.fit(out);
     hud.release();
     place = AT_OVERVIEW;
   };
@@ -538,22 +544,48 @@ export function boot() {
   // A planet in an open system (T11) is asked first: its sheet comes at once, and the camera flies
   // about 45 % closer with the planet left in the free box, its ring and the card on the empty side
   // (night 5 B3, camera.js PICK); a moon's planet stays framed, so a tap on its ring keeps the camera.
+  // A moon is a place of its own (night 5 T13): Back from it steps to its planet. A tap on the
+  // framed planet or one of its moons keeps the camera, turned or not (a moon's shot is its planet's).
   const openPlanet = (id, site) => {
     left.leave(place, cam);
     hud.open({ id, arriveMs: 0 });
-    if (reduced) {
+    const w = cam.want();
+    const host = hostOf(site, id);
+    const framed = w.kind === 'site' && w.id === site && w.member != null && (hostOf(site, w.member) ?? w.member) === (host ?? id);
+    if (framed) { /* the camera stays */ } else if (reduced) {
       finger.cut(site, TIMING.zoom, { member: id });
       fade?.cut();
     } else finger.focus(site, TIMING.zoom, { member: id });
-    place = placeOf(site, id);
+    place = host != null ? placeOf(site, host, id) : placeOf(site, id);
   };
-  // One step back (T13): a planet's sheet gives way to its system's, a system to the overview.
+  // The planet a moon orbits (layout.js moonHosts), null for a planet.
+  const hostOf = (site, id) => {
+    const m = galaxy.world?.byId.get(site)?.members.find((x) => x.id === id);
+    return m?.moon ? m.moon.host?.id ?? m.moon.host ?? null : null;
+  };
+  // Back from a planet to its system (night 5 T13): the place is the system's, so its moons fold;
+  // the camera stays where the finger turned it, else it eases out to the system's hold (ZOOM_OUT).
+  const backToSite = (id) => {
+    const w = cam.want();
+    const kept = w.kind === 'site' && w.id === id && (w.turned != null || w.member == null);
+    if (!kept && reduced) {
+      finger.cut(id, TIMING.zoom);
+      fade?.cut();
+    } else if (!kept) finger.focus(id, TIMING.zoom, ZOOM_OUT);
+    hud.open({ id, arriveMs: kept || reduced ? 0 : ZOOM_OUT.ms });
+    place = placeOf(id);
+  };
+  // One step back (T13; night 5 T13): a moon's sheet gives way to its planet's (the camera stays: a
+  // moon's shot is its planet's), a planet's to its system's, a system to the overview.
   const goBack = () => {
     touch?.poke(); // the control's press never reaches the stage: it counts as a touch here
     if (!canGoBack(place)) return;
     const next = backStep(place);
-    if (next.level === 'site') openSite(next.site);
-    else toOverview(left.pose());
+    if (next.level === 'planet') {
+      hud.open({ id: next.planet, arriveMs: 0 });
+      place = next;
+    } else if (next.level === 'site') backToSite(next.site);
+    else toOverview(left.pose(), ZOOM_OUT);
   };
   // `▶ TOUR` at the overview (night 4 T5): the tour has the page at once, as after the minute.
   const handBack = () => {
@@ -609,6 +641,7 @@ export function boot() {
     tap: (hit) => {
       if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); // empty sky: nothing (T12)
     },
+    back: () => goBack(), // a right-click, a double tap on empty sky (night 5 T13)
   }) : null;
 
   // fx=sweep (night 4 T18, fx.js createSweep): once per tour cycle, while the tour holds the camera
