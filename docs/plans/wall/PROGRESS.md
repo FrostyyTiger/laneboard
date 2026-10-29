@@ -398,7 +398,7 @@ Notes for every builder round (planner, round 7):
 - [x] T15 (§7 Night 5 C4) [ui] [variant:galaxy] The overview turn: 0.0032 rad per px, the camera follows with a short lag
   (about 70 ms), a longer gentler coast (τ about 650 ms), a capped fling speed (`touch.js`, the sketch's `SOFT.perPx`,
   `tauMs`, `follow`, `maxVel`) — done when: a test drags 100 px and finds 0.32 rad of target turn, the camera behind the
-  target during the drag, the coast decaying with the τ, and a 3000 px/s fling capped; the touch tests green. (commit SHA_T15)
+  target during the drag, the coast decaying with the τ, and a 3000 px/s fling capped; the touch tests green. (commit d4bcca4)
   Notes (builder, round 37): `touch.js ORBIT` perPx 0.0032, tauMs 650, new `followMs` 70 and `maxVel` 1.4 px/ms, as
   defaults with no switch (the sketch's `SOFT`). New pure `capVel` and `followStep` (yaw/pitch close the gap as
   1 - exp(-dt/followMs), distance and look at once so a pinch or the wheel never lags; within 1e-4 rad it is the goal).
