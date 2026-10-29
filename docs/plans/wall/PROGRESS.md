@@ -572,7 +572,7 @@ Notes for every builder round (planner, round 7):
   `?at=hv1&open=1` with a builder picked shows card, leader and ring together.
   (r45-accessibility #1, measured: today the card never takes focus — `document.activeElement` stays `BODY` — and Esc leaves it
   open. On open focus the heading (`tabindex=-1`, `focus({ preventScroll: true })`); Esc closes and returns focus to the opener,
-  or to Back after a canvas tap; pin both in a fakedom test.) (commit COMMIT)
+  or to Back after a canvas tap; pin both in a fakedom test.) (commit 42ce20f)
   Notes (builder, round 47): `card.js`: `CARD_SWIPE` {fadeMs 150, swipePx 64, slope 2}; pure `cardTint(world, site)`
   (palette.js `LOOK.tints` at `tintL`, as CSS) → `--galaxy-card-tint` via `style.setProperty`, the 2 px top edge only
   (`[data-tinted]`). **The fade is JS, on the frame clock** (opacity eased out, written only on change, on card,
