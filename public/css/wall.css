@@ -1175,3 +1175,135 @@ html.wall body {
 }
 .galaxy-card-leader[hidden],
 .galaxy-card-spot[hidden] { display: none; }
+/* The card's words (night 5 T18, card.js describe): one scale under the 24 px name, 20 / 15 / 11 px;
+   grey but for the status word, a problem's mark and word, an off value and a chip in trouble. */
+.galaxy-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 12px 0 0;
+}
+.galaxy-card-path {
+  margin-top: -6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.galaxy-card-status,
+.galaxy-card-problem {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 20px;
+}
+.galaxy-card-word {
+  flex: none;
+  font-family: var(--font-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+}
+.galaxy-card-why {
+  min-width: 0;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.galaxy-card-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.galaxy-card-glyph {
+  flex: none;
+  width: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.galaxy-card-more,
+.galaxy-card-chip-more {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+}
+.galaxy-card-more { padding-left: 20px; }
+.galaxy-card-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.galaxy-card-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.galaxy-card-stat[data-wide] { grid-column: span 2; }
+.galaxy-card-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.galaxy-card-value {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 24px;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.galaxy-card-below {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.galaxy-card-below > .galaxy-card-label { flex: 0 0 100%; }
+.galaxy-card-chip {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 12px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-1);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.galaxy-card-chip:active { background: color-mix(in oklch, var(--text-1) 14%, transparent); }
+.galaxy-card-chip:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
+.galaxy-card-chip-more { padding: 0 6px; }
+.galaxy-card-status > .galaxy-card-word[data-tone="crit"],
+.galaxy-card-problem[data-tone="crit"] > .galaxy-card-glyph,
+.galaxy-card-problem[data-tone="crit"] > .galaxy-card-word,
+.galaxy-card-value[data-tone="crit"] { color: var(--crit); }
+.galaxy-card-status > .galaxy-card-word[data-tone="warn"],
+.galaxy-card-problem[data-tone="warn"] > .galaxy-card-glyph,
+.galaxy-card-problem[data-tone="warn"] > .galaxy-card-word,
+.galaxy-card-value[data-tone="warn"] { color: var(--warn); }
+.galaxy-card-status > .galaxy-card-word[data-tone="low"],
+.galaxy-card-problem[data-tone="low"] > .galaxy-card-glyph,
+.galaxy-card-problem[data-tone="low"] > .galaxy-card-word,
+.galaxy-card-value[data-tone="low"] { color: var(--p3); }
+.galaxy-card-chip[data-tone="crit"] { border-color: var(--crit); }
+.galaxy-card-chip[data-tone="warn"] { border-color: var(--warn); }
+.galaxy-card-chip[data-tone="low"] { border-color: var(--p3); }

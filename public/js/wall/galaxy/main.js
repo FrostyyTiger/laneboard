@@ -114,7 +114,7 @@ import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
 import { FIT, FLIGHT, createGalaxyCamera, fitPose, showFlightMs } from './camera.js';
-import { cardBodies, cardInfo, cardRing, createCard } from './card.js';
+import { cardBodies, cardRing, createCard, describe } from './card.js';
 import { createHud } from './hud.js';
 import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
@@ -571,7 +571,7 @@ export function boot() {
   // joining them, instead of the left-hand sheet; the plate goes, the fleet line and the tag stay.
   const pickCard = (id, site) => {
     hud.release();
-    card?.open(cardInfo(galaxy.world, site, id));
+    card?.open(describe({ id, site }, galaxy.world));
   };
   // The planet a moon orbits (layout.js moonHosts), null for a planet.
   const hostOf = (site, id) => {
@@ -646,6 +646,7 @@ export function boot() {
     ring: (id) => cardRing(galaxy.world, place.site, id, cam.screenOf),
     flying: () => cam.flight() != null,
     onClose: () => card.close(),
+    onPick: (id) => openPlanet(id, place.site), // a Below chip (T18): that node, as a tap on it
   }) : null;
   if (card) cam.onDraw(card.draw);
   const taps = touch ? createTaps(touch, {

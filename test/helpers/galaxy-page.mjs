@@ -12,7 +12,7 @@ import { createGalaxyScene } from '../../public/js/wall/galaxy/scene.js';
 import { createGalaxyCamera, FLIGHT } from '../../public/js/wall/galaxy/camera.js';
 import { ZOOM_OUT, createDirector } from '../../public/js/wall/galaxy/director.js';
 import { freeRect } from '../../public/js/wall/galaxy/framing.js';
-import { cardBodies, cardInfo, cardRing, createCard } from '../../public/js/wall/galaxy/card.js';
+import { cardBodies, cardRing, createCard, describe } from '../../public/js/wall/galaxy/card.js';
 import {
   AT_OVERVIEW, TAP, TOUCH, backControl, backStep, canGoBack, createBack, createGestures, createReturn, createTaps, createTouch,
   hitNearest, memberHit, memberPoints, moonsAt, orbitLimits, placeOf, tapPoints,
@@ -80,12 +80,12 @@ export function page() {
     bodies: (id) => cardBodies(galaxy.world, place.site, id, cam.screenOf),
     ring: (id) => cardRing(galaxy.world, place.site, id, cam.screenOf),
     flying: () => cam.flight() != null,
-    onClose: () => card.close(), doc: { createElement: (t) => listening(t) },
+    onClose: () => card.close(), onPick: (id) => openPlanet(id, place.site), doc: { createElement: (t) => listening(t) },
   });
   cam.onDraw(card.draw);
   const pickCard = (id, site) => {
     hud.release();
-    card.open(cardInfo(galaxy.world, site, id));
+    card.open(describe({ id, site }, galaxy.world));
   };
   // main.js's, as written there.
   const toOverview = (pose = null, out = { ms: TOUCH.fitMs }) => {

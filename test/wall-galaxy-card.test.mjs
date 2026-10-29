@@ -2,13 +2,17 @@
 // galaxy/card.js cardPlace beside the node, docked right when it fits on
 // neither side or would cover a planet, never over the fleet line or the tag;
 // on the page a tapped planet gets a card (no sheet) whose leader joins it.
+// What it says (T18, D2): card.js describe for a site, a room, a builder, a
+// service moon and a lane moon; only an off value takes a hue; a Below chip
+// selects its node.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { CARD, cardBodies, cardCover, cardInfo, cardPlace, cardRing, createCard } from '../public/js/wall/galaxy/card.js';
+import { CARD, CARD_SAYS, cardBodies, cardCover, cardInfo, cardPlace, cardRing, createCard, describe } from '../public/js/wall/galaxy/card.js';
+import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { FLIGHT } from '../public/js/wall/galaxy/camera.js';
 import { OPEN_MS } from '../public/js/wall/galaxy/layout.js';
-import { BA, page } from './helpers/galaxy-page.mjs';
+import { BA, LARGE, page } from './helpers/galaxy-page.mjs';
 import { listening } from './helpers/galaxy-page.mjs';
 
 const W = 1368, H = 912;
@@ -200,10 +204,134 @@ test('galaxy/main.js makes the card under the stage, a tapped planet or moon get
   assert.match(js, /covers: \(\) => \[\.\.\.hud\.covers\(\), \.\.\.touchCovers\(\), \.\.\.showCovers\(\)\]/);
   assert.match(js, /if \(card\) cam\.onDraw\(card\.draw\);/);
   const pick = js.slice(js.indexOf('const pickCard = '), js.indexOf('\n  };', js.indexOf('const pickCard = ')));
-  assert.match(pick, /hud\.release\(\);\s*card\?\.open\(cardInfo\(galaxy\.world, site, id\)\);/);
+  assert.match(pick, /hud\.release\(\);\s*card\?\.open\(describe\(\{ id, site \}, galaxy\.world\)\);/);
+  assert.match(js, /onPick: \(id\) => openPlanet\(id, place\.site\),/, 'a Below chip opens its node as a tap on it would');
   const site = js.slice(js.indexOf('const openSite = '), js.indexOf('\n  };', js.indexOf('const openSite = ')));
   assert.match(site, /card\?\.close\(\);\s*hud\.open\(/);
   const over = js.slice(js.indexOf('const toOverview = '), js.indexOf('\n  };', js.indexOf('const toOverview = ')));
   assert.match(over, /card\?\.close\(\);/);
   assert.match(js, /if \(card\?\.shown\(\) && card\.selected\(\) !== \(place\.moon \?\? place\.planet\)\) card\.close\(\);/);
+});
+
+// The large demo's world, as scene.js lays it out.
+const LARGE_WORLD = (() => {
+  const g = galaxyLayout(LARGE);
+  return { byId: new Map(g.sites.map((x) => [x.id, x])) };
+})();
+const say = (id, site) => describe({ id, site }, LARGE_WORLD);
+
+test('describe: a site, its status, its problems by name, its rooms up and loads, its rooms as chips worst first, +N', () => {
+  const d = say('lab', 'lab');
+  assert.deepEqual([d.name, d.kind, d.chip, d.path, d.tone], ['hv1', 'site', 'SITE', null, 'warn']);
+  assert.deepEqual(d.status, { word: 'OK', text: 'demo hypervisor · 128 GB', tone: 'calm' }, 'its own word and what it is');
+  assert.deepEqual(d.problems.map((p) => p.text), [
+    'FEAT-SEARCH · waiting on a permission prompt · 10m', 'FIX-LOGIN · asked a question · 10m', 'ACME-BILLING · task T2 failed in rounds 2, 3',
+  ], 'the trouble below it, named as the sheet named it');
+  assert.deepEqual(d.problems.map((p) => [p.glyph, p.word, p.tone]), [['▲', 'ATTENTION', 'warn'], ['▲', 'ATTENTION', 'warn'], ['▲', 'WARN', 'warn']]);
+  assert.equal(d.more, 0);
+  assert.deepEqual(d.stats.map((x) => [x.label, x.value]), [['rooms up', '13/13'], ['cpu', '34%'], ['mem', '62%'], ['disk', '48%']]);
+  assert.equal(d.stats.length, CARD_SAYS.stats);
+  assert.deepEqual(d.below.map((c) => c.id), ['room-a', 'room-b', 'room-c', 'ci', 'backup', 'proxy'], 'rooms in trouble first, then the model\'s order');
+  assert.deepEqual(d.below.slice(0, 2).map((c) => c.tone), ['warn', 'warn'], 'a room by the worst in it');
+  assert.equal(d.belowMore, 13 - CARD_SAYS.below, '+N for the rest');
+});
+
+test('describe: a room and a builder, their path, their waiting lanes named, the lanes a stat with only the off one in a hue', () => {
+  const room = say('ci', 'lab');
+  assert.deepEqual([room.chip, room.path, room.status.word, room.status.text, room.tone], ['ROOM', 'hv1', 'OK', 'CI runners', 'calm']);
+  assert.deepEqual(room.stats, [{ label: 'cpu', value: '46%', tone: null }, { label: 'mem', value: '66%', tone: null }]);
+  assert.deepEqual(room.below.map((c) => c.label), ['runner-1', 'runner-2', 'runner-3']);
+  assert.deepEqual(room.problems, []);
+  const ba = say(BA, 'lab');
+  assert.deepEqual([ba.name, ba.chip, ba.path, ba.tone], ['BA', 'BUILDER', 'hv1 › vm-a', 'warn']);
+  assert.deepEqual(ba.status, { word: 'OK', text: 'builder-a · 3 lanes', tone: 'calm' });
+  assert.deepEqual(ba.problems.map((p) => p.id), ['lane:builder-a/feat-search', 'lane:builder-a/fix-login'], 'a lane and its waiting session are one problem');
+  assert.deepEqual(ba.stats.slice(0, 2), [{ label: 'lanes', value: '3', tone: null }, { label: 'waiting', value: '2', tone: 'warn' }]);
+  assert.deepEqual(ba.below.map((c) => [c.label, c.tone]), [['feat-search', 'warn'], ['fix-login', 'warn'], ['docs-refresh', 'calm']]);
+});
+
+test('describe: a service moon and a lane moon, their path down to the host, their own why, no chips past the leaves', () => {
+  const svc = say('ci-runner-1', 'lab');
+  assert.deepEqual([svc.kind, svc.chip, svc.path, svc.tone], ['service', 'SERVICE', 'hv1 › ci', 'calm']);
+  assert.deepEqual(svc.status, { word: 'WORKING', text: 'job · 4m', tone: 'calm' });
+  assert.deepEqual([svc.below, svc.belowMore, svc.problems], [[], 0, []]);
+  const lane = say('lane:builder-a/feat-search', 'lab');
+  assert.deepEqual([lane.chip, lane.path, lane.tone], ['LANE', 'hv1 › vm-a › BA', 'warn']);
+  assert.deepEqual(lane.status, { word: 'ATTENTION', text: 'waiting on a permission prompt · 10m', tone: 'warn' });
+  assert.deepEqual(lane.stats.map((x) => x.label), ['cost', 'context', 'age']);
+  assert.deepEqual(lane.stats[0], { label: 'cost', value: '$5.30', tone: null });
+  assert.deepEqual(lane.below.map((c) => c.label), ['search ui', 'search api'], 'its sessions, the waiting one first');
+  assert.equal(describe({ id: 'nope', site: 'lab' }, LARGE_WORLD), null);
+  assert.equal(describe({ id: 'lab', site: 'nope' }, LARGE_WORLD), null);
+});
+
+test('describe and the card: a calm stat has no hue, an off one takes its tone; the ID goes to the chip; more than three problems give +N', () => {
+  const site = { id: 's', kind: 'site', label: 'hv9', status: 'ok' };
+  const room = { id: 'r', parent: 's', kind: 'room', label: 'vm-z', status: 'ok', metrics: { cpu: 0.4, mem: 0.9, disk: 0.97 }, detail: { ID: 301, Uptime: '3h' } };
+  const svcs = [1, 2, 3, 4, 5].map((i) => ({ id: `r-${i}`, parent: 'r', kind: 'service', label: `svc-${i}`, status: i === 5 ? 'down' : 'warn', why: `why ${i}` }));
+  const world = { byId: new Map([['s', { id: 's', node: site, members: [room, ...svcs].map((n) => ({ id: n.id, node: n })) }]]) };
+  const d = describe({ id: 'r', site: 's' }, world);
+  assert.equal(d.chip, 'ROOM · 301');
+  assert.deepEqual(d.stats, [
+    { label: 'cpu', value: '40%', tone: null }, { label: 'mem', value: '90%', tone: 'warn' }, { label: 'disk', value: '97%', tone: 'crit' }, { label: 'uptime', value: '3h', tone: null },
+  ]);
+  assert.deepEqual([d.tone, d.problems[0].text, d.problems.length, d.more], ['crit', 'SVC-5 · why 5', CARD_SAYS.problems, 2], 'worst first, +2 more');
+  assert.equal(d.below[0].id, 'r-5');
+
+  const card = createCard(listening('main'), { screenOf: () => ({ x: 300, y: 300, r: 10 }), size: () => ({ W, H }), doc: { createElement: (t) => listening(t) } });
+  card.open(d);
+  card.draw();
+  const all = (e) => [e, ...e.children.flatMap(all)];
+  const els = all(card.el);
+  const values = els.filter((e) => e.className === 'galaxy-card-value');
+  assert.deepEqual(values.map((e) => [e.textContent, e.dataset.tone]), [['40%', undefined], ['90%', 'warn'], ['97%', 'crit'], ['3h', undefined]], 'a calm value carries no tone');
+  assert.equal(els.find((e) => e.className === 'galaxy-card-kind').textContent, 'ROOM · 301');
+  assert.equal(els.find((e) => e.className === 'galaxy-card-path').textContent, 'hv9');
+  assert.equal(els.find((e) => e.className === 'galaxy-card-more').textContent, '+2 MORE');
+  const word = els.find((e) => e.className === 'galaxy-card-word');
+  assert.deepEqual([word.textContent, word.dataset.tone], ['OK', undefined], 'its own calm status word is grey');
+  const chips = els.filter((e) => e.className === 'galaxy-card-chip');
+  assert.deepEqual(chips.map((c) => [c.tagName, c.textContent, c.getAttribute('aria-label')]).slice(0, 2), [['BUTTON', 'svc-5', 'Fly to svc-5'], ['BUTTON', 'svc-1', 'Fly to svc-1']]);
+  assert.equal(chips[0].dataset.tone, 'crit');
+  assert.ok(!els.some((e) => e.innerHTML), 'no innerHTML');
+  const css = fs.readFileSync(new URL('../public/css/wall.css', import.meta.url), 'utf8');
+  const rule = css.slice(css.indexOf('.galaxy-card-chip {'), css.indexOf('}', css.indexOf('.galaxy-card-chip {')));
+  assert.match(rule, /min-height: 48px;/);
+  assert.match(rule, /touch-action: manipulation;/);
+  assert.match(css, /\.galaxy-card-chip:active \{/, 'a visible pressed state');
+  // Opened again on another node: what it said before is gone.
+  card.open(describe({ id: 'r-1', site: 's' }, world));
+  assert.equal(all(card.el).filter((e) => e.className === 'galaxy-card-chip').length, 0);
+});
+
+test('the page: a Below chip on a planet\'s card selects that node and flies there, its card replacing the old one', () => {
+  const p = page();
+  p.toBuilder();
+  p.run(FLIGHT.ms + OPEN_MS);
+  const all = (e) => [e, ...e.children.flatMap(all)];
+  const chip = all(p.card.el).find((e) => e.className === 'galaxy-card-chip' && e.dataset.id === 'lane:builder-a/feat-search');
+  assert.ok(chip, 'the waiting lane is a chip');
+  const ev = chip.dispatch('click');
+  assert.equal(ev.stopped, true, 'the press stays on the card');
+  p.tick(16);
+  assert.deepEqual([p.place().level, p.place().moon, p.card.selected()], ['moon', 'lane:builder-a/feat-search', 'lane:builder-a/feat-search']);
+  p.run(FLIGHT.ms + OPEN_MS);
+  assert.equal(p.card.el.hidden, false, 'its card shows');
+  assert.ok(all(p.card.el).some((e) => e.className === 'galaxy-card-chip' && e.dataset.id === 'sess:builder-a/search ui'), 'the lane\'s own chips now');
+});
+
+test('cardPlace: docked, the card never covers its own node; the right edge first, else the left; the leader meets its edge', () => {
+  // A moon too near the right edge for the right side, planets left of it: the dock, but not over the moon.
+  const at = { x: 1051, y: 350, r: 13 };
+  const bodies = [{ x: 860, y: 350, r: 14 }, { x: 900, y: 250, r: 12 }, { x: 880, y: 450, r: 12 }];
+  const p = cardPlace({ at, size: { w: 360, h: 350 }, W, H, covers: [TAG, FLEET], bodies });
+  assert.equal(p.side, 'dock');
+  const r = cardCover(p);
+  assert.ok(distToCircle(at, r) >= Math.max(at.r, CARD.hitPx), 'the node stays in sight');
+  assert.ok(p.leader, 'a leader to it');
+  assert.ok(Math.abs(p.leader.y2 - r.top) < 1e-6 || Math.abs(p.leader.y2 - r.bottom) < 1e-6 || Math.abs(p.leader.x2 - r.left) < 1e-6 || Math.abs(p.leader.x2 - r.right) < 1e-6, 'ending on the card\'s edge');
+  // Words fill the right edge's whole height: the left edge takes it.
+  const right = { left: W - 400, top: 0, right: W, bottom: H };
+  const q = cardPlace({ at: { x: 700, y: 450, r: 12 }, size: { w: 360, h: 350 }, W, H, covers: [right], bodies: [{ x: 640, y: 450, r: 14 }, { x: 760, y: 450, r: 14 }] });
+  assert.deepEqual([q.side, q.x], ['dock', CARD.edge]);
 });
