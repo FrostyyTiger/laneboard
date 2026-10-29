@@ -80,8 +80,15 @@ export function page() {
     bodies: (id) => cardBodies(galaxy.world, place.site, id, cam.screenOf),
     ring: (id) => cardRing(galaxy.world, place.site, id, cam.screenOf),
     flying: () => cam.flight() != null,
-    onClose: () => card.close(), onPick: (id) => openPlanet(id, place.site), doc: { createElement: (t) => listening(t) },
+    onClose: () => card.close(), onPick: (id) => openPlanet(id, place.site), onAct: (act, id) => cardAct(act, id),
+    doc: { createElement: (t) => listening(t) },
   });
+  // main.js's cardAct (night 5 T19), as written there.
+  const cardAct = (act, id) => {
+    touch?.poke();
+    if (act === 'open' && galaxy.world?.byId.has(id)) openSite(id);
+    else if (act === 'fly' && id != null && place.site != null) finger.focus(place.site, TIMING.zoom, { member: id });
+  };
   cam.onDraw(card.draw);
   const pickCard = (id, site) => {
     hud.release();

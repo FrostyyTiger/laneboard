@@ -19,7 +19,13 @@
 // below it by name (r40-stranger #3: the sheet's words must not be lost),
 // 3-4 key stats where only the off value takes a hue, and a Below strip of
 // child chips (a tap selects that node and flies there, `onPick`). Its
-// actions and its manners (fade, the dim, the ways it closes) are T19-T20's.
+// actions (T19, README §7 Night 5, the card's items 3-4) are `cardActions`', pure: at most
+// four in a row and the rest behind `…`; navigation works (`onAct`), a link
+// opens an existing app view in a new tab (`/#/board…`, `/#/runs…`,
+// `/#/diff…`) or is absent, never a dead button; a fleet action (restart,
+// pause, ack, snooze) and Pin are outline buttons tagged `later` that say so
+// on a tap and do nothing else. No card button calls the network. Its
+// manners (fade, the dim, the ways it closes) are T20's.
 
 /**
  * The card's numbers, css px: `w` its width (`h` the height assumed until it
@@ -31,6 +37,7 @@
 export const CARD = Object.freeze({ w: 360, h: 200, gap: 24, hitPx: 24, edge: 16, pad: 8, bodyPx: 10, spot: 14 });
 
 import { GLYPH } from '../caption.js';
+import { BUILDER_ID_RX, isFkey } from '../../core/keys.js';
 import { SEVERITY, TROUBLE } from '../../views/map/model.js';
 import { statusStyle } from '../../views/map/overlays.js';
 import { toneOf, worseTone } from './palette.js';
@@ -178,7 +185,7 @@ const ago = (ms) => (ms >= 86_400_000 ? `${Math.floor(ms / 86_400_000)}d` : ms >
  * CARD_SAYS.stats `{ label, value, tone }` from the model, `tone` null
  * unless the value is off; `below` its children as chips `{ id, label, tone }`,
  * worst first (each by the worst in it), `belowMore` the ones past
- * CARD_SAYS.below. Pure.
+ * CARD_SAYS.below (`belowRest` those chips); `actions` cardActions'. Pure.
  */
 export function describe(sel, world) {
   const site = world?.byId?.get(sel?.site);
@@ -271,7 +278,64 @@ export function describe(sel, world) {
     stats,
     below: chips.slice(0, CARD_SAYS.below).map((c) => ({ id: c.id, label: c.label, tone: toneOf(c.status) })),
     belowMore: Math.max(0, chips.length - CARD_SAYS.below),
+    // The chips past the strip's six, shown by `What's below` (T19).
+    belowRest: chips.slice(CARD_SAYS.below).map((c) => ({ id: c.id, label: c.label, tone: toneOf(c.status) })),
+    actions: cardActions(node, { kind, under: under(node.id), direct }),
   };
+}
+
+/**
+ * What the action row holds at most before `…`, and what a `later` button
+ * says when it is tapped (README §7 Night 5, the card's item 4: fleet actions are cockpit C6).
+ */
+export const CARD_ACTS = Object.freeze({ row: 4, later: 'comes later, with the cockpit', fleet: 'The Wall changes nothing in the fleet.' });
+
+// The app's views a card links to (core/router.js formatHash's grammar), opened in a new tab: the Wall stays up.
+const appHash = (view, q) => {
+  const parts = Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+  return `/#/${view}${parts.length ? `?${parts.join('&')}` : ''}`;
+};
+const builderOf = (n) => (typeof n?.builder === 'string' && BUILDER_ID_RX.test(n.builder) ? n.builder : null);
+const runOf = (n) => (n?.kind === 'run' && typeof n.run === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(n.run) ? n.run : null);
+
+/**
+ * The card's buttons for `node` of kind `kind` (`site` for a site), in the
+ * plan's order per type (README §7 Night 5, the card's item 3): `under` every node below it,
+ * `direct` its children. Each `{ id, label, act, href?, says? }`: `act` `go`
+ * (navigation, done by the page: `open`, `below`, `fly`), `link` (an app view,
+ * `href` same-origin `/#/…`) or `later` (disabled, `says` what a tap says). One
+ * whose target does not exist is left out (Logs, Terminal and Proxmox: the
+ * model names no such view or address). Returns `{ row, more }`: the first
+ * CARD_ACTS.row, the rest behind `…`. Pure.
+ */
+export function cardActions(node, { kind = node?.kind, under = [], direct = [] } = {}) {
+  if (!node) return { row: [], more: [] };
+  const go = (id, label) => ({ id, label, act: 'go' });
+  const link = (id, label, href) => (href ? { id, label, act: 'link', href } : null);
+  const later = (id, label, what, fleet = true) => ({ id, label, act: 'later', says: `${what} ${CARD_ACTS.later}.${fleet ? ` ${CARD_ACTS.fleet}` : ''}` });
+  const own = builderOf(node);
+  const builders = [...new Set([own, ...under.map(builderOf)].filter(Boolean))];
+  const board = link('board', 'Board', builders.length === 1 ? appHash('board', { b: builders[0] }) : builders.length > 1 ? appHash('board', {}) : null);
+  const below = direct.length ? go('below', "What's below") : null;
+  const fly = go('fly', 'Fly to');
+  const pin = later('pin', 'Pin', 'Pinning', false); // the room's shared pins (show.js) are the cockpit's
+  const fkey = isFkey(node.fkey) ? node.fkey : null;
+  const log = fkey && own ? link('log', 'Log', appHash('board', { b: own, sel: fkey, open: 'transcript' })) : null;
+  const run = [node, ...under].map(runOf).find(Boolean);
+  const alert = TROUBLE.includes(node.status) ? [later('ack', 'Ack', 'Acknowledging an alert'), later('snooze', 'Snooze', 'Snoozing an alert')] : [];
+  const lists = {
+    site: [go('open', 'Open'), below, board, pin, ...alert],
+    room: [board, below, pin, fly, ...alert],
+    host: [board, below, pin, fly, ...alert],
+    builder: [link('runlog', 'Run log', run ? appHash('runs', { run }) : null), below, board, pin, later('pause', 'Pause', 'Pausing a builder'), ...alert],
+    service: [board, pin, fly, later('restart', 'Restart', 'Restarting a service'), ...alert],
+    // The lane's PR slot: the app's diff view of the lane (the model carries no PR address).
+    lane: [log, link('diff', 'Diff', fkey ? appHash('diff', { sel: fkey }) : null), pin, fly, later('pause', 'Pause', 'Pausing a lane'), ...alert],
+    session: [log, pin, fly, ...alert],
+    run: [link('runlog', 'Run log', runOf(node) ? appHash('runs', { run: runOf(node) }) : null), below, pin, fly, ...alert],
+  };
+  const all = (lists[kind] ?? [below, pin, fly, ...alert]).filter(Boolean);
+  return { row: all.slice(0, CARD_ACTS.row), more: all.slice(CARD_ACTS.row) };
 }
 
 /**
@@ -313,13 +377,15 @@ export function cardRing(world, site, id, screenOf) {
  * off, `bodies(id)` the open system's other planets and moons, `ring(id)`
  * its own open ring's reach (cardRing), `onClose()`
  * when its × is pressed, `onPick(id)` when a Below chip is (select it, fly
- * there). `open(info)` (`describe`'s, or a bare `{ id, name, kind, tone }`), `close()`,
+ * there), `onAct(act, id, action)` when an action is (`open`, `fly` the
+ * page's to do; `below`, `more` and the `later` notes the card's own; a link
+ * opens its view by itself). `open(info)` (`describe`'s, or a bare `{ id, name, kind, tone }`), `close()`,
  * `flying()` true while the camera flies (a new card waits for the landing),
  * `draw()` (each frame, after the camera), `shown()`, `selected()` (the id),
  * `cover()` (its box, for the names) and `place()` (the last cardPlace).
  */
 export function createCard(root, opts = {}) {
-  const o = { covers: () => [], bodies: () => [], ring: () => 0, flying: () => false, onClose: () => {}, onPick: () => {}, doc: globalThis.document, ...opts };
+  const o = { covers: () => [], bodies: () => [], ring: () => 0, flying: () => false, onClose: () => {}, onPick: () => {}, onAct: () => {}, doc: globalThis.document, ...opts };
   const make = (tag, cls, text) => {
     const e = o.doc.createElement(tag);
     if (cls) e.className = cls;
@@ -343,8 +409,16 @@ export function createCard(root, opts = {}) {
   card.append(head, body);
   const toned = (e, tone) => { if (tone && tone !== 'calm') e.dataset.tone = tone; return e; };
   const label = (text) => make('span', 'galaxy-card-label', text);
+  // What a `later` button says when tapped (T19), under the action row.
+  const note = make('div', 'galaxy-card-note');
+  note.setAttribute('role', 'status');
+  note.hidden = true;
+  let rest = null;
   const say = (info) => {
     body.textContent = '';
+    note.textContent = '';
+    note.hidden = true;
+    rest = null;
     if (info.path) body.append(make('div', 'galaxy-card-path', info.path));
     if (info.status) {
       const row = make('div', 'galaxy-card-status');
@@ -377,17 +451,87 @@ export function createCard(root, opts = {}) {
     if (info.below?.length) {
       const strip = make('div', 'galaxy-card-below');
       strip.append(label('below'));
-      for (const c of info.below) {
-        const chip = toned(make('button', 'galaxy-card-chip', c.label), c.tone);
-        chip.type = 'button';
-        chip.dataset.id = c.id;
-        chip.setAttribute('aria-label', `Fly to ${c.label}`);
-        chip.addEventListener('click', (ev) => { ev.stopPropagation?.(); o.onPick(c.id); });
-        strip.append(chip);
+      for (const c of info.below) strip.append(chipFor(c));
+      if (info.belowMore > 0) {
+        const more = make('span', 'galaxy-card-chip-more', `+${info.belowMore}`);
+        strip.append(more);
+        rest = { strip, more, chips: info.belowRest ?? [] };
       }
-      if (info.belowMore > 0) strip.append(make('span', 'galaxy-card-chip-more', `+${info.belowMore}`));
       body.append(strip);
     }
+    if (info.actions?.row?.length) {
+      // The action row (T19): at most four and `…` for the rest, each a 48 px button or link.
+      const acts = make('div', 'galaxy-card-acts');
+      for (const a of info.actions.row) acts.append(action(a));
+      body.append(acts);
+      if (info.actions.more?.length) {
+        const extra = make('div', 'galaxy-card-acts');
+        extra.dataset.more = '1';
+        extra.hidden = true;
+        for (const a of info.actions.more) extra.append(action(a));
+        const dots = make('button', 'galaxy-card-act', '…');
+        dots.type = 'button';
+        dots.dataset.act = 'more';
+        dots.setAttribute('aria-label', 'More actions');
+        dots.setAttribute('aria-expanded', 'false');
+        dots.addEventListener('click', (ev) => {
+          ev.stopPropagation?.();
+          extra.hidden = !extra.hidden;
+          dots.setAttribute('aria-expanded', String(!extra.hidden));
+          measured = null; // taller or shorter: measured again
+          o.onAct('more', sel?.id);
+        });
+        acts.append(dots);
+        body.append(extra);
+      }
+      body.append(note);
+    }
+  };
+  // `What's below` (T19): the strip shows every child, not six and `+N`; focus goes to its first chip.
+  const showBelow = () => {
+    if (rest) {
+      for (const c of rest.chips) rest.strip.insertBefore(chipFor(c), rest.more);
+      rest.more.remove();
+      rest = null;
+      measured = null;
+    }
+    body.querySelector?.('.galaxy-card-chip')?.focus?.();
+  };
+  const action = (a) => {
+    const later = a.act === 'later';
+    const e = make(a.act === 'link' ? 'a' : 'button', 'galaxy-card-act', a.label);
+    e.dataset.act = a.id;
+    if (a.act === 'link') {
+      e.setAttribute('href', a.href);
+      e.setAttribute('target', '_blank');
+      e.setAttribute('rel', 'noopener');
+    } else e.type = 'button';
+    if (later) {
+      // Not `disabled`: a disabled button takes no tap, and a tap must say why (README §7 Night 5 D4).
+      e.setAttribute('aria-disabled', 'true');
+      e.dataset.later = '1';
+      e.setAttribute('aria-label', `${a.label}, later`);
+      e.append(make('span', 'galaxy-card-later', 'later'));
+    }
+    e.addEventListener('click', (ev) => {
+      ev.stopPropagation?.();
+      if (later) {
+        ev.preventDefault?.();
+        note.textContent = a.says;
+        note.hidden = false;
+        measured = null;
+      } else if (a.id === 'below') showBelow();
+      o.onAct(a.id, sel?.id, a);
+    });
+    return e;
+  };
+  const chipFor = (c) => {
+    const chip = toned(make('button', 'galaxy-card-chip', c.label), c.tone);
+    chip.type = 'button';
+    chip.dataset.id = c.id;
+    chip.setAttribute('aria-label', `Fly to ${c.label}`);
+    chip.addEventListener('click', (ev) => { ev.stopPropagation?.(); o.onPick(c.id); });
+    return chip;
   };
   // The leader: a 1 px span scaled along its length from its left end (as the lock's), and a ring on the node.
   const leader = make('span', 'galaxy-card-leader');

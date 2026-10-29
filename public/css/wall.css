@@ -1307,3 +1307,66 @@ html.wall body {
 .galaxy-card-chip[data-tone="crit"] { border-color: var(--crit); }
 .galaxy-card-chip[data-tone="warn"] { border-color: var(--warn); }
 .galaxy-card-chip[data-tone="low"] { border-color: var(--p3); }
+/* The card's actions (night 5 T19, card.js cardActions): at most four in a row and `…`, each a 48 px
+   outline target on the chips' face and size; a link to an app view looks the same. A `later` one is a
+   dashed outline in the quiet grey with a small `later` under its word; a tap says so in the note. */
+.galaxy-card-acts {
+  display: flex;
+  gap: 6px;
+}
+.galaxy-card-acts:not([data-more]) {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.galaxy-card-acts[hidden] { display: none; }
+.galaxy-card-act {
+  flex: 1 1 0;
+  min-width: 48px;
+  min-height: 48px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--text-1);
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.galaxy-card-act[data-act="more"] { flex: 0 0 48px; font-size: 20px; }
+.galaxy-card-act[data-later] {
+  color: var(--text-3);
+  border: 1px dashed var(--line);
+  cursor: default;
+}
+.galaxy-card-act:active { background: color-mix(in oklch, var(--text-1) 14%, transparent); }
+.galaxy-card-act:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
+.galaxy-card-later {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 12px;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+}
+.galaxy-card-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+  text-transform: uppercase;
+}
+.galaxy-card-note[hidden] { display: none; }

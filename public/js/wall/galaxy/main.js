@@ -573,6 +573,19 @@ export function boot() {
     hud.release();
     card?.open(describe({ id, site }, galaxy.world));
   };
+  // A card's action (night 5 T19, card.js cardActions): it counts as a touch (the card's presses never
+  // reach the stage); `Open` flies into a site, `Fly to` frames its node again (after a turn, it is back
+  // in the free box). Links open their app view by themselves; `later` buttons only say so.
+  const cardAct = (act, id) => {
+    touch?.poke();
+    if (act === 'open' && galaxy.world?.byId.has(id)) openSite(id);
+    else if (act === 'fly' && id != null && place.site != null) {
+      if (reduced) {
+        finger.cut(place.site, TIMING.zoom, { member: id });
+        fade?.cut();
+      } else finger.focus(place.site, TIMING.zoom, { member: id });
+    }
+  };
   // The planet a moon orbits (layout.js moonHosts), null for a planet.
   const hostOf = (site, id) => {
     const m = galaxy.world?.byId.get(site)?.members.find((x) => x.id === id);
@@ -647,6 +660,7 @@ export function boot() {
     flying: () => cam.flight() != null,
     onClose: () => card.close(),
     onPick: (id) => openPlanet(id, place.site), // a Below chip (T18): that node, as a tap on it
+    onAct: (act, id) => cardAct(act, id), // its actions (T19)
   }) : null;
   if (card) cam.onDraw(card.draw);
   const taps = touch ? createTaps(touch, {

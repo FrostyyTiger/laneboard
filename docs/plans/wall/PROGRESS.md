@@ -506,13 +506,44 @@ Notes for every builder round (planner, round 7):
   **Seen:** in the first take a tap on `scr('storage')` while HV1's BA was framed (HV2 not on screen) left the camera
   very close to HV1's star with BA's card still up (frames 07-08 of that take, overwritten): a tap on a point from a
   node off the frame; worth a look by T35/T36's rounds. The site's tap keeps its sheet (T19 decides the site card).
-- [ ] T19 (§7 Night 5 D3+D4) [ui] [variant:galaxy] The card's actions per type, at most 4 and `…`: site (Open, What's below,
+- [x] T19 (§7 Night 5 D3+D4) [ui] [variant:galaxy] The card's actions per type, at most 4 and `…`: site (Open, What's below,
   Board, Pin; `…` Proxmox link), room (Logs, Board, What's below, Pin; `…` Fly to, Terminal link, Proxmox link), builder (Run
   log, What's below, Board, Pin), service moon (Logs, Board, Pin, Fly to), lane moon (Log, PR, Pin, Fly to). Navigation
   works; links open existing app views or are absent (never a dead button). Fleet actions (restart a service, pause a builder
   or lane, snooze or ack) are disabled outline buttons tagged `later` in their slots; a tap says so; nothing touches the fleet,
   nothing heavier ever appears — done when: tests per type list the buttons in order, find no button without a handler or an
-  existing target, every `later` button disabled and saying so on tap, and no network call from any card button.
+  existing target, every `later` button disabled and saying so on tap, and no network call from any card button. (commit COMMIT)
+  Notes (builder, round 43): `card.js cardActions(node, { kind, under, direct })` (pure, in `describe` as `actions`
+  `{ row, more }`): the plan's order per type, absent ones dropped, the first `CARD_ACTS.row` 4 in the row and the rest
+  behind a 48 px `…` (`aria-expanded`, a second row). Each is `go` (`open`, `below`, `fly`: main.js `cardAct`, which
+  pokes the idle minute since card presses never reach the stage), `link` (an `<a>` to `/#/board?b=…`,
+  `/#/board?b=…&sel=<fkey>&open=transcript`, `/#/runs?run=…` or `/#/diff?sel=<fkey>`, `target=_blank rel=noopener`: the
+  Wall stays up) or `later`. **Decisions:** Logs (room, service), Terminal and Proxmox are absent: the app has no logs
+  view and the model carries no terminal or Proxmox address (adding one is `server/*`, fenced). Board is the builder's
+  board (a site with several builders: the whole board; none below: absent). Run log only when a run hangs below the
+  builder (builder-b yes, builder-a no). The lane's PR slot is `Diff` (the app's diff view; no PR address in the model).
+  **Pin is `later`**: the only pins are the cockpit room's shared ones (`show.js`, a network message), so it says
+  "Pinning comes later, with the cockpit." Fleet `later`s: Restart (service), Pause (builder, lane), Ack and Snooze (a
+  node whose own status is trouble); nothing for rooms or hosts. A `later` is `aria-disabled`, not `disabled` (a
+  disabled button takes no tap), dashed in `--line` with a small `later`; a tap writes the note (`role=status`).
+  `What's below` shows every child chip (`describe`'s new `belowRest`, no `+N` left). `Fly to` re-frames the node
+  (`finger.focus(site, zoom, { member })`), clearing a turn. `wall.css`: rules added only (`.galaxy-card-acts`,
+  `-act`, `-later`, `-note`), 15 px label face like the chips, a long word wraps to two lines in its 48 px button.
+  Test: `test/wall-galaxy-card-actions.test.mjs` (6: order per type; every button on every large-demo node has a page
+  action or a same-origin view whose builder/run/fkey exists, later ones say so, no restart of a room; the DOM: links,
+  aria-disabled, the note, `…`; What's below; the page: Fly to after a turn, the other buttons move nothing, fetch/XHR/
+  WebSocket stubbed and never called, no network API in card.js; main.js wiring). `test/helpers/galaxy-page.mjs` mirrors
+  `cardAct`. Found: `test/render.test.mjs` fails on any `d3` in app JS (a chart library guard), so comments say "the
+  card's item 3", not "D3". Looked at (`$RUN_DIR/shots/r43-t19-acts/sheet.png` + `crop-*.png`, CDP touch, `--size
+  large`, `$RUN_DIR/tools/r43-t19.mjs`): BA's row `WHAT'S BELOW · BOARD · PIN later · PAUSE later`, Pin's note,
+  Board an `<a>` to `/#/board?b=builder-a`, the lane's `LOG · DIFF · PIN · FLY TO · …` and the rest row, Pause's note,
+  Fly to after a drag frames the lane again, STORAGE's `… · ACK · SNOOZE`; 0 console errors. `r43-galaxy` (`?demo=1`,
+  cpu 4x) 34.7 fps, worst gap 239 ms, 0 errors (the tour opens no card). **Not done here:** a site still keeps its
+  sheet, so the site's actions are tested pure only: T19b.
+- [ ] T19b (split from T19) [ui] [variant:galaxy] The site's card: a tapped site gets the card (its `describe` and
+  `Open · What's below · Board · Pin`) or keeps the plate, decided against README D5 ("the caption and the fleet line
+  stay") and the e2e cockpit selectors (`e2e/cockpit/*.mjs`, grep `galaxy-caption`/sheet first) — done when: a page test
+  taps a site and finds what was decided (card with its actions and `Open` flying in, or the plate), and a still.
 - [ ] T20 (§7 Night 5 D5+D6) [ui] [variant:galaxy] The card's manners: grey glass from tokens, the site tint only as a 2 px top
   edge, a 150 ms fade, the galaxy dimmed slightly behind it; closes on ×, Esc, an empty tap, a second tap on its node, a
   sideways swipe, or 60 s idle (then the tour may resume as now, B237); a labelled region, real named buttons, focus moves in
