@@ -543,7 +543,7 @@ Notes for every builder round (planner, round 7):
 - [x] T19b (split from T19) [ui] [variant:galaxy] The site's card: a tapped site gets the card (its `describe` and
   `Open · What's below · Board · Pin`) or keeps the plate, decided against README D5 ("the caption and the fleet line
   stay") and the e2e cockpit selectors (`e2e/cockpit/*.mjs`, grep `galaxy-caption`/sheet first) — done when: a page test
-  taps a site and finds what was decided (card with its actions and `Open` flying in, or the plate), and a still. (commit SHA)
+  taps a site and finds what was decided (card with its actions and `Open` flying in, or the plate), and a still. (commit f3b1b2c)
   Notes (builder, round 44): **Decided: the card.** README D5 says "the old left-hand sheet for a tapped node gives way
   to the card"; the site's sheet *was* the left-hand plate (`hud.open`, sheetCaption), so it goes as a planet's did in
   T17, and the owner's sketch (`sk_card=1`) did the same (`hud.release()` on a site). "The caption and the fleet line
