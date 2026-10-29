@@ -638,13 +638,34 @@ Notes for every builder round (planner, round 7):
   explore hold is pinned by the page test only. **Seen:** HV2's card still read `CRIT STORAGE` after the model had
   cleared it (the card is described at open, not followed); a drag's coast still steers over a later `focus` (the test
   waits it out; as noted under T19b, for T35/T36).
-- [ ] T24 (triage, r10-film-ui #4) [ui] [variant:galaxy] The plate's text never truncates and has three levels:
+- [x] T24 (triage, r10-film-ui #4) [ui] [variant:galaxy] The plate's text never truncates and has three levels:
   `FEAT-SEARCH · WAITING ON A PERMIS…` is cut at the plate's edge; the site name `HV1` is smaller than the line above it and
   the status lines compete with the headline. Wrap (or grow one line) instead of cutting; headline, subject, facts on one
   scale (about 1.0 / 0.42 / 0.28), facts in `--text-1` with only the mark and label coloured — done when: a test with a long
   fact finds no ellipsis cut and the plate inside the frame, a still of a crit plate (large demo, `HV1` down) shows three
   clear sizes. Also (r40-stranger #5): no plate line is clipped through its glyphs (`r40-fx-warp` frame 6, VM-C's third
-  line): the plate cuts at whole lines (`+N MORE`), never mid-glyph.
+  line): the plate cuts at whole lines (`+N MORE`), never mid-glyph. (commit SHA)
+  Notes (builder, round 49): the plate is the Wall's shared caption (`js/wall/caption.js`, `wall.css`), so `wall.html`
+  gets it too (looked at, same plate). **Three levels:** `STEPS.subject` 5.6 (the why and, under a word, the site's name:
+  `.wall-caption[data-hero] { --cap-name }`) and `STEPS.fact` 3.6 (the count and the named problems), against the word's
+  14 (0.40 / 0.26; at the least word 9 still 1.6x and 1.56x apart); `STEPS.why` 4.3 stays as the banner's size under a
+  crit plate, now under the plate's own why (the T19 hud test reads that). A named problem's words are `--text-1`, its
+  shape and status word keep the hue; the count's parts keep theirs (each is shape + word). **Never cut:** no
+  `text-overflow` left on the plate; the why, name, word and every value wrap (`overflow-wrap: anywhere`,
+  `text-wrap: balance` on the why and values); `MAX_TEXT` 40 → 96, a guard against runaway strings only. Each box stays an
+  exact height, its step x `var(--lines, 1)`: `build` reads each part's `scrollHeight` once a leg (where it already reads
+  the plate's box) and sets `--lines`; `plateHeight(cap, shown, hero, wraps)` adds whole lines. A first try with
+  `min-height` let rows lay out 1-2 px over the sum and the plate's content overflowed 5 px (the r40 clip in small);
+  exact heights read scroll = client height in Chromium. **Fit:** `plateRoom` (8vh top to the clock, 11vmin, over the 8vh
+  margin: 73 vmin at 1368x912) and pure `fitPlate`: whole rows give way from the end (facts first) to a `+N MORE` row at
+  the key step, mono like the banner's. Tests: new `test/wall-caption-wrap.test.mjs` (5: the levels, long why/fact kept
+  and wraps counted, fit with `+N MORE`, the page on a fake layout wrapping and fitting, the css); `wall-caption` and
+  `wall-galaxy-hud` updated for the new steps and `--lines` heights only. Looked at (`$RUN_DIR/shots/r49-t24/`,
+  `$RUN_DIR/tools/r49-t24.mjs`, large demo): `after-lab2` is the crit plate with VM-C down: `■ VM-C` / `BUILDER-C NO
+  CONTACT FOR 15S` and `HV1` / the facts, `FEAT-SEARCH · WAITING ON A PERMISSION PROMPT · 10M` whole on two balanced lines;
+  `after-hv2`, `radial` (wall.html) whole; `before-lab` shows the old cut. `r49-galaxy` (`?demo=1`, cpu 4x) 33.7 fps,
+  worst gap 130 ms, 0 errors, every plate whole. **Seen:** the banner's own why is still cut with `…` (`BUILDER-C NO
+  CONTA…` under the HV2 hold; frame.js, T30/T32's).
 - [ ] T25 (triage, r10-film-ui #11) [ui] [variant:galaxy] The overview banner returns after a Back flight lands, from its
   own place: in `r10-touch` 09-back-2 (3.2 s after the tap) `HV2 · STORAGE` is clipped by the frame's bottom edge while the
   camera still flies — done when: a page test on a fake clock finds the banner's box inside the frame at every step of a

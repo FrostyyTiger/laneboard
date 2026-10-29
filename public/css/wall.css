@@ -77,9 +77,15 @@ html.wall body {
    colour with its shape. The plate's fades and the typing run in script
    (the plan's motion, README §3); nothing here transitions.
    On a site in trouble (T20) the trouble word leads at the 3 m step (14vmin,
-   fitted to the plate by caption.js `heroSize`, 9 at the least), its why
-   under it at 4.3, the name at 6.9 under that; facts drop to the key step
-   below a gap. The numbers are caption.js `STEPS`.
+   fitted to the plate by caption.js `heroSize`, 9 at the least); its why and
+   the name under it share the subject step (5.6), the count and the next
+   problems the fact step (3.6), white with only their shape and label in
+   hue (night 5 T24: three levels, not four sizes). Facts drop to the key step
+   below a gap. A long line wraps, it is never cut: every text's line height
+   is its row's, so a wrapped row is a whole number of rows tall; caption.js
+   counts them once a leg into `--lines` (each box stays an exact height, as
+   `plateHeight` adds up), and rows that would run past the frame's clock give way
+   to `+N MORE` (`fitPlate`). The numbers are caption.js `STEPS`.
    --------------------------------------------------------------------------- */
 
 .wall-caption-layer {
@@ -127,8 +133,9 @@ html.wall body {
 .wall-caption[data-status="attention"]::before,
 .wall-caption[data-status="attention"]::after { border-color: var(--warn); }
 
-/* A trouble plate may run wider: the word is the point (caption.js HERO_PLATE). */
-.wall-caption[data-hero] { max-width: 56vw; }
+/* A trouble plate may run wider: the word is the point (caption.js HERO_PLATE).
+   Its name steps down to the subject's size beside the why (T24). */
+.wall-caption[data-hero] { max-width: 56vw; --cap-name: 5.6vmin; }
 
 .wall-caption-hero {
   --cap-hero: 14vmin;
@@ -145,7 +152,7 @@ html.wall body {
   gap: 0.25em;
   font-family: var(--font-label);
   font-weight: 600;
-  height: calc(var(--cap-hero) * 0.86);
+  height: calc(var(--cap-hero) * 0.86 * var(--lines, 1));
   font-size: var(--cap-hero);
   line-height: 0.86;
   letter-spacing: 0.04em;
@@ -155,22 +162,21 @@ html.wall body {
 .wall-caption-hero-word .wall-caption-glyph { font-size: 0.62em; }
 .wall-caption-hero-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .wall-caption-hero-sub {
-  height: 4.3vmin;
+  height: calc(5.6vmin * var(--lines, 1));
   margin-top: 0.9vmin;
   font-family: var(--font-label);
   font-weight: 600;
-  font-size: 4.3vmin;
+  font-size: 5.6vmin;
   line-height: 1;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 .wall-caption-hero-sub[hidden] { display: none; }
 
@@ -195,7 +201,7 @@ html.wall body {
 .wall-caption-kicker .wall-caption-glyph[hidden] { display: none; }
 
 .wall-caption-name {
-  height: calc(var(--cap-name) * 0.92);
+  height: calc(var(--cap-name) * 0.92 * var(--lines, 1));
   margin: 0.9vmin 0 1.6vmin;
   font-family: var(--font-label);
   font-weight: 600;
@@ -203,7 +209,7 @@ html.wall body {
   line-height: 0.92;
   letter-spacing: 0.04em;
   color: var(--text-1);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* The letters still to type hold their place, so the plate never widens
@@ -238,7 +244,7 @@ html.wall body {
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   align-items: baseline;
-  height: 3.2vmin;
+  height: calc(3.2vmin * var(--lines, 1));
 }
 .wall-caption-lines > .wall-caption-line[hidden] { display: none; }
 
@@ -258,21 +264,25 @@ html.wall body {
   font-family: var(--font-label);
   font-weight: 500;
   font-size: var(--cap-line);
-  line-height: 1.15;
+  line-height: 3.2vmin;
   letter-spacing: 0.02em;
   color: var(--text-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 /* Facts on a trouble plate: the key step for key and value, a gap above. */
 .wall-caption-line[data-step="line"] + .wall-caption-line[data-step="small"] { margin-top: 1.6vmin; }
-.wall-caption-line[data-step="small"] { height: 2.3vmin; }
+.wall-caption-line[data-step="small"] { height: calc(2.3vmin * var(--lines, 1)); }
 .wall-caption-line[data-step="small"] .wall-caption-val {
   font-size: var(--cap-key);
-  line-height: 1.3;
+  line-height: 2.3vmin;
   color: var(--text-3);
+}
+/* Rows that gave way to the frame (T24): the banner's `+N MORE` voice. */
+.wall-caption-line[data-kind="more"] .wall-caption-val {
+  font-family: var(--font-mono);
+  letter-spacing: 0.12em;
 }
 
 .wall-caption-line[data-kind="trouble"] > *,
@@ -282,15 +292,18 @@ html.wall body {
 .wall-caption-line[data-kind="trouble"][data-tone="low"] > *,
 .wall-caption-line[data-kind="problem"][data-tone="low"] > * { color: var(--info); }
 .wall-caption-line[data-kind="trouble"] .wall-caption-val { font-weight: 600; }
+/* A named problem's words are white; its shape and status word carry the hue (T24). */
+.wall-caption-line[data-kind="problem"] .wall-caption-val { color: var(--text-1); }
 .wall-caption-glyph { font-size: var(--cap-line); line-height: 1; }
 
 /* The count and the named problems on a trouble plate (T23, r17-operator 9):
-   the values at the why's step and face, so the why carries from 3 m; the
-   keys stay at the key step. The count's parts each in their own hue. */
-.wall-caption-line[data-step="trouble"] { height: 4.3vmin; }
+   the values at the fact step (T24, under the why's subject step) and the
+   why's face; the keys stay at the key step. The count's parts each in
+   their own hue. */
+.wall-caption-line[data-step="trouble"] { height: calc(3.6vmin * var(--lines, 1)); }
 .wall-caption-line[data-step="trouble"] .wall-caption-val {
   font-weight: 600;
-  font-size: 4.3vmin;
+  font-size: 3.6vmin;
   line-height: 1;
   letter-spacing: 0.04em;
   text-transform: uppercase;

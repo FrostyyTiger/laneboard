@@ -730,10 +730,11 @@ test('wall.css (T19): with a crit plate up the far line is one line at the hero\
   assert.match(rule('.wall-fleet[data-step="far"] .wall-fleet-line'), /font-size: var\(--fleet-far\)/, 'no plate: the 3 m size');
   // The overview is unchanged: the hero's 3 m step, fitted (frame.js fleetSize) but never under STEPS.heroMin.
   assert.equal(vmin(/--fleet-far: ([\d.]+)vmin/, css), STEPS.hero);
-  // Held: the hero's second line (its why, caption.js STEPS.why), the same size the plate sets it at ...
+  // Held: caption.js STEPS.why, under the plate's own why (its subject step, night 5 T24), never louder ...
   const why = vmin(/--cap-why: ([\d.]+)vmin/, rule('.wall-stage'));
   assert.equal(why, STEPS.why);
-  assert.equal(vmin(/font-size: ([\d.]+)vmin/, rule('.wall-caption-hero-sub')), why);
+  assert.equal(vmin(/font-size: ([\d.]+)vmin/, rule('.wall-caption-hero-sub')), STEPS.subject);
+  assert.ok(why < STEPS.subject);
   // ... at most half the hero at its least, so the hero is the only top-step type on screen.
   assert.ok(why <= 0.5 * STEPS.heroMin, `${why} ≤ half of ${STEPS.heroMin}`);
   // One line: word, why and count side by side on a shared baseline; the why is what gets cut.
