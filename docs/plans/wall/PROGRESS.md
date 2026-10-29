@@ -395,10 +395,31 @@ Notes for every builder round (planner, round 7):
   `$RUN_DIR/tools/r34-t14.mjs`): explore drag → `__cockpitView.map.fitNodes([hv2, cloud])` (1922 off the explore pose)
   → tap HV1 → Back: 0.0 off the explore pose; explore → `flyTo(hv2)` → tap HV2 → Back: 0.0 off; 0 console errors.
   `r34-galaxy` (`?demo=1`, cpu 4x) 34.1 fps, worst gap 145 ms, 0 errors, the tour unchanged.
-- [ ] T15 (§7 Night 5 C4) [ui] [variant:galaxy] The overview turn: 0.0032 rad per px, the camera follows with a short lag
+- [x] T15 (§7 Night 5 C4) [ui] [variant:galaxy] The overview turn: 0.0032 rad per px, the camera follows with a short lag
   (about 70 ms), a longer gentler coast (τ about 650 ms), a capped fling speed (`touch.js`, the sketch's `SOFT.perPx`,
   `tauMs`, `follow`, `maxVel`) — done when: a test drags 100 px and finds 0.32 rad of target turn, the camera behind the
-  target during the drag, the coast decaying with the τ, and a 3000 px/s fling capped; the touch tests green.
+  target during the drag, the coast decaying with the τ, and a 3000 px/s fling capped; the touch tests green. (commit SHA_T15)
+  Notes (builder, round 37): `touch.js ORBIT` perPx 0.0032, tauMs 650, new `followMs` 70 and `maxVel` 1.4 px/ms, as
+  defaults with no switch (the sketch's `SOFT`). New pure `capVel` and `followStep` (yaw/pitch close the gap as
+  1 - exp(-dt/followMs), distance and look at once so a pinch or the wheel never lags; within 1e-4 rad it is the goal).
+  `createGestures`: a drag and its coast move a `goal` orbit, `frame` draws the orbit following it (one steer a frame as
+  before); a pinch zooms both. **Deviation from the sketch, on purpose:** a finger down drops the goal as well as the coast
+  (the sketch kept following), so a tap after a turn never has a follow steering over its flight. The feel applies to
+  the round orbit in a held system too (T12; the star stays put, since every round pose keeps `see`): one feel for every
+  turn, as the owner picked it. The wheel's impulse keeps its total zoom (∫ v e^(-t/τ) = v τ) and now eases out over the
+  longer τ. A capped fling coasts about maxVel × τ = 910 px (2.9 rad) and rests after τ ln(maxVel / REST) ≈ 4.3 s; REST
+  kept (stopping sooner would cut a visible move). Three page tests waited a 250 ms coast out (touch: drag/coast and back
+  from a turned system; return: `explore`): they now wait 8τ / 5.2 s, their assertions unchanged. Test:
+  `test/wall-galaxy-turn.test.mjs` (9: ORBIT values and 100 px → 0.32 rad, capVel, inertia's τ, followStep; on
+  createGestures with a fake clock: 100 px past the slop is 0.32 rad, the camera behind the finger each frame and on it
+  after, 1 - exp(-16/70) after one frame and 63 % at 70 ms, a finger down stops the follow, a 3000 px/s fling's coast
+  ≈ maxVel·τ·perPx within 3 % (not the uncapped 6.2 rad), the coast's τ windows falling by e). No draw change. Looked at
+  (`$RUN_DIR/shots/r37-t15-turn/`, CDP touch on `--size large`, `$RUN_DIR/tools/r37-t15.mjs`): a slow 112 px drag turns
+  0.320 rad, the trace trailing the finger; a ~3000 px/s fling coasts 0.75 rad by 0.4 s, 1.37 by 1 s, about 1.78 by 4.5 s
+  (SwiftShader frames are slow and `frame` caps dt at 100 ms, so the coast runs short in wall time); 0 console errors.
+  `r37-galaxy` (`?demo=1`, cpu 4x) 33.2 fps, worst gap 182 ms, 0 errors, the tour unchanged. **Seen:** a free overview
+  turn can carry the crit site (HV2) under the plate (`07-fling-4500ms`): the plate's corner is fixed while a finger
+  turns the galaxy anywhere (for triage, near T23/T30/T35).
 - [ ] T16 (§7 Night 5 C, done-when) [ui] [variant:galaxy] The night's touch walk as one page test and one film: tap site →
   tap planet (moons open) → drag-turn (system stays open, star stays put) → empty tap (nothing) → tap moon → Back ×3 →
   overview, with the flight durations asserted (`test/wall-galaxy-walk.test.mjs`); then a CDP touch film of the same walk

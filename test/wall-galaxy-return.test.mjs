@@ -136,7 +136,7 @@ function page() {
   const explore = () => {
     run(200);
     drag(5, { x: 300, y: 800 }, 260, -40);
-    run(3000);
+    run(5200); // the coast (night 5 C4: τ 650 ms) runs out
     assert.equal(cam.want().kind, 'free', 'a finger has turned the overview');
     return cam.pose();
   };

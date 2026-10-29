@@ -261,10 +261,16 @@ export function createTouch(stage, opts = {}) {
  * scene.js siteShot's nearest); `slopPx` how far a finger moves before it
  * drags (T10's tap is within it, so a tap never turns the galaxy); `tauMs`
  * the coast's time constant after release; `stillMs` a finger held that long
- * before lifting throws nothing; `wheel` log-zoom per wheel px.
+ * before lifting throws nothing; `wheel` log-zoom per wheel px; `followMs`
+ * the drawn orbit's lag behind the finger's (exponential: a jittery drag
+ * turns the galaxy smoothly); `maxVel` the fastest a fling coasts (px/ms).
+ * Night 5 C4, the owner's sketch pick (`SOFT`): 0.0032 rad per px (was
+ * 0.005), a 650 ms coast (was 250), a 70 ms follow, flings capped at 1.4
+ * px/ms (1400 px/s, a coast of at most maxVel × tauMs ≈ 910 px).
  */
 export const ORBIT = Object.freeze({
-  perPx: 0.005, pitch: Object.freeze([0.35, 1.45]), near: 700, slopPx: 12, tauMs: 250, stillMs: 80, wheel: 0.0015,
+  perPx: 0.0032, pitch: Object.freeze([0.35, 1.45]), near: 700, slopPx: 12, tauMs: 650, stillMs: 80, wheel: 0.0015,
+  followMs: 70, maxVel: 1.4,
 });
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -401,6 +407,24 @@ export function inertia(v, dtMs, { tauMs = ORBIT.tauMs } = {}) {
   return { x: turning ? x : 0, y: turning ? y : 0, zoom: Math.abs(zoom) >= REST.zoom ? zoom : 0 };
 }
 
+/** A fling's speeds `{ x, y, zoom }` with the turn capped at `maxVel` px/ms, its direction kept. Pure. */
+export function capVel(v, { maxVel = ORBIT.maxVel } = {}) {
+  const l = Math.hypot(v.x, v.y);
+  return l > maxVel ? { ...v, x: (v.x / l) * maxVel, y: (v.y / l) * maxVel } : v;
+}
+
+/**
+ * The drawn orbit `dtMs` on its way to the finger's `goal`: yaw and pitch
+ * close the gap as 1 - exp(-dt/followMs), distance and look are the goal's
+ * at once (a zoom never lags). Within 1e-4 rad it is the goal. Pure.
+ */
+export function followStep(o, goal, dtMs, { followMs = ORBIT.followMs } = {}) {
+  const dy = goal.yaw - o.yaw, dp = goal.pitch - o.pitch;
+  if (Math.abs(dy) < 1e-4 && Math.abs(dp) < 1e-4) return goal;
+  const k = 1 - Math.exp(-Math.max(0, dtMs) / followMs);
+  return { ...goal, yaw: o.yaw + dy * k, pitch: o.pitch + dp * k };
+}
+
 /** Whether a coast has come to rest. */
 export const atRest = (v) => !v || (v.x === 0 && v.y === 0 && v.zoom === 0);
 
@@ -448,7 +472,9 @@ export function orbitLimits(overview, sites = [], { near = ORBIT.near } = {}) {
  * Only in `explore` does a finger move the camera. Call `frame(now)` once a
  * frame before the camera's: a coast steps there, and the gesture's newest
  * orbit is handed to the camera then (one steer a frame, however many
- * pointer events came). `moved()` (optional) is told each time a gesture
+ * pointer events came). A drag and its coast move the finger's orbit; the
+ * drawn one follows it there (`followStep`, night 5 C4), and a finger down
+ * stops both where the turn is drawn. `moved()` (optional) is told each time a gesture
  * starts to move the camera from rest (for what belongs to the overview's
  * pose). `pivot()` (optional, night 5 T12) is the held system's star, or
  * null: a gesture that starts while it gives one turns round it
@@ -461,6 +487,7 @@ export function createGestures(stage, touch, cam, opts = {}) {
   let orbit = null; // the orbit being steered, null when the camera is someone else's
   let dirty = false;
   let vel = { x: 0, y: 0, zoom: 0 };
+  let goal = null; // the finger's orbit the drawn one follows (night 5 C4), null when there
   let zoomAt = null; // where a coasting zoom closes in on
   let drag = null; // { id, sx, sy, moved, t } the one finger turning
   let pinch = null; // { span, t }
@@ -490,6 +517,12 @@ export function createGestures(stage, touch, cam, opts = {}) {
     dirty = true;
     if (still) { still = false; o.moved?.(); }
   };
+  // A drag or a coast moves the goal; the drawn orbit follows it in `frame`.
+  const aim = (next) => {
+    if (next === (goal ?? orbit)) return;
+    goal = next;
+    if (still) { still = false; o.moved?.(); }
+  };
   const at = (x, y) => {
     const v = o.view();
     return orbit ? planeAt(orbitPose(orbit), x, y, v.W, v.H, v.fov) : null;
@@ -517,7 +550,8 @@ export function createGestures(stage, touch, cam, opts = {}) {
       if (mode !== 'explore') return;
       if (ev.button > 0) return; // a right-click is Back (T13), never a turn
       pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-      vel = { x: 0, y: 0, zoom: 0 }; // a finger down catches a coast
+      vel = { x: 0, y: 0, zoom: 0 }; // a finger down catches a coast, and the turn where it is drawn
+      goal = null;
       if (!take()) return;
       regrip();
       return;
@@ -534,10 +568,10 @@ export function createGestures(stage, touch, cam, opts = {}) {
           const d = Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy);
           const k = (d - ORBIT.slopPx) / d;
           drag.moved = true;
-          set(orbitStep(orbit, dx * k, dy * k));
+          aim(orbitStep(goal ?? orbit, dx * k, dy * k));
         } else {
-          set(orbitStep(orbit, dx, dy));
-          vel = { x: (vel.x + dx / dt) / 2, y: (vel.y + dy / dt) / 2, zoom: 0 };
+          aim(orbitStep(goal ?? orbit, dx, dy));
+          vel = capVel({ x: (vel.x + dx / dt) / 2, y: (vel.y + dy / dt) / 2, zoom: 0 });
         }
         Object.assign(drag, { x: ev.clientX, y: ev.clientY, t: now });
       } else if (pinch && pointers.size === 2) {
@@ -545,7 +579,9 @@ export function createGestures(stage, touch, cam, opts = {}) {
         if (s.d > 0 && pinch.d > 0) {
           const f = pinch.d / s.d; // fingers apart: closer
           zoomAt = at(s.x, s.y);
-          set(zoomStep(orbit, f, limits(), zoomAt));
+          const next = zoomStep(orbit, f, limits(), zoomAt);
+          set(next);
+          if (goal) goal = { ...goal, dist: next.dist, look: next.look }; // a turn still on its way keeps going
           vel = { x: 0, y: 0, zoom: Math.log(f) / Math.max(1, now - pinch.t) };
         }
         pinch = { ...s, t: now };
@@ -577,10 +613,14 @@ export function createGestures(stage, touch, cam, opts = {}) {
     last = now;
     const fingers = pointers.size > 0;
     if (orbit && !fingers && !atRest(vel) && dt > 0) {
-      let next = orbitStep(orbit, vel.x * dt, vel.y * dt);
+      let next = orbitStep(goal ?? orbit, vel.x * dt, vel.y * dt);
       if (vel.zoom) next = zoomStep(next, Math.exp(vel.zoom * dt), limits(), zoomAt);
-      set(next);
+      aim(next);
       vel = inertia(vel, dt);
+    }
+    if (goal && orbit) {
+      set(followStep(orbit, goal, dt));
+      if (orbit === goal) goal = null;
     }
     if (dirty && orbit) {
       if (orbit.pivot) cam.steer(orbitPose(orbit), { hold: true });
@@ -589,12 +629,12 @@ export function createGestures(stage, touch, cam, opts = {}) {
     }
     // At rest with no finger down, the camera is free for others (a tap's flight, T10; the tour, T14):
     // the next gesture starts from wherever it is then.
-    if (!fingers && atRest(vel)) { orbit = null; still = true; }
+    if (!fingers && atRest(vel) && !goal) { orbit = null; still = true; }
   };
 
   return {
     frame,
-    busy: () => pointers.size > 0 || !atRest(vel),
+    busy: () => pointers.size > 0 || !atRest(vel) || Boolean(goal),
     stop: () => { off(); stage.removeEventListener('wheel', wheel, { passive: false }); },
   };
 }

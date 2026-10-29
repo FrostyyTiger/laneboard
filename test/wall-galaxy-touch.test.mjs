@@ -379,7 +379,7 @@ test('pointer events on the page: a one-finger drag turns the camera round the g
   p.tick();
   const coasted = orbitOf(p.cam.pose()).yaw;
   assert.ok(turned(lifted.yaw, coasted) < 0, 'it keeps turning after the lift');
-  p.run(4000);
+  p.run(ORBIT.tauMs * 8); // a capped fling rests within τ ln(maxVel / rest) ≈ 4.3 s (night 5 C4)
   assert.ok(!p.gestures.busy(), 'and comes to rest');
   const rest = orbitOf(p.cam.pose()).yaw;
   p.run(1000);
@@ -854,7 +854,7 @@ test('pointer events on the page: back from a system the finger turned away from
   p.into();
   // Drag: the camera's pose is the finger's now, the system folds.
   p.drag(61, [[800, 450], [830, 450], [900, 460], [960, 470]]);
-  p.run(2000);
+  p.run(ORBIT.tauMs * 8);
   assert.equal(p.cam.want().kind, 'free');
   p.press();
   p.tick(16);
