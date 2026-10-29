@@ -352,11 +352,33 @@ Notes for every builder round (planner, round 7):
   (0.0 px), open 1, STORAGE's lock follows it; empty tap keeps hv2; with k8s-2 picked a drag keeps the star too; 0 console
   errors. **Seen:** a long turn brings the sun and HV1 in behind the tag and Back (`07-drag-far-right`), and the faceted sun
   edge (T28). `r32-galaxy` (`?demo=1`, cpu 4x) 39.8 fps, worst gap 173 ms, 0 errors, the tour unchanged (no draw change).
-- [ ] T13 (§7 Night 5 C3) [ui] [variant:galaxy] Back, one step at a time (moon → planet → system → overview): right-click,
+- [x] T13 (§7 Night 5 C3) [ui] [variant:galaxy] Back, one step at a time (moon → planet → system → overview): right-click,
   double-click/double-tap on empty space, or the Back control; Back from a planet folds its moons and keeps the camera where
   the finger turned it; zoom-out flights 3000 ms on a soft ease (`director.js` timings); double-click from a system goes to
   the overview as now — done when: a page test walks moon → planet → system → overview with each Back kind and asserts the
-  step, the folded moons, the kept pose from a planet, and each zoom-out flight's duration 3000 ms; keep B239.
+  step, the folded moons, the kept pose from a planet, and each zoom-out flight's duration 3000 ms; keep B239. (commit 23a511b)
+  Notes (builder, round 33): `touch.js` `placeOf(site, planet, moon)` gives a `moon` level (`planet` its host), `backStep`
+  moon → planet → system → overview, `moonsAt` a moon's planet; `createTaps({ back })` hears a right-click (secondary button
+  down and up within the slop, however long; never a pick nor a tap) and a double tap/click on empty sky (`TAP.doubleMs`
+  450, `doublePx` 40, the sketch's; the first empty tap is told as any and does nothing); `createGestures` ignores a
+  non-primary button (a right drag never turns). `director.js ZOOM_OUT` {3000, soft}: `soft` rides on a finger's move to
+  `camera.js`, which eases it on `smoother` (other moves keep the cubic `ease`). `main.js`: `openPlanet` makes a moon's
+  place (`hostOf`) and **keeps the camera on a tap on the framed planet or one of its moons** (found while testing: the
+  moon tap re-flew to the pick shot and dropped the turn); `backToSite` keeps a turned camera (or one already at the hold),
+  else eases out to the hold in ZOOM_OUT; `goBack` from a moon only changes the sheet (a moon's shot is its planet's);
+  to the overview `toOverview(left.pose(), ZOOM_OUT)`. **Deviation, on purpose:** the wake's ease out stays
+  `TOUCH.fitMs` 1500 (not a Back; B237's minute counts from it); B239 untouched. A show's moon flight still makes a
+  planet-level place (`showPlace`, unchanged), so Back from it steps to the system. Tests: `test/wall-galaxy-back.test.mjs`
+  (8: ZOOM_OUT and the soft move, the levels, createTaps right-click/double tap edges, no right-drag turn, the page walk on the
+  large demo moon → planet (right-click) → system (double tap: moons fold, turned pose kept, star < 2 px) → overview (the
+  control, 3000 ms soft), the unturned planet → hold and double-click → overview each 3000 ms, single tap/right-click at the
+  overview nothing, main.js wiring); the touch/resume harnesses now wire `back` as main.js (empty tap nothing, double tap
+  Back) and their source assertions read the new `toOverview(…, out)`/`backToSite`. Looked at (`$RUN_DIR/shots/r33-t13-back/`,
+  CDP touch + mouse on `--size large`, `$RUN_DIR/tools/r33-t13.mjs`): HV1 → builder-a → drag (star 872,685 → 872,685) →
+  empty tap nothing → moon feat-search (pose kept) → right-click (builder-a's sheet) → double-click (HV1's sheet, moons
+  folded, star unmoved) → Back: the flight at k 0.24/0.59/0.93 at 0.75/1.5/2.25 s, done by 3.2 s, overview, 0 console
+  errors. `r33-galaxy` (`?demo=1`, cpu 4x) 34.5 fps, worst gap 150 ms, 0 errors, the tour unchanged. **Seen:** a turn can
+  bring the held star under the banner (`04-turned`, T23/T30's banner size); the plate still truncates (T24).
 - [ ] T14 (§7 Night 5 C5) [ui] [variant:galaxy] The `createReturn` leftover (`touch.js`, `main.js`): Back returns to the
   explore pose a person left, never to a pose a show's `flyTo` left — done when: a page test explores to a pose, lets a show
   fly elsewhere and end, presses Back and finds the camera at the explore pose; the existing return tests green.
