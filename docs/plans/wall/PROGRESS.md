@@ -512,7 +512,7 @@ Notes for every builder round (planner, round 7):
   works; links open existing app views or are absent (never a dead button). Fleet actions (restart a service, pause a builder
   or lane, snooze or ack) are disabled outline buttons tagged `later` in their slots; a tap says so; nothing touches the fleet,
   nothing heavier ever appears — done when: tests per type list the buttons in order, find no button without a handler or an
-  existing target, every `later` button disabled and saying so on tap, and no network call from any card button. (commit COMMIT)
+  existing target, every `later` button disabled and saying so on tap, and no network call from any card button. (commit 5fc2b76)
   Notes (builder, round 43): `card.js cardActions(node, { kind, under, direct })` (pure, in `describe` as `actions`
   `{ row, more }`): the plan's order per type, absent ones dropped, the first `CARD_ACTS.row` 4 in the row and the rest
   behind a 48 px `…` (`aria-expanded`, a second row). Each is `go` (`open`, `below`, `fly`: main.js `cardAct`, which
