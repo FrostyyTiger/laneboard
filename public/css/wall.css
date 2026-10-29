@@ -1066,3 +1066,112 @@ html.wall body {
   .wall-tag { top: calc(8vh - 4.6vmin); }
   .galaxy-manual { top: calc(8vh - 1.9vmin); }
 }
+
+/* ---------------------------------------------------------------------------
+   The node card (night 5 T17, js/wall/galaxy/card.js): a tapped planet or
+   moon's card, beside it or docked right (card.js cardPlace writes its
+   transform), joined to it by a 1 px leader and a ring on the node. Grey
+   glass from tokens: nothing on it is loud unless the node is (its dot).
+   The header on the plate's scale: the name in the condensed caps face, the
+   kind in the tag's mono and tracking. The × is a 48 px target (D224).
+   T18-T20 fill it and give it its manners.
+   --------------------------------------------------------------------------- */
+.galaxy-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 360px;
+  box-sizing: border-box;
+  padding: 4px 4px 12px 16px;
+  color: var(--text-1);
+  background: color-mix(in oklch, var(--bg-canvas) 88%, transparent);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--line-strong);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
+}
+.galaxy-card[hidden] { display: none; }
+.galaxy-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+}
+.galaxy-card-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.galaxy-card[data-tone="crit"] .galaxy-card-dot { background: var(--crit); }
+.galaxy-card[data-tone="warn"] .galaxy-card-dot { background: var(--warn); }
+.galaxy-card[data-tone="low"] .galaxy-card-dot { background: var(--p3); }
+.galaxy-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.galaxy-card-kind {
+  flex: none;
+  padding: 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+}
+.galaxy-card-x {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  margin-left: auto;
+  padding: 0;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--text-2);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.galaxy-card-x:active { color: var(--text-1); background: color-mix(in oklch, var(--text-1) 14%, transparent); }
+.galaxy-card-x:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
+.galaxy-card-leader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--text-3);
+  transform-origin: 0 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+.galaxy-card-spot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  box-sizing: border-box;
+  border: 1px solid var(--text-2);
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+.galaxy-card-leader[hidden],
+.galaxy-card-spot[hidden] { display: none; }

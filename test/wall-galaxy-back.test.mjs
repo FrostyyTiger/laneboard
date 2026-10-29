@@ -157,7 +157,7 @@ test('page: the walk moon → planet → system → overview, one Back kind each
   p.rightClick(30, SKY);
   p.tick(16);
   assert.deepEqual([p.place().level, p.place().planet], ['planet', BA]);
-  assert.equal(p.sheets.at(-1), BA, 'the planet\'s sheet');
+  assert.deepEqual([p.card.selected(), p.sheets.at(-1)], [BA, null], 'the planet\'s card, no sheet (night 5 T17)');
   assert.equal(p.moves.length, n, 'no camera move');
   assert.equal(p.galaxy.moonsOpen(), BA, 'the ring stays open');
 
@@ -165,7 +165,7 @@ test('page: the walk moon → planet → system → overview, one Back kind each
   p.doubleTap(31, SKY);
   p.tick(16);
   assert.deepEqual([p.place().level, p.place().site], ['site', 'lab']);
-  assert.equal(p.sheets.at(-1), 'lab');
+  assert.deepEqual([p.sheets.at(-1), p.card.shown()], ['lab', false], 'the system\'s sheet, the card gone');
   assert.equal(p.galaxy.moonsOpen(), null, 'builder-a\'s moons fold');
   assert.equal(p.moves.length, n, 'no camera move');
   p.run(1000);
@@ -247,7 +247,7 @@ test('galaxy/main.js wires the levels (T13): goBack moon → planet → system �
   const js = fs.readFileSync(new URL('../public/js/wall/galaxy/main.js', import.meta.url), 'utf8');
   const body = (key) => js.slice(js.indexOf(key), js.indexOf('\n  };', js.indexOf(key)));
   const go = body('const goBack = ');
-  assert.match(go, /if \(next\.level === 'planet'\) \{\s*hud\.open\(\{ id: next\.planet, arriveMs: 0 \}\);\s*place = next;\s*\} else if \(next\.level === 'site'\) backToSite\(next\.site\);\s*else toOverview\(left\.pose\(\), ZOOM_OUT\);/);
+  assert.match(go, /if \(next\.level === 'planet'\) \{\s*pickCard\(next\.planet, next\.site\);\s*place = next;\s*\} else if \(next\.level === 'site'\) backToSite\(next\.site\);\s*else toOverview\(left\.pose\(\), ZOOM_OUT\);/);
   const site = body('const backToSite = ');
   assert.match(site, /const kept = w\.kind === 'site' && w\.id === id && \(w\.turned != null \|\| w\.member == null\);/);
   assert.match(site, /else if \(!kept\) finger\.focus\(id, TIMING\.zoom, ZOOM_OUT\);/);

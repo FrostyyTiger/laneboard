@@ -2,8 +2,8 @@
 // wires it (night 5 T13, shared with T16): the real scene with a fake
 // renderer, stage and clock; the touch, gestures, taps (a member first, then
 // a site), Back control, director and camera; main.js's toOverview,
-// openSite, openPlanet, backToSite and goBack copied (and pinned against its
-// source in test/wall-galaxy-back.test.mjs).
+// openSite, openPlanet, pickCard, backToSite and goBack copied (and pinned against its
+// source in test/wall-galaxy-back.test.mjs); the node card (night 5 T17) as main.js makes it.
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { OPEN_MS } from '../../public/js/wall/galaxy/layout.js';
@@ -12,6 +12,7 @@ import { createGalaxyScene } from '../../public/js/wall/galaxy/scene.js';
 import { createGalaxyCamera, FLIGHT } from '../../public/js/wall/galaxy/camera.js';
 import { ZOOM_OUT, createDirector } from '../../public/js/wall/galaxy/director.js';
 import { freeRect } from '../../public/js/wall/galaxy/framing.js';
+import { cardBodies, cardInfo, cardRing, createCard } from '../../public/js/wall/galaxy/card.js';
 import {
   AT_OVERVIEW, TAP, TOUCH, backControl, backStep, canGoBack, createBack, createGestures, createReturn, createTaps, createTouch,
   hitNearest, memberHit, memberPoints, moonsAt, orbitLimits, placeOf, tapPoints,
@@ -73,11 +74,24 @@ export function page() {
   let moonsAsked = null;
   const left = createReturn();
   const reduced = false;
+  const card = createCard(stage, {
+    // The plate goes when the card comes (pickCard): the fleet line and the tag stay.
+    screenOf: cam.screenOf, size: galaxy.size, covers: () => WORDS.slice(1),
+    bodies: (id) => cardBodies(galaxy.world, place.site, id, cam.screenOf),
+    ring: (id) => cardRing(galaxy.world, place.site, id, cam.screenOf),
+    onClose: () => card.close(), doc: { createElement: (t) => listening(t) },
+  });
+  cam.onDraw(card.draw);
+  const pickCard = (id, site) => {
+    hud.release();
+    card.open(cardInfo(galaxy.world, site, id));
+  };
   // main.js's, as written there.
   const toOverview = (pose = null, out = { ms: TOUCH.fitMs }) => {
     if (pose && !reduced) finger.fly(pose, out);
     else finger.fit(out);
     hud.release();
+    card.close();
     place = AT_OVERVIEW;
   };
   const openSite = (id) => {
@@ -85,6 +99,7 @@ export function page() {
     const w = cam.want();
     const there = w.kind === 'site' && w.id === id && w.member == null;
     if (!there) finger.focus(id, TIMING.zoom);
+    card.close();
     hud.open({ id });
     place = placeOf(id);
   };
@@ -94,7 +109,7 @@ export function page() {
   };
   const openPlanet = (id, site) => {
     left.leave(place, cam);
-    hud.open({ id });
+    pickCard(id, site);
     const w = cam.want();
     const host = hostOf(site, id);
     const framed = w.kind === 'site' && w.id === site && w.member != null && (hostOf(site, w.member) ?? w.member) === (host ?? id);
@@ -105,6 +120,7 @@ export function page() {
     const w = cam.want();
     const kept = w.kind === 'site' && w.id === id && (w.turned != null || w.member == null);
     if (!kept) finger.focus(id, TIMING.zoom, ZOOM_OUT);
+    card.close();
     hud.open({ id });
     place = placeOf(id);
   };
@@ -113,7 +129,7 @@ export function page() {
     if (!canGoBack(place)) return;
     const next = backStep(place);
     if (next.level === 'planet') {
-      hud.open({ id: next.planet });
+      pickCard(next.planet, next.site);
       place = next;
     } else if (next.level === 'site') backToSite(next.site);
     else toOverview(left.pose(), ZOOM_OUT);
@@ -146,10 +162,12 @@ export function page() {
     back.show(backControl(m, place));
     const moonsFor = moonsAt(place);
     if (moonsFor !== moonsAsked) { moonsAsked = moonsFor; galaxy.openMoons(moonsFor); }
+    if (card.shown() && card.selected() !== (place.moon ?? place.planet)) card.close();
     director.tick();
     gestures.frame(now);
     cam.frame(now);
     galaxy.frame(now);
+    cam.drawn(); // as main.js: the card draws where the camera is now
   };
   const run = (ms) => { for (let t = 0; t < ms; t += 16) tick(16); };
   const tapAt = (id, sp, init = {}) => {
@@ -191,7 +209,7 @@ export function page() {
   const isSky = (sp) => memberHit(memberPoints(galaxy.world.sites, cam.screenOf), sp.x, sp.y) == null
     && hitNearest(tapPoints(galaxy.world.sites, cam.screenOf), sp.x, sp.y) == null;
   return {
-    galaxy, cam, touch, button, sheets, moves, run, tick, tapAt, rightClick, doubleTap, press, drag, toBuilder, isSky,
+    galaxy, cam, touch, button, stage, card, sheets, moves, run, tick, tapAt, rightClick, doubleTap, press, drag, toBuilder, isSky,
     place: () => place, picks: () => picks, now: () => now,
   };
 }

@@ -114,6 +114,7 @@ import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
 import { FIT, FLIGHT, createGalaxyCamera, fitPose, showFlightMs } from './camera.js';
+import { cardBodies, cardInfo, cardRing, createCard } from './card.js';
 import { createHud } from './hud.js';
 import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
@@ -334,11 +335,14 @@ export function boot() {
   let touchCovers = () => [];
   // The show's cards (T37): the names keep off them too; set once the show exists.
   let showCovers = () => [];
+  // The node card (night 5 T17): the names keep off it too; set once the touch controls exist.
+  let card = null;
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
     steps,
     // The lock's leader too (T16): the names keep off the line, as off the words.
     covers: () => {
-      return [...hud.covers(), ...lock.covers(), ...touchCovers(), ...showCovers()];
+      const c = card?.cover();
+      return [...hud.covers(), ...lock.covers(), ...touchCovers(), ...showCovers(), ...(c ? [c] : [])];
     },
     held: lock.held,
     flight: cam.flight,
@@ -478,6 +482,7 @@ export function boot() {
     if (pose && !reduced) finger.fly(pose, out); // reduced motion has no free poses to fly to: a cut to the fit
     else finger.fit(out);
     hud.release();
+    card?.close();
     place = AT_OVERVIEW;
   };
   // The first touch (T7): the tour stops where it is, the camera eases out to the overview.
@@ -494,6 +499,7 @@ export function boot() {
     resume: () => {
       cutAway();
       hud.release();
+      card?.close();
       left.clear();
       place = AT_OVERVIEW;
       shows?.tourBack(); // the tour clears what the agent drew: the highlight, its note, the undo (c4 §2)
@@ -540,6 +546,7 @@ export function boot() {
       fade?.cut();
     } else if (!there) finger.focus(id, TIMING.zoom);
     // A sheet says what was touched, not the tour's count (T25).
+    card?.close();
     hud.open({ id, arriveMs: there || reduced ? 0 : FLIGHT.ms });
     place = placeOf(id);
   };
@@ -550,7 +557,7 @@ export function boot() {
   // framed planet or one of its moons keeps the camera, turned or not (a moon's shot is its planet's).
   const openPlanet = (id, site) => {
     left.leave(place, cam);
-    hud.open({ id, arriveMs: 0 });
+    pickCard(id, site);
     const w = cam.want();
     const host = hostOf(site, id);
     const framed = w.kind === 'site' && w.id === site && w.member != null && (hostOf(site, w.member) ?? w.member) === (host ?? id);
@@ -559,6 +566,12 @@ export function boot() {
       fade?.cut();
     } else finger.focus(site, TIMING.zoom, { member: id });
     place = host != null ? placeOf(site, host, id) : placeOf(site, id);
+  };
+  // A tapped planet or moon (night 5 T17, README §7 Night 5 D1): its card beside it, a leader
+  // joining them, instead of the left-hand sheet; the plate goes, the fleet line and the tag stay.
+  const pickCard = (id, site) => {
+    hud.release();
+    card?.open(cardInfo(galaxy.world, site, id));
   };
   // The planet a moon orbits (layout.js moonHosts), null for a planet.
   const hostOf = (site, id) => {
@@ -574,6 +587,7 @@ export function boot() {
       finger.cut(id, TIMING.zoom);
       fade?.cut();
     } else if (!kept) finger.focus(id, TIMING.zoom, ZOOM_OUT);
+    card?.close();
     hud.open({ id, arriveMs: kept || reduced ? 0 : ZOOM_OUT.ms });
     place = placeOf(id);
   };
@@ -584,7 +598,7 @@ export function boot() {
     if (!canGoBack(place)) return;
     const next = backStep(place);
     if (next.level === 'planet') {
-      hud.open({ id: next.planet, arriveMs: 0 });
+      pickCard(next.planet, next.site);
       place = next;
     } else if (next.level === 'site') backToSite(next.site);
     else toOverview(left.pose(), ZOOM_OUT);
@@ -622,6 +636,17 @@ export function boot() {
       return boxes;
     };
   }
+  // The node card (night 5 T17, card.js): under the stage, beside its node or docked right, off the
+  // words, the touch controls and a show's cards; drawn after the camera, each frame.
+  card = touch ? createCard(stage, {
+    screenOf: cam.screenOf,
+    size: galaxy.size,
+    covers: () => [...hud.covers(), ...touchCovers(), ...showCovers()],
+    bodies: (id) => cardBodies(galaxy.world, place.site, id, cam.screenOf),
+    ring: (id) => cardRing(galaxy.world, place.site, id, cam.screenOf),
+    onClose: () => card.close(),
+  }) : null;
+  if (card) cam.onDraw(card.draw);
   const taps = touch ? createTaps(touch, {
     pick: (x, y, ev) => {
       const o = stageEl.getBoundingClientRect();
@@ -690,6 +715,8 @@ export function boot() {
       // step (its system, the overview, the tour's hand-back) folds them.
       const moonsFor = moonsAt(place);
       if (moonsFor !== moonsAsked) { moonsAsked = moonsFor; galaxy.openMoons(moonsFor); }
+      // The card goes with its node's place (a show's flight, the hand-back).
+      if (card?.shown() && card.selected() !== (place.moon ?? place.planet)) card.close();
       // MANUAL says a person drives: not while a show holds the camera.
       sayManual(director.driver() === 'show' ? null : manualLine(touch.left()));
     }

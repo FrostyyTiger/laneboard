@@ -68,7 +68,7 @@ test('the walk: site → planet → turn → empty tap → moon → Back ×3 →
   p.tapAt(31, moon);
   p.tick(16);
   assert.deepEqual([p.place().level, p.place().moon, p.place().planet], ['moon', moon.id, BA], 'the moon is picked');
-  assert.equal(p.sheets.at(-1), moon.id);
+  assert.deepEqual([p.card.selected(), p.sheets.at(-1)], [moon.id, null], 'the moon\'s card, no sheet (T17)');
   assert.equal(p.moves.length, n, 'no camera move');
   assert.equal(flown(p), 0, 'moon: no flight');
 
@@ -76,12 +76,12 @@ test('the walk: site → planet → turn → empty tap → moon → Back ×3 →
   assert.equal(p.button.dataset.kind, 'back');
   p.press();
   p.tick(16);
-  assert.deepEqual([p.place().level, p.place().planet, p.sheets.at(-1)], ['planet', BA, BA]);
+  assert.deepEqual([p.place().level, p.place().planet, p.card.selected()], ['planet', BA, BA]);
   assert.equal(flown(p), 0, 'Back to the planet: no flight');
   assert.equal(p.galaxy.moonsOpen(), BA);
   p.press();
   p.tick(16);
-  assert.deepEqual([p.place().level, p.place().site, p.sheets.at(-1)], ['site', 'lab', 'lab']);
+  assert.deepEqual([p.place().level, p.place().site, p.sheets.at(-1), p.card.shown()], ['site', 'lab', 'lab', false]);
   assert.equal(flown(p), 0, 'Back to the system: no flight');
   assert.equal(p.galaxy.moonsOpen(), null, 'the moons fold');
   assert.equal(p.moves.length, n, 'the camera never moved since the turn');
