@@ -1065,3 +1065,143 @@ slim top bar of fleet totals, map modes.
 | 50 | film-ui | fx-sweep | | | | | 6 | 7 | |
 
 ## Morning
+
+Night 5, final report (round 52, 2026-10-29 04:03 Europe/Zurich). Shots are in `$RUN_DIR` = the run's own directory on the VM.
+
+- **Done:** 25 of 51 tasks. All of the plan's A (your sketch picks as defaults, T1-T5), B (system room, nested moons,
+  the pick shot, T6-T10), C (touch and mouse, T11-T16) and D (the node card, T17-T20), plus two panel fixes (T23 one
+  hero per held frame, T24 the plate's text never cut). Tests: 4972 pass, 0 fail.
+- **Not done:** E (T21 `docs/wall.md`, T22 the cockpit's handover list) and 24 panel tasks (T25-T49, none blocked).
+  Most are about the banner's size and subject, the pick shot's framing, and the card's and labels' legibility.
+- **Why it stopped:** the 7-day usage window reached 85 % (stop reason `7d-window`) at 04:03, about 32 h before the
+  12:00 deadline, after 51 rounds (notional $87). The script left no owner-notes file (`$RUN_DIR/owner-notes` does not exist).
+
+### The directions side by side
+
+The galaxy is still the only direction. Nine reviews (r10-r50) scored the galaxy, with touch as its `touch` column, and
+the five effects behind `?fx=`, all off by default. The card, moons and turning were judged inside the galaxy's findings.
+
+**galaxy** (`galaxy.html`, also `wall.html?variant=galaxy`): your sketch's look is now the default. That means the
+tighter rosette, size by what a body carries, quiet site tints on a blue-black ground, depth haze and the slower
+2800 ms open. New tonight: moons (services, lanes, sessions) that open onto a ring when you tap their planet, a pick
+shot 45 % closer with the planet left, and a node card in place of the sheet. *Loved:* overview is the best score of
+the five nights (7.2; 8 from the stranger and from r50). At 3 m, `■ 2 CRIT · HV1 · HV2` is still the first thing you read
+(r50). The stranger would hang it in their hallway. Performance rose to 7.1 because the moons cost draw calls only
+while a ring is open. *Hated:* legibility (6.1) is now the weakest axis. Map names and card labels are 11 px, about 2 mm
+on the Surface (T46). Yellow labels sit on yellow halos at 2:1 (T45). The banner's size follows the length of its
+text, not its rank (T47). The banner repeats the plate word for word, and its `+N MORE` flips with the camera (T32).
+At a held card the banner or the clock outshouts the thing you touched (T49).
+
+**touch** (the galaxy's `touch` column, 5.4, down from night 4's 6.3): a finger gets a 48 px target and a mouse
+28 px, with the nearest centre winning and no fan. A drag inside a system turns it round its own star. Back goes one
+step at a time (right-click, double tap or the control), and the overview turn has a short follow and a coast.
+*Loved:* every step of the walk works with no cut (`r38-t16-walk`, `r50-walk`), and moons are tappable without a
+picker. *Hated:* the pick shot pushes the system to the right edge under the card's long leader, and the star can sit
+under Back (T35, T48). A third Back tap starts the tour (T36). A 450 ms press is lost, and a press shows nothing until
+lift (T37). `MANUAL · TOUR IN 0:58` cannot be read from the hallway (T43).
+
+**fx-beacon:** a red pillar over each crit. *Loved:* the stranger's pick (wow 8). Every reviewer from r30 on says it is
+the one effect that adds meaning at overview size, and the others should copy its one steady mark. *Hated:* the pillar
+is uncapped and runs to the frame's edge "like a laser sight" in a flight (r50). It can steal a finger's tap in an open system (r30).
+
+**fx-warp:** streaks toward a trouble target in flight. *Loved:* the streaks finally show (r50) and wow rose late (6 at
+r40/r45). *Hated:* wow averaged 4.2. It is the most expensive effect (26.9 fps, worst gap 306 ms), and the skeptic and
+operator ask to drop it, or keep it only on a flight to a crit.
+
+**fx-afterglow:** a fading ring where a crit cleared. *Loved:* calm (7.4). *Hated:* wow 2.3, the lowest of the night,
+because the films rarely catch a clear. Its closed ring reads as "selected" to a finger (r30). The skeptic asks to drop it unless a demo hook can show it.
+
+**fx-activity:** rings and brightness on working planets. *Loved:* little. *Hated:* the lowest calm (4.0). It repeats
+`7 WORKING`, and its rings read as selection too (r25, r30).
+
+**fx-sweep:** one wedge of light per tour cycle, and a silent site does not answer. *Loved:* the rhythm the others should
+copy, one motion then stillness (r10, r50). Calm reached 8 from the stranger and r45. *Hated:* its one job, "this site
+went silent", still does not show at 3 m.
+
+Averages over the nine reviews (`## Scores`):
+
+| variant | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|
+| galaxy | 7.2 | 6.1 | 6.8 | 5.4 | 6.7 | 6.0 | 7.1 |
+| fx-beacon | - | - | - | - | 5.7 | 6.2 | - |
+| fx-warp | - | - | - | - | 4.2 | 5.9 | - |
+| fx-afterglow | - | - | - | - | 2.3 | 7.4 | - |
+| fx-activity | - | - | - | - | 3.8 | 4.0 | - |
+| fx-sweep | - | - | - | - | 4.6 | 6.4 | - |
+
+Compared with night 4: overview 6.9 → 7.2, status 6.2 → 6.8, wow 6.2 → 6.7, calm 5.2 → 6.0, performance 6.0 → 7.1.
+Two axes fell: legibility 6.8 → 6.1 and touch 6.3 → 5.4. Touch fell because reviewers now judge picking moons, the pick
+shot and the card. Night 4 only had a sheet.
+
+Newest filmstrips (live: start the demo fleet with `--size large`, then open the URL):
+- galaxy, the tour: `$RUN_DIR/shots/r49-galaxy/sheet.png`, live `galaxy.html?demo=1` (or `wall.html?variant=galaxy&demo=1`).
+- galaxy, the touch walk (tap, ring, card, turn, Back, overview): `$RUN_DIR/shots/r50-walk/sheet.png`, the 12 frames
+  next to it, `03-hv1-open.png` and `04-ba-card.png` first.
+- fx: `$RUN_DIR/shots/r40-fx-<name>/sheet.png` for `beacon`, `warp`, `afterglow`, `activity`, `sweep`, live
+  `galaxy.html?demo=1&fx=<name>`. The effect code is unchanged since T5, so r45 and r50 reviewed these same films.
+- 3 m: `$RUN_DIR/shots/r50-3m.png`.
+
+### Tasks
+
+Done: T1 (6d278d7), T1b (deecadd), T2 (ac22fb0), T3 (117cfbd), T4 (6255bf1), T5 (36bfcb4), T6 (1cca98f),
+T6b (5cf9de0), T7 (df9eae4, 2da817b), T8 (a756402, 6bdc125), T9 (c39f2dc), T10 (942eac2), T11 (81dac29),
+T12 (d33e1c8), T13 (23a511b), T14 (9a49689), T15 (d4bcca4), T16 (7126a88), T17 (8537e71, e424189), T18 (5ad5a89),
+T19 (5fc2b76), T19b (f3b1b2c), T20 (42ce20f), T23 (17fd358), T24 (a795344).
+
+Open, none blocked: T21 and T22 (the plan's E) and the panel's T25-T49. By theme:
+- banner and plate: T25, T30, T31, T32, T34, T42, T47;
+- status on the map: T26, T27, T29, T33, T41;
+- pick shot and touch: T35, T36, T37, T43, T48;
+- card and type: T44, T45, T46, T49;
+- cost: T28, T38, T39, T40.
+
+Tests now: 4972 pass, 0 fail (`npm test` after round 51). `e2e/cockpit` (Playwright) was never run on this VM and is
+checked only by `ci` on the PR.
+
+**Needs you, worst first.**
+
+1. **Your pick for tonight: does touch feel right, and keep, drop or more for each fx.** Turn a system on the Surface
+   (`galaxy.html` on the large demo: tap HV1, tap BA, drag, Back ×3) and watch `r50-walk`. For each option below, the
+   first line is the panel's case for it and the second the case against.
+   - *touch:* every gesture works with no cut, and moons need no picker.
+     Against: the pick shot crowds the system right under the card's leader, a third Back starts the tour, and slow presses are lost (T35-T37, T48 are ready to build).
+   - *beacon, keep and grow it:* it is the only effect that means something at overview size, and the stranger would hang it.
+     Against: cap the pillar's length, and let calm sites get a quiet "fine" mark in the same style.
+   - *warp, drop it:* the skeptic and operator want it gone, it averages wow 4.2 and it is the most expensive effect.
+     The alternative is to keep it only on a flight to a crit, with the target's name in the streak's colour.
+   - *afterglow, drop it unless it gets a demo hook:* it scored wow 2.3 because a clear is almost never seen.
+     Against dropping: it is the only effect that shows history; `dial` (a 24-hour ring per star) is the same idea with a clock.
+   - *activity, drop it:* its calm is 4.0, it repeats `7 WORKING` and its rings read as selection.
+     Nobody argued to keep it.
+   - *sweep, keep it as is:* it has the rhythm everyone wants copied, with calm up to 8.
+     Its silent-site cue is still invisible at 3 m (`## Later`).
+2. **The cockpit handover was not written (T22), and nothing was written under `patches/`.** The commits above changed
+   the shared `galaxy/main.js`, `galaxy/touch.js`, `galaxy/director.js` and `public/css/wall.css` while C1b works on the same files.
+   Before merging, run `git log main..run/wall-n5 -- public/js/galaxy/main.js public/js/galaxy/touch.js
+   public/js/galaxy/director.js public/css/wall.css` and check it against C1b's branch. Also check that `ci` runs
+   `e2e/cockpit` (S-C1-01, S-SCR-0x) green: it never ran here. B237 and B239 are pinned by unit tests that stayed green.
+3. **`docs/wall.md` does not describe tonight's work (T21).** It lacks moons, the card, right-click and double-tap Back, and
+   drag-to-turn. A stranger who reads the docs will not find the gestures.
+4. **Warn-hold banner size (T23's decision).** A warn hold keeps the banner at its 3 m size (README §2.1: trouble stays
+   loudest). r10 and r50 want one hero at every hold. If you agree, it is one `[data-hold="warn"]` rule in `wall.css` and
+   the T30 css test. r50 #6 waits on this too.
+5. **A frame cap for the kiosk (r35 #2).** Every rAF renders all day, which is the heat worst case. The proposal is
+   `?cap=30`, off by default or on for the kiosk URL. It has been open since r31.
+6. **Fenced `tour.js`/`show.js` work is queued, with no patch written.** It covers a tour hold scaled by severity, real
+   `DEMO_TIMING` ratios and one ranking for banner and tour (r20 #5-#7, night 4's T28/T48), plus the show items
+   (night 4's T51/T52/T59/T60/T63). Say whether the cockpit or the Wall should write these.
+7. **Site tints as tokens (planner, colours).** They live as a documented table in `galaxy/palette.js` because the
+   design guardrail allows only accent and status hues in `tokens.css`. `--site-tint-*` tokens would need a guardrail change, which is yours to make.
+8. **Taste ideas waiting for a yes or no** (`## For the owner`): planet labels in the plate's condensed caps (r10 #6), a
+   held system in its site's tint (r15 #2), the destination's name riding the frame edge in flight (r15 #3), a tick over
+   each tappable planet (r30), and three new fx (`scan`, `eclipse`, `dial`; r15).
+
+### Research
+
+- Q19 (moons and nested selection, `research/Q19-moons-nested-selection.md`): the source games space moons on screen, open
+  them on selection and step back one level at a time. This backed T8's ring with no picker, T11's screen-space hits and
+  T13's Back levels. Sources were partly blocked, and the hit-radius evidence is thin.
+- Q20 (node card placement, `research/Q20-node-card-placement.md`): anchor the card beside its body with a leader and
+  dock it at the edge when there is no room, then close on an empty tap or Esc. This became T17/T20. The Apple HIG page
+  did not load, so that part is a summary only.
+- No open research questions.
