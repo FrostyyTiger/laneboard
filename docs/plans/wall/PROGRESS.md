@@ -792,6 +792,31 @@ Notes for every builder round (planner, round 7):
   lose to trouble's as before — done when: a test pins the new sizes (card CSS rules and the labels' font size), the T6/T6b
   label tests (`wall-galaxy-room`, `wall-galaxy-hostnames`) stay green or are updated only for the size, and a still of
   `?at=hv1&open=1` at 1368 px with a builder picked shows card and names at the new size without overlap.
+- [ ] T47 (triage, r50-film-ui #1) [ui] [variant:galaxy] The banner's size is its rank, not its text's length: at the 3 m
+  step `wall-fleet[data-step="far"]` is fitted to 64vw by `frame.js fleetSize`, so `■ HV1 · VM-C` stands at about 10 vmin cap
+  height and `■ 2 CRIT · HV1 · HV2` at about 6 (`r49-galaxy` frames 1 and 4; `r40-fx-sweep` 9-12) — the same message jumps 60 %
+  in size by the length of a name. One cap height for the 3 m step (the 9 vmin floor), a short line gets air, not size; and
+  check `data-hold` when the camera has landed on a calm site with no plate (frame 4: the line is at its no-hold size). Goes
+  with T23/T30 (read both) — done when: a test finds the banner's font size equal for a short and a long text at the same
+  rank and step, and at most the floor step, and the hold attribute set on landing with or without a plate; a 684 px shrink
+  of frames 1 and 4 shows one size.
+- [ ] T48 (triage, r50-film-ui #4+#5) [ui] [variant:galaxy] The pick shot frames the system in the space the card leaves,
+  clear of the banner: with the card docked left (x 16-376) the leader runs flat about 750 px into the star's centre across
+  `template`, `gpu-box` and `media`, and the system is pushed to the right edge (`r50-walk` 02, 03, 05, 06, 08, 09, 11); at
+  `04-ba-card` HV1's star sits on the bottom edge under the banner's feathered ground. The pick framing's free box (`framing.js`,
+  `main.js pickBox`) starts right of the card and subtracts `hud.covers()` (banner, clock, Back, tag) as the tour hold does, and
+  checks the star as well as the picked planet; the leader ends on the star's rim and stays under a quarter of the frame's
+  width. Read T35 (Back and manual line) first, it edits the same box — done when: a page test on the large demo finds, for
+  each planet of HV1 and HV2 picked, the star and the planet's ring outside the card's box and every `covers()` box, and the
+  leader shorter than a quarter of the frame; a still of BA picked in HV1.
+- [ ] T49 (triage, r50-film-ui #2) [ui] [variant:galaxy] A held card has a hero: at the warn hold `04-ba-card` the banner's
+  `■ HV2 · STORAGE` is the biggest type while the touched `BA` is a 20 px name; at the crit hold `11-hv2-card` the clock `03:00`
+  is the biggest type and the crit member `storage` an 11 px red label. While a card is up its name takes the plate's subject
+  step in the plate's condensed caps (about 5 vmin), the banner follows T23's one-line rule as for a plate, and the selected
+  node's map label takes the same face and status hue at 2x, so a crit member is never the smallest word in its own shot.
+  Check against T44/T46 (card header, sizes) — done when: a DOM test finds, with a card up, its name at the subject step in the
+  condensed face, the banner at the one-line step, the selected label at twice the plain label size in its status hue, and
+  the clock smaller than the card name; a still of `04-ba-card` and `11-hv2-card`'s views.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -914,6 +939,14 @@ From `r45-accessibility.md` (past the 3-task limit; #1 is T20's, #2-#4 are T44-T
 - r45 #9 Small red text (`--crit` 4.89:1) at 15 px kicker and the card's 11 px `■`: keep small red text bold, or put status text in `--text-1` with the red shape before it.
 - r45 fx warp: white streaks over a flight that ends at the overview (vestibular trigger on normal motion): never run on a flight to the overview (same as r40). Beacon is the model for colour-blind readers; afterglow/activity/sweep harmless.
 
+From `r50-film-ui.md` (past the 3-task limit; #1 is T47, #4+#5 T48, #2 T49):
+- r50 #3 Four voices set the same facts (plate caps, card mixed-case mono, map labels lowercase mono, plate `WHERE`/`HOLDS` light lowercase): card problem lines and stat values and the plate's `WHERE`/`HOLDS` values in condensed caps, map labels condensed caps a step down in `--text-2`, mono only on keys and the kicker (r10 #6; goes with T45/T46's label work).
+- r50 #6 The warn banner wraps to a two-line block heavier than a calm hold's name: the warn line takes the crit line's one-line grammar with the why on the sub line, and the calm plate's bare `+17:21` gets its word (`NEXT RUN 17:21`). Warn size is the owner's call (see `## For the owner`, builder r48).
+- r50 #7 Flights are dead air (frames 3 and 10 are 85 % black): r15 #3 and r10's idea of the next kicker riding in during the last 40 % of a flight, already under `## For the owner`.
+- r50 #8 The block cursor stays on a finished word (`HV1▌`, `CLOUD█`): T34's.
+- r50 #9 The plate's headline and the map's name disagree (`VM-C` vs `bc`): T29's (r10 #5).
+- r50 fx beacon: the pillar is uncapped and runs to the frame's edge in a flight; a small mono tick with the crit's age at its top, under a quarter of the frame's height in a flight. warp (26.9 fps, the most expensive): streaks only in the middle 40 % of a flight to a site, never on the way out (same as r40, r45). activity: rings at `--text-3` alpha, none inside a lock. sweep: a short dash arc fading in over about 1 s, not closed ellipses that read as selected. afterglow: not found in any frame, needs a demo clear at a known second (r10, r40).
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -970,6 +1003,7 @@ slim top bar of fleet totals, map modes.
 - r35-performance.md: 8 galaxy findings + fx notes + 3 m check (yes); 3 became tasks (T38 = #1, T39 = #3, T40 = #6); #2 (frame cap) under `## For the owner`, #4/#5/#7/#8 and the fx notes under `## Later`.
 - r40-stranger.md: 12 galaxy findings + 5 fx + 3 m check (yes); 3 became tasks (T41 = #1, T42 = #4, T43 = #6); #3 (empty card) folded into T18, #5 (clipped line) folded into T24, #7 dropped (by design since T12, docs are T21's), #2/#8/#9/#10/#11/#12 and the fx notes under `## Later`, the calm-mark idea under `## For the owner`.
 - r45-accessibility.md: 9 galaxy findings + 5 fx + 3 m check (yes for normal sight, borderline low vision); 3 became tasks (T44 = #2, T45 = #3, T46 = #4); #1 (focus, Esc) is T20's, added there with the measurement; #5-#9 and the fx notes under `## Later`, the cross-variant steals under `## For the owner`.
+- r50-film-ui.md: 9 galaxy findings + 5 fx + 3 m check (yes); 3 became tasks (T47 = #1, T48 = #4+#5, T49 = #2); #8 covered by T34 and #9 by T29 (dropped, duplicate), #3/#6/#7 and the fx notes under `## Later` (#7 is already an owner idea, #6 waits on the owner's warn-size call).
 
 ## Scores
 
@@ -1023,5 +1057,11 @@ slim top bar of fleet totals, map modes.
 | 45 | accessibility | fx-afterglow | | | | | 3 | 8 | |
 | 45 | accessibility | fx-activity | | | | | 5 | 5 | |
 | 45 | accessibility | fx-sweep | | | | | 4 | 8 | |
+| 50 | film-ui | galaxy | 8 | 6 | 7 | 6 | 7 | 6 | 8 |
+| 50 | film-ui | fx-beacon | | | | | 6 | 6 | |
+| 50 | film-ui | fx-warp | | | | | 5 | 5 | |
+| 50 | film-ui | fx-afterglow | | | | | 2 | 8 | |
+| 50 | film-ui | fx-activity | | | | | 4 | 4 | |
+| 50 | film-ui | fx-sweep | | | | | 6 | 7 | |
 
 ## Morning
