@@ -379,9 +379,22 @@ Notes for every builder round (planner, round 7):
   folded, star unmoved) → Back: the flight at k 0.24/0.59/0.93 at 0.75/1.5/2.25 s, done by 3.2 s, overview, 0 console
   errors. `r33-galaxy` (`?demo=1`, cpu 4x) 34.5 fps, worst gap 150 ms, 0 errors, the tour unchanged. **Seen:** a turn can
   bring the held star under the banner (`04-turned`, T23/T30's banner size); the plate still truncates (T24).
-- [ ] T14 (§7 Night 5 C5) [ui] [variant:galaxy] The `createReturn` leftover (`touch.js`, `main.js`): Back returns to the
+- [x] T14 (§7 Night 5 C5) [ui] [variant:galaxy] The `createReturn` leftover (`touch.js`, `main.js`): Back returns to the
   explore pose a person left, never to a pose a show's `flyTo` left — done when: a page test explores to a pose, lets a show
-  fly elsewhere and end, presses Back and finds the camera at the explore pose; the existing return tests green.
+  fly elsewhere and end, presses Back and finds the camera at the explore pose; the existing return tests green. (commit SHA)
+  Notes (builder, round 34): the leftover was `leave` keeping any `free` want: a show's `place` (fitNodes, setCamera, an
+  undo) is one, so a tap on a site after a show made Back fly to the show's frame; after a show's flyTo (a site want) it
+  went to the fit. `touch.js createReturn` now has `moved(m)`, wired as `director.onMove(left.moved)` in `main.js`: a
+  finger's steer (not a `{ hold }` turn round a held star), its fly back and its fit set the explore pose; any other
+  source's move marks the camera not the finger's, and `leave` then keeps the explore pose from before the show (null
+  after a finger's fit: back to the fit). Without `moved` it is night 4's (the touch/resume/back harnesses unchanged, all
+  green). `clear` forgets the explore pose too. Test: `test/wall-galaxy-return.test.mjs` (5: the unit cases; the page on
+  the large demo: explore by drag → a show's fitNodes-like free pose → tap HV1 → Back lands on the explore pose; the same
+  after a show's flyTo to HV2; no show between; main.js wiring). The two show cases fail on the old `createReturn`
+  (checked). No draw or per-frame change. Looked at (`$RUN_DIR/shots/r34-t14-return/`, CDP touch on `--size large`,
+  `$RUN_DIR/tools/r34-t14.mjs`): explore drag → `__cockpitView.map.fitNodes([hv2, cloud])` (1922 off the explore pose)
+  → tap HV1 → Back: 0.0 off the explore pose; explore → `flyTo(hv2)` → tap HV2 → Back: 0.0 off; 0 console errors.
+  `r34-galaxy` (`?demo=1`, cpu 4x) 34.1 fps, worst gap 145 ms, 0 errors, the tour unchanged.
 - [ ] T15 (§7 Night 5 C4) [ui] [variant:galaxy] The overview turn: 0.0032 rad per px, the camera follows with a short lag
   (about 70 ms), a longer gentler coast (τ about 650 ms), a capped fling speed (`touch.js`, the sketch's `SOFT.perPx`,
   `tauMs`, `follow`, `maxVel`) — done when: a test drags 100 px and finds 0.32 rad of target turn, the camera behind the

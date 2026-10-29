@@ -64,7 +64,8 @@
 // a pen and 28 for a mouse (the event's pointerType); night 4's fan is gone.
 // Back returns to the pose you left (night 4 T4, touch.js createReturn): back
 // to the overview flies to where the finger had turned the galaxy before it
-// opened a site, not the default fit; a wake and the tour's hand-back fit.
+// opened a site, not the default fit; a wake and the tour's hand-back fit. A pose a
+// show left (flyTo, fitNodes) is never one: back goes to the person's (night 5 T14).
 // The tour resumes (T14, touch.js IDLE): a minute after the last touch the
 // tour takes the page back at its next leg, trouble first (tour.js
 // `resume`), the camera flying there from where the finger left it; a
@@ -469,6 +470,7 @@ export function boot() {
   };
   // The pose a finger left the overview in (night 4 T4): back flies there, not to the fit.
   const left = createReturn();
+  director.onMove(left.moved); // only a finger's pose is one to return to, never a show's (night 5 T14)
   // Out to the whole galaxy in TOUCH.fitMs (or to the pose it was left in): the plate and the lock go.
   // `out` the move's time (and ease): the wake's TOUCH.fitMs, a Back's ZOOM_OUT (night 5 T13).
   const toOverview = (pose = null, out = { ms: TOUCH.fitMs }) => {

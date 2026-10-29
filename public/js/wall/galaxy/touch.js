@@ -941,17 +941,34 @@ export function backStep(place) {
  * and only a pose a finger steered (`cam.want().kind === 'free'`); a fitted
  * overview remembers nothing. `pose()` is what back flies to (null: the
  * fit); `clear()` forgets it (a wake, the tour taking the page back).
- * Returns `{ leave, pose, clear }`.
+ * Only a person's pose (night 5 T14, C5): `moved` hears the director's moves
+ * (`director.onMove`). A finger's steer (not a turn round a held star), its
+ * fly back and its fit set the explore pose; a show's free pose (`place`,
+ * fitNodes, setCamera) or flight (flyTo) never does. Leaving the overview
+ * after a show moved the camera keeps the explore pose from before the show
+ * (null after a fit: back to the fit). Without `moved` it is as before.
+ * Returns `{ moved, leave, pose, clear }`.
  */
 export function createReturn() {
   let kept = null;
+  let explore = null; // the last overview pose a finger gave the camera (null: the fit)
+  let mine = true; // no other source has moved the camera since the finger's last move
+  const copy = (p) => (p?.pos && p.look ? { pos: { ...p.pos }, look: { ...p.look } } : null);
   return {
+    moved: ({ source, call, args } = {}) => {
+      if (source !== 'touch') { mine = false; return; }
+      if (call === 'steer' && args?.[1]?.hold) return; // a turn in a held system: not an overview pose
+      if (call === 'steer' || call === 'fly') explore = copy(args?.[0]);
+      else if (call === 'fit') explore = null;
+      mine = true;
+    },
     leave: (place, cam) => {
       if (place != null && place.level !== 'overview') return;
+      if (!mine) { kept = copy(explore); return; }
       kept = cam.want().kind === 'free' ? cam.pose() : null;
     },
     pose: () => (kept ? { pos: { ...kept.pos }, look: { ...kept.look } } : null),
-    clear: () => { kept = null; },
+    clear: () => { kept = null; explore = null; mine = true; },
   };
 }
 
