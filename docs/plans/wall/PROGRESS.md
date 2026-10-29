@@ -326,11 +326,32 @@ Notes for every builder round (planner, round 7):
   folded trouble moon fix-login, 13 px off (ba at 30 is past a mouse's 28); a mouse on ba → ba; never a fan row, 0
   console errors. HV1's right side is so crowded that a live "30 px off = nothing" needs empty sky; the unit test pins it.
   `r29-galaxy` (`?demo=1`, cpu 4x) 33.1 fps, worst gap 191 ms, 0 errors, the tour unchanged (no scene or draw change).
-- [ ] T12 (§7 Night 5 C2) [ui] [variant:galaxy] Inside an open system a drag orbits it round its own star (both axes, pitch
+- [x] T12 (§7 Night 5 C2) [ui] [variant:galaxy] Inside an open system a drag orbits it round its own star (both axes, pitch
   clamped; the sketch's `orbitRound`) and it stays open; the first drag does not shift the system on screen (no aim offset);
   a tap on empty space does nothing — done when: a page test on a fake clock opens a site, drags 200 px each way and finds the
   site still held and open, the star's screen point within 2 px of where it was, pitch within its clamp, and an empty tap
-  changing neither mode, selection nor camera.
+  changing neither mode, selection nor camera. (commit d33e1c8)
+  Notes (builder, round 32): `touch.js orbitRound(pose, pivot)` keeps the star's **direction in the camera's own frame**
+  (`see`: right/up/ahead), not a world aim offset; `orbitPose` solves the view's pitch and heading in closed form (world up,
+  no roll), so the star stays on its exact screen point through any yaw, pitch or zoom (`zoomStep` on a round orbit changes
+  only the distance). The pitch clamp (`range`) is ORBIT's widened to where the camera stands (a hold below 20° does not
+  jump on the first drag) and narrowed where the view would tip over the top. `createGestures({ pivot })` takes a round
+  orbit when the page gives one, steers with `{ hold: true }` (director.js forwards it), and keeps a near limit no farther
+  than where the gesture started (a pick shot nearer than `ORBIT.near` does not jump out on a pinch). `camera.js
+  steer(pose, { hold: true })` keeps the site the want with `turned` (the finger's pose, no drift), so it stays held and
+  open; any later move (a planet tap, Back, a show) drops the turn. `main.js`: `pivot` is the wanted site's star; a tap on
+  empty sky now does nothing (was a step back; T13 brings double-tap/right-click). `lock.js offFrame`: the brackets and
+  leader hide while their target is outside the frame (r30 #1's note). Source assertion in `wall-galaxy-touch` updated to
+  the tap line without `goBack`. The touch/resume test harnesses still step back on an empty tap in their own copies of the
+  wiring; T13 should replace that there with its double-tap. Test: `test/wall-galaxy-orbit.test.mjs` (6: orbitRound
+  round-trip, star fixed < 0.5 px over six drags and two zooms, both clamps; low-pitch hold; the page on the large demo:
+  lab tapped and held, drags 200 px each way, star ≤ 2 px during and after the coast, open > 0.99, pitch clamped, a 600 px
+  drag stops at the top, empty tap changes nothing; a planet tap after a turn drops it; offFrame; main.js wiring). The
+  page test fails with the pivot removed (checked). Looked at (`$RUN_DIR/shots/r32-t12-turn/`, CDP touch on `--size large`,
+  script `$RUN_DIR/tools/r32-t12.mjs`): HV2 held, drags left/right/down/up/420 px right: the star at (1120, 387) every time
+  (0.0 px), open 1, STORAGE's lock follows it; empty tap keeps hv2; with k8s-2 picked a drag keeps the star too; 0 console
+  errors. **Seen:** a long turn brings the sun and HV1 in behind the tag and Back (`07-drag-far-right`), and the faceted sun
+  edge (T28). `r32-galaxy` (`?demo=1`, cpu 4x) 39.8 fps, worst gap 173 ms, 0 errors, the tour unchanged (no draw change).
 - [ ] T13 (§7 Night 5 C3) [ui] [variant:galaxy] Back, one step at a time (moon → planet → system → overview): right-click,
   double-click/double-tap on empty space, or the Back control; Back from a planet folds its moons and keeps the camera where
   the finger turned it; zoom-out flights 3000 ms on a soft ease (`director.js` timings); double-click from a system goes to
