@@ -441,12 +441,40 @@ Notes for every builder round (planner, round 7):
   33.8 fps, worst gap 192 ms, 0 errors, the tour unchanged. **Seen:** `08-moon` the plate truncates (`WAITING ON A PER…`,
   T24); `05`-`10` CLOUD's label sits against the Back control and the tag after the turn (T35's family); `03-site-held`
   the plate names the trouble FEAT-SEARCH large while the held site is HV1 (T32/T24's hierarchy).
-- [ ] T17 (§7 Night 5 D1) [ui] [variant:galaxy] The card's place: a new `galaxy/card.js` with a pure `cardPlace` (beside the
+- [x] T17 (§7 Night 5 D1) [ui] [variant:galaxy] The card's place: a new `galaxy/card.js` with a pure `cardPlace` (beside the
   selected node with a visible leader line; docked to the right edge when it does not fit beside the node or would cover the
   open system's planets; never over the fleet line or the tag, `hud.covers()`) and the DOM shell `main.js` creates under the
   stage on a selection, replacing the left-hand sheet for a tapped node; the caption and the fleet line stay (Q20 when
   answered) — done when: `cardPlace` tests (fits beside, docks when off the edge, docks when it would cover a planet, clear
-  of fleet line and tag), and a page test taps a planet and finds a card, no sheet, the leader joining card and node.
+  of fleet line and tag), and a page test taps a planet and finds a card, no sheet, the leader joining card and node. (commit e424189)
+  Notes (builder, round 39): `galaxy/card.js`: `CARD` {w 360, gap 24, hitPx 24, edge 16, pad 8, bodyPx 10, spot 14};
+  pure `cardPlace({ at, size, W, H, covers, bodies, ring, prev })` → `{ side: right|left|dock, x, y, w, h, leader }`:
+  beside means *level with* the node (its height inside the card) and past its own open ring of moons (`cardRing`, the
+  ring's screen reach), the side away from the nearer edge first, the previous side kept while it fits (no flip mid-move,
+  Q20); the card may slide up or down past a cover's or a planet's edge; else docked at the right edge, off the words, over
+  the fewest planets. Without `ring` an open ring always sent it to the dock, over the system: the ring is what made it
+  work. `cardBodies` (the open system's other members on screen), `cardInfo` (header: name, kind, tone), `cardCover`.
+  `createCard(stage, …)`: a `section` role region with an aria-label, dot, name (condensed caps 24 px), kind (mono chip)
+  and a 48 px × (`aria-label` Close, pressed state, `touch-action: manipulation`); its pointers stop at the card (touch.js
+  never sees them: a tap on it is no tap and no turn); a 1 px leader and a 28 px ring on the node; transforms in whole px,
+  written only on change; the size measured once per open. **It comes as the camera lands** (the first placement waits
+  while `cam.flight()`; placed at the tap it docked top right, then jumped left on landing). `main.js` (selection/card
+  parts only): `pickCard(id, site)` = `hud.release()` + `card.open(cardInfo(…))` in `openPlanet` and Back's moon → planet
+  step; `openSite`, `backToSite`, `toOverview` and the idle resume close it; the frame closes it when the place no longer
+  names its node (a show's flight); covers = `hud.covers()` + Back/manual + show cards; the names keep off the card.
+  **A tapped site keeps its sheet** (the plate, every trouble line): a site's card comes with T18/T19 (site stats and
+  actions), which decide whether it replaces the site sheet too. `wall.css`: rules added only (`.galaxy-card*`), tokens,
+  no shadow (guardrail). `test/helpers/galaxy-page.mjs` makes the card as main.js does and calls `cam.drawn()`; the
+  back/walk/touch pins now read `pickCard` and the card where they read the planet's sheet. Test:
+  `test/wall-galaxy-card.test.mjs` (11: beside/leader, dock off the edge and off the frame, dock for planets, never over
+  tag or fleet line over a grid of node points, side kept, ring, cardInfo/Bodies, the shell, waits for landing, the page:
+  tap builder-a → card, no sheet, leader from the node's ring to the card's edge, no planet under it, Back closes it,
+  main.js wiring). Looked at (`$RUN_DIR/shots/r39-t17-card/sheet.png`, CDP touch on `--size large`,
+  `$RUN_DIR/tools/r39-t17.mjs`): BA's card left of it past the ring, level, leader to its ring; a tap on the card steps
+  nothing; FEAT-SEARCH (moon) and VM-A cards the same; × closes; Back to HV1 closes it; 0 console errors. `r39-galaxy`
+  (`?demo=1`, cpu 4x) 34.1 fps, worst gap 305 ms, 0 errors (the tour never opens a card). **Seen:** the pick framing still
+  keeps the planet right of the remembered plate box, so the card stands in the plate's old place (fine now; T18's taller
+  card may want `pickBox` to count the card instead of the plate); the leader crosses the ring's orbit line.
 - [ ] T18 (§7 Night 5 D2) [ui] [variant:galaxy] The card's content: status dot, name, type chip, parent path (`hv1 › vm-a`),
   a 48 px ×; 3-4 key stats from the model where only the off value takes a status hue; a "Below" strip of child chips (tap:
   select and fly there; `+N`); a pure `describe(sel, model)` (the sketch's `card.js describe`) — done when: `describe` tests
