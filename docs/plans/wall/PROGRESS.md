@@ -570,6 +570,9 @@ Notes for every builder round (planner, round 7):
   on open and back on close — done when: a page test on a fake clock closes it each of the seven ways, finds focus inside on
   open and back on the opener on close, the region's label and every button's name; `wall.css` gains rules only; a still of
   `?at=hv1&open=1` with a builder picked shows card, leader and ring together.
+  (r45-accessibility #1, measured: today the card never takes focus — `document.activeElement` stays `BODY` — and Esc leaves it
+  open. On open focus the heading (`tabindex=-1`, `focus({ preventScroll: true })`); Esc closes and returns focus to the opener,
+  or to Back after a canvas tap; pin both in a fakedom test.)
 - [ ] T21 (§7 Night 5 E) `docs/wall.md`: the look (the defaults and why), moons, the card (actions, `later` buttons), the
   gestures (mouse and touch: right-click, double-click/tap, drag in a system, Back steps); not the "Show commands" or handle
   sections; demo data for every feature named — done when: `test/wall-docs.test.mjs` (extended) finds the new sections and
@@ -697,6 +700,26 @@ Notes for every builder round (planner, round 7):
   says nothing. While manual show a `MANUAL` word at the clock's scale beside the clock (or a countdown ring on it); the small
   line stays — done when: a test finds the manual word present in explore and absent while touring, its font size at least
   the clock's, and the tag/clock boxes not overlapping; the 684 px shrink of a manual overview still shows the word.
+- [ ] T44 (triage, r45-accessibility #2) [ui] [variant:galaxy] The card's status is a shape and a true word, not a dot beside
+  `OK`: BA's header has a bare yellow dot over `OK builder-a · 3 lanes`, HV2's a red dot over `OK demo hypervisor · GPU`
+  (`r45-a11y/card-builder.png`). Replace the dot with the worst status's shape (`■` crit, `▲` warn/attention, grey `●` calm) at
+  the name's cap height, and say the node's own state apart from what is below it (`OK itself · ▲ 2 BELOW`, or lead with the
+  worst: `▲ 2 ATTENTION BELOW · builder-a · 3 lanes`); shape, word and hue travel together (design rule 2) — done when: a
+  `describe`/card DOM test finds, for a calm node with a warn child and for a crit node, a shape glyph in the header matching the
+  worst tone, no `OK` word beside a trouble shape, and no header status carried by colour alone; a still of BA's and HV2's cards.
+- [ ] T45 (triage, r45-accessibility #3) [ui] [variant:galaxy] Map labels keep a dark ground: `search ui` (yellow 235,200,49)
+  over its planet's yellow halo is 2.30:1 declared, 2.07:1 rendered; `ci` 1.85:1 over a body; `proxy` 2.39:1 on the warn hold.
+  Give every `.galaxy-label` a 2-3 px text halo in `--bg-canvas` at about 0.85 (`paint-order: stroke` or stacked
+  `text-shadow`; `wall.css` rule added, no colour literal) or a feathered plate like the caption's — done when: a labels test
+  requires the halo on every label class (trouble and calm) and a probe like `tools/r45-a11y.mjs` (or a computed pair of the
+  label colour against the halo's peak colour) finds ≥ 4.5:1; a still of `?at=hv1&open=1` shows `search ui` and `ci` readable.
+- [ ] T46 (triage, r45-accessibility #4) [ui] [variant:galaxy] Text sizes for a hand-held tablet: map names are 11 px (about 2 mm
+  on the 12.3" Surface), and the card's labels (`ROOMS UP`, `CPU`, `BELOW`, `+1 MORE`, the path `hv1 › vm-a`, `later`) and
+  status glyphs are 11 px too. Card labels, path and `later` 13 px, problem glyphs 15 px to match their line; planet and moon
+  names 13 px in an open system (`labels.js`), lanes 12 px; the collision pass makes the room, and names that no longer fit
+  lose to trouble's as before — done when: a test pins the new sizes (card CSS rules and the labels' font size), the T6/T6b
+  label tests (`wall-galaxy-room`, `wall-galaxy-hostnames`) stay green or are updated only for the size, and a still of
+  `?at=hv1&open=1` at 1368 px with a builder picked shows card and names at the new size without overlap.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -811,6 +834,14 @@ From `r40-stranger.md` (past the 3-task limit):
 - r40 #12 The status word on a feed-site plate is lowercase and small (`STATUS warn`), `HOLDS 2 rooms` for lamps: caps as on trouble plates, `HOLDS` names the feed's kind.
 - r40 fx warp: no streaks on a flight that ends at the overview (frame 12 crosses the trouble); fx activity: rings round CLOUD/HOME read as a selection, thinner or brightness only (same as r10/r30); fx sweep: faint rings unexplained, harmless; fx afterglow: nothing cleared in 35 s, needs the demo clear hook (r10).
 
+From `r45-accessibility.md` (past the 3-task limit; #1 is T20's, #2-#4 are T44-T46):
+- r45 #5 In still (reduced-motion) mode HV1 sits on the frame's right edge and its lock brackets cover its name (REMOTE's touches): the lock frames the star only, clear of the label box; the overview fit keeps every site's label box inside the free box.
+- r45 #6 The fleet line has no `role="status"` (night 3's A5 asked for it) and its `+N MORE` is text: container `role="status"`, announce text changes only, `+N MORE` a button labelled `N more problems`.
+- r45 #7 Reduced motion: the plate is empty for gaps (frame 6, 15 s) — cross-fade one plate straight into the next in still mode.
+- r45 #8 Far labels fade to 2.6:1 grey during a flight: fade them to opacity 0 instead of parking at a grey that fails 3:1.
+- r45 #9 Small red text (`--crit` 4.89:1) at 15 px kicker and the card's 11 px `■`: keep small red text bold, or put status text in `--text-1` with the red shape before it.
+- r45 fx warp: white streaks over a flight that ends at the overview (vestibular trigger on normal motion): never run on a flight to the overview (same as r40). Beacon is the model for colour-blind readers; afterglow/activity/sweep harmless.
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -851,6 +882,7 @@ slim top bar of fleet totals, map modes.
 - (triage r35, decision, not a task) r35 #2: every rAF renders all day with no frame cap; a kiosk on all day is the heat worst case (§2.4). Proposal: `?cap=30`, off by default (or on for the kiosk URL). Unchanged since r31; needs your call. Also unattributed: listeners 27 flat (r60 had 23), layouts ~10 a second; only the Surface's `?perf=1` can say how the iGPU fills 5 MP at 2x.
 
 - (triage r40, idea, not a task) From the stranger: borrow `fx=beacon`'s plain-mark idea for calm sites, one quiet mark that says "fine" at overview size (T42 puts the words; a mark is a look decision). The stranger would hang `galaxy` with `fx=beacon` in their hallway: the beacon is the one effect that adds meaning at overview size. No new `fx` task this review.
+- (triage r45, idea, not a task) Across variants, from the accessibility reviewer: every fx should copy `beacon`'s honesty (one steady shape meaning trouble without colour or motion); the card should borrow the plate's `■ 1 CRIT  ▲ 2 ATTENTION` status line (T44 does the header); the plate should get the card's real named buttons for `+N MORE`. No new `fx` task this review.
 
 ## Reviews
 
@@ -861,6 +893,7 @@ slim top bar of fleet totals, map modes.
 - r30-touch.md: 11 galaxy findings + 5 fx (one each) + 3 m check; 3 became tasks (T35 = #2, T36 = #3 second half, T37 = #5); #1 covered by T12 and #3 first half by T13 (notes added under `## Later`), #11 dropped (no fault), the rest and the fx notes under `## Later`, the beacon-tick idea under `## For the owner`.
 - r35-performance.md: 8 galaxy findings + fx notes + 3 m check (yes); 3 became tasks (T38 = #1, T39 = #3, T40 = #6); #2 (frame cap) under `## For the owner`, #4/#5/#7/#8 and the fx notes under `## Later`.
 - r40-stranger.md: 12 galaxy findings + 5 fx + 3 m check (yes); 3 became tasks (T41 = #1, T42 = #4, T43 = #6); #3 (empty card) folded into T18, #5 (clipped line) folded into T24, #7 dropped (by design since T12, docs are T21's), #2/#8/#9/#10/#11/#12 and the fx notes under `## Later`, the calm-mark idea under `## For the owner`.
+- r45-accessibility.md: 9 galaxy findings + 5 fx + 3 m check (yes for normal sight, borderline low vision); 3 became tasks (T44 = #2, T45 = #3, T46 = #4); #1 (focus, Esc) is T20's, added there with the measurement; #5-#9 and the fx notes under `## Later`, the cross-variant steals under `## For the owner`.
 
 ## Scores
 
@@ -908,5 +941,11 @@ slim top bar of fleet totals, map modes.
 | 40 | stranger | fx-afterglow | | | | | 3 | 8 | |
 | 40 | stranger | fx-activity | | | | | 5 | 5 | |
 | 40 | stranger | fx-sweep | | | | | 4 | 8 | |
+| 45 | accessibility | galaxy | 7 | 6 | 8 | 6 | 7 | 7 | 7 |
+| 45 | accessibility | fx-beacon | | | | | 7 | 7 | |
+| 45 | accessibility | fx-warp | | | | | 6 | 4 | |
+| 45 | accessibility | fx-afterglow | | | | | 3 | 8 | |
+| 45 | accessibility | fx-activity | | | | | 5 | 5 | |
+| 45 | accessibility | fx-sweep | | | | | 4 | 8 | |
 
 ## Morning
