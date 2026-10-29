@@ -479,7 +479,9 @@ Notes for every builder round (planner, round 7):
   a 48 px ×; 3-4 key stats from the model where only the off value takes a status hue; a "Below" strip of child chips (tap:
   select and fly there; `+N`); a pure `describe(sel, model)` (the sketch's `card.js describe`) — done when: `describe` tests
   for a site, a room, a builder, a service moon and a lane moon (path, stats, below, `+N`), a test that a calm stat has no
-  hue, and a page test tapping a Below chip selecting that node.
+  hue, and a page test tapping a Below chip selecting that node. (r40-stranger #3: a tapped planet's card is today empty,
+  `• BA BUILDER ✕`, and the sheet's status and named problems are gone; the content must carry the node's status word and
+  its named problems, not stats only.)
 - [ ] T19 (§7 Night 5 D3+D4) [ui] [variant:galaxy] The card's actions per type, at most 4 and `…`: site (Open, What's below,
   Board, Pin; `…` Proxmox link), room (Logs, Board, What's below, Pin; `…` Fly to, Terminal link, Proxmox link), builder (Run
   log, What's below, Board, Pin), service moon (Logs, Board, Pin, Fly to), lane moon (Log, PR, Pin, Fly to). Navigation
@@ -512,7 +514,8 @@ Notes for every builder round (planner, round 7):
   the status lines compete with the headline. Wrap (or grow one line) instead of cutting; headline, subject, facts on one
   scale (about 1.0 / 0.42 / 0.28), facts in `--text-1` with only the mark and label coloured — done when: a test with a long
   fact finds no ellipsis cut and the plate inside the frame, a still of a crit plate (large demo, `HV1` down) shows three
-  clear sizes.
+  clear sizes. Also (r40-stranger #5): no plate line is clipped through its glyphs (`r40-fx-warp` frame 6, VM-C's third
+  line): the plate cuts at whole lines (`+N MORE`), never mid-glyph.
 - [ ] T25 (triage, r10-film-ui #11) [ui] [variant:galaxy] The overview banner returns after a Back flight lands, from its
   own place: in `r10-touch` 09-back-2 (3.2 s after the tap) `HV2 · STORAGE` is clipped by the frame's bottom edge while the
   camera still flies — done when: a page test on a fake clock finds the banner's box inside the frame at every step of a
@@ -602,6 +605,23 @@ Notes for every builder round (planner, round 7):
   `planet` and `bigStar` at 20x14 at every level and take the saving from dust and far stars — done when: a test pins the
   floor at L2 for planet and bigStar and that L2's overview triangles stay at or under night 4's L2 number plus a few hundred
   (or lower after T38); a still of `?at=hv1&open=1&quality=2` shows round bodies.
+- [ ] T41 (triage, r40-stranger #1) [ui] [variant:galaxy] The galaxy paints a feed's `glow` and `ring`: the README and the
+  kiosk docs send a stranger to `galaxy.html`, where `lamp` (glow) and `printer-3d` (ring 0.72) are plain grey balls; only
+  `wall.html` paints them. A soft halo in the light's colour on the planet (capped below status brightness, never read as
+  trouble) and a thin grey arc for `ring` progress, taking the radial variant's data path (`/api/map` fields) — done when:
+  a scene test finds a halo for a node with `glow` (colour kept, brightness under a warn halo's) and an arc of the right
+  sweep for `ring: 0.5`, none for nodes without; `?perf=1` draw calls at the overview before/after in the notes (none added
+  for nodes without either); a still of the large demo's `kitchen-light` and `printer-3d` at `?at=…&open=1`.
+- [ ] T42 (triage, r40-stranger #4) [ui] [variant:galaxy] The calm plate says it is calm: a calm site's plate is a bare
+  `HOME` (still 2, `r40-galaxy` frames 5, 6, 8), so from the hallway it could be fine or still loading. Put a calm line in
+  the status slot (`ALL CLEAR · 9 ROOMS`, in the calm grey, from the model's counts) — done when: a test finds, for a calm
+  site, the status slot holding the calm line with the site's count and no status hue, and a trouble site's plate unchanged;
+  a still of a calm hold.
+- [ ] T43 (triage, r40-stranger #6) [ui] [variant:galaxy] Manual versus touring is readable from the hallway: `MANUAL · TOUR IN
+  0:58` and `▶ TOUR` are about 10 px caps (`r39-t17-card` frame 00), gone at a quarter scale, so a frozen galaxy after a touch
+  says nothing. While manual show a `MANUAL` word at the clock's scale beside the clock (or a countdown ring on it); the small
+  line stays — done when: a test finds the manual word present in explore and absent while touring, its font size at least
+  the clock's, and the tag/clock boxes not overlapping; the 684 px shrink of a manual overview still shows the word.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -708,6 +728,14 @@ From `r35-performance.md` (past the 3-task limit):
 - r35 fx: none filmed but beacon; afterglow/sweep key strings per slot per frame (r60 note stands).
 - r35 #1 is T38, #3 is T39, #6 is T40; night 4's T34 is now T38.
 
+From `r40-stranger.md` (past the 3-task limit):
+- r40 #2 The docs' `POST /api/map/feeds` answers 404 on a hub (route is builder-only): `demo-fleet.mjs` prints its `feedsDir` and `docs/wall.md` "Feed fields" says to drop `<feedsDir>/<source>.json` there on a hub (demo-fleet is `test/tools`, not fenced; the route is `server/*`, fenced: patch if taken).
+- r40 #7 The empty-tap step back is by design gone (T12): `docs/wall.md` Touch section says it still goes back; T21 rewrites it (double-tap/right-click/Back).
+- r40 #8/#9/#10 Docs (T21): the README Wall row says "switches for a kiosk" (none exists: kiosk is OS setup), `docs/map.md` feed extras cite the plan's D3 (point at `docs/wall.md` "Feed fields"), and the demo (`demo-fleet.mjs --size large`, `/galaxy.html?demo=1`) is buried: one line in the Wall row. `docs/wall.md` also still promises "tap a planet for its own sheet".
+- r40 #11 The plate is empty for about a third of the tour's flights (fleet line carries it; minor).
+- r40 #12 The status word on a feed-site plate is lowercase and small (`STATUS warn`), `HOLDS 2 rooms` for lamps: caps as on trouble plates, `HOLDS` names the feed's kind.
+- r40 fx warp: no streaks on a flight that ends at the overview (frame 12 crosses the trouble); fx activity: rings round CLOUD/HOME read as a selection, thinner or brightness only (same as r10/r30); fx sweep: faint rings unexplained, harmless; fx afterglow: nothing cleared in 35 s, needs the demo clear hook (r10).
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -747,6 +775,8 @@ slim top bar of fleet totals, map modes.
 - (triage r30, idea, not a task) Steal `fx=beacon`'s idea for the pick framing: a short vertical tick over each tappable planet in an open system, so the aim point is visible even when two spheres touch. The tour hold's layout (system right, plate left, nothing under tag or Back) is the model for the pick framing's free box. No new `fx` task this review.
 - (triage r35, decision, not a task) r35 #2: every rAF renders all day with no frame cap; a kiosk on all day is the heat worst case (§2.4). Proposal: `?cap=30`, off by default (or on for the kiosk URL). Unchanged since r31; needs your call. Also unattributed: listeners 27 flat (r60 had 23), layouts ~10 a second; only the Surface's `?perf=1` can say how the iGPU fills 5 MP at 2x.
 
+- (triage r40, idea, not a task) From the stranger: borrow `fx=beacon`'s plain-mark idea for calm sites, one quiet mark that says "fine" at overview size (T42 puts the words; a mark is a look decision). The stranger would hang `galaxy` with `fx=beacon` in their hallway: the beacon is the one effect that adds meaning at overview size. No new `fx` task this review.
+
 ## Reviews
 
 - r10-film-ui.md: 12 galaxy findings + 5 fx + 3 m check; 3 became tasks (T23, T24, T25); #9 dropped (covered by T9), #1/#2 covered by T1b, the rest under `## Later` or `## For the owner`.
@@ -755,6 +785,7 @@ slim top bar of fleet totals, map modes.
 - r25-skeptic.md: 15 galaxy findings + 5 fx + 3 m check; 3 became tasks (T32 = #1+#9, T33 = #12, T34 = #6); #15 covered by T9 (test note under `## Later`), #3 covered by the card (T18) and r10 #10, the rest and the fx notes under `## Later`, removals under `## For the owner`.
 - r30-touch.md: 11 galaxy findings + 5 fx (one each) + 3 m check; 3 became tasks (T35 = #2, T36 = #3 second half, T37 = #5); #1 covered by T12 and #3 first half by T13 (notes added under `## Later`), #11 dropped (no fault), the rest and the fx notes under `## Later`, the beacon-tick idea under `## For the owner`.
 - r35-performance.md: 8 galaxy findings + fx notes + 3 m check (yes); 3 became tasks (T38 = #1, T39 = #3, T40 = #6); #2 (frame cap) under `## For the owner`, #4/#5/#7/#8 and the fx notes under `## Later`.
+- r40-stranger.md: 12 galaxy findings + 5 fx + 3 m check (yes); 3 became tasks (T41 = #1, T42 = #4, T43 = #6); #3 (empty card) folded into T18, #5 (clipped line) folded into T24, #7 dropped (by design since T12, docs are T21's), #2/#8/#9/#10/#11/#12 and the fx notes under `## Later`, the calm-mark idea under `## For the owner`.
 
 ## Scores
 
@@ -796,5 +827,11 @@ slim top bar of fleet totals, map modes.
 | 35 | performance | fx-afterglow | | | | | 2 | 7 | |
 | 35 | performance | fx-activity | | | | | 3 | 4 | |
 | 35 | performance | fx-sweep | | | | | 4 | 6 | |
+| 40 | stranger | galaxy | 8 | 7 | 8 | 5 | 8 | 7 | 7 |
+| 40 | stranger | fx-beacon | | | | | 8 | 7 | |
+| 40 | stranger | fx-warp | | | | | 6 | 5 | |
+| 40 | stranger | fx-afterglow | | | | | 3 | 8 | |
+| 40 | stranger | fx-activity | | | | | 5 | 5 | |
+| 40 | stranger | fx-sweep | | | | | 4 | 8 | |
 
 ## Morning
