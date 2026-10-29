@@ -381,7 +381,7 @@ Notes for every builder round (planner, round 7):
   bring the held star under the banner (`04-turned`, T23/T30's banner size); the plate still truncates (T24).
 - [x] T14 (§7 Night 5 C5) [ui] [variant:galaxy] The `createReturn` leftover (`touch.js`, `main.js`): Back returns to the
   explore pose a person left, never to a pose a show's `flyTo` left — done when: a page test explores to a pose, lets a show
-  fly elsewhere and end, presses Back and finds the camera at the explore pose; the existing return tests green. (commit SHA)
+  fly elsewhere and end, presses Back and finds the camera at the explore pose; the existing return tests green. (commit 9a49689)
   Notes (builder, round 34): the leftover was `leave` keeping any `free` want: a show's `place` (fitNodes, setCamera, an
   undo) is one, so a tap on a site after a show made Back fly to the show's frame; after a show's flyTo (a site want) it
   went to the fit. `touch.js createReturn` now has `moved(m)`, wired as `director.onMove(left.moved)` in `main.js`: a
