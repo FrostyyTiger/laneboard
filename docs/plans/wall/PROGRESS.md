@@ -564,7 +564,7 @@ Notes for every builder round (planner, round 7):
   running (≈2 s after the finger lifts) re-turns the camera over a card's `Open` or `Fly to` (the coast steers with
   `hold`); worth a line in T35/T36's rounds. The site card is tall (≈520 px with three problems); T20's manners
   round may want the problems capped lower for a site.
-- [ ] T20 (§7 Night 5 D5+D6) [ui] [variant:galaxy] The card's manners: grey glass from tokens, the site tint only as a 2 px top
+- [x] T20 (§7 Night 5 D5+D6) [ui] [variant:galaxy] The card's manners: grey glass from tokens, the site tint only as a 2 px top
   edge, a 150 ms fade, the galaxy dimmed slightly behind it; closes on ×, Esc, an empty tap, a second tap on its node, a
   sideways swipe, or 60 s idle (then the tour may resume as now, B237); a labelled region, real named buttons, focus moves in
   on open and back on close — done when: a page test on a fake clock closes it each of the seven ways, finds focus inside on
@@ -572,7 +572,35 @@ Notes for every builder round (planner, round 7):
   `?at=hv1&open=1` with a builder picked shows card, leader and ring together.
   (r45-accessibility #1, measured: today the card never takes focus — `document.activeElement` stays `BODY` — and Esc leaves it
   open. On open focus the heading (`tabindex=-1`, `focus({ preventScroll: true })`); Esc closes and returns focus to the opener,
-  or to Back after a canvas tap; pin both in a fakedom test.)
+  or to Back after a canvas tap; pin both in a fakedom test.) (commit COMMIT)
+  Notes (builder, round 47): `card.js`: `CARD_SWIPE` {fadeMs 150, swipePx 64, slope 2}; pure `cardTint(world, site)`
+  (palette.js `LOOK.tints` at `tintL`, as CSS) → `--galaxy-card-tint` via `style.setProperty`, the 2 px top edge only
+  (`[data-tinted]`). **The fade is JS, on the frame clock** (opacity eased out, written only on change, on card,
+  leader, spot and dim): the app's CSS guardrails (`css-guardrails.mjs` [6]) cap transitions at 120 ms and allow no
+  animation but `lb-flash`, so a 150 ms CSS fade would break them; reduced motion: no fade. A closing card is closed
+  for the page at once (`shown()` false, `inert`, no presses) and hidden after the fade; a new card replaces a fading
+  one at once. The dim: `.galaxy-card-dim` (`--bg-canvas` 30 %) inserted before `galaxy-show-veil`, so canvas and
+  names dim and the frame's words (plate, banner, fleet line, tag) stay as loud. No `backdrop-filter` (guardrail [2]):
+  the "glass" stays the 88 % ground it had. Closes: × (as before), Esc (keydown on the document), a sideways swipe
+  on the card (decided on the move, the click after it swallowed), and in `main.js`'s tap: **an empty tap or a tap on
+  the card's own node closes the card and does nothing else** (place, ring and camera stay: T12's "empty tap does
+  nothing" kept for the camera); a further tap on the node opens it again; the idle minute's resume already closed
+  it. Focus: the name is `role=heading aria-level=2 tabindex=-1`, focused (`preventScroll`) when the card first
+  shows (it waits for the landing); on close, only focus the card took is given back: to the opener (what had focus
+  at open) or `focusBack()` = the Back control after a canvas tap. Tests: new `test/wall-galaxy-card-manners.test.mjs`
+  (6: cardTint; the shell's region/heading/named buttons and focus in/back; Esc and swipe, not a downward drag nor a
+  tap; the fade in/out and dim order, reduced motion; the page closing it seven ways on a fake clock: ×, Esc, empty
+  tap (no move), second tap, swipe (no turn), Back to the overview, the idle minute on the tour-role page (B237);
+  main.js wiring, wall.css rules added only). `galaxy-page.mjs` mirrors the new tap, tint, focus doc, resume and a
+  `role` option; two source pins updated (`card`, `touch`). Looked at (`$RUN_DIR/shots/r47-t20/`, CDP touch +
+  key events, `--size large`, `$RUN_DIR/tools/r47-t20.mjs`): HV1's card with the teal top edge and the galaxy a step
+  darker, the banner undimmed; BA's card, leader and ring together (`02-ba-card`, the still the task asked for:
+  `?at=hv1&open=1` is parked and has no touch, so no card; this is the explore equivalent); Esc → closed, focus on
+  Back (its focus ring shows, a keyboard close); second tap, empty tap, swipe, × each close it, place and ring kept;
+  opacity 0.66 read 40 ms into the fade out; 0 console errors. `r47-galaxy` (`?demo=1`, cpu 4x) 32.3 fps, worst gap
+  152 ms, 0 errors (the tour opens no card; the hidden dim costs nothing). **Seen:** a site's leader runs long across
+  its open system to the left dock (`01-hv1-card`); BA's card covers its ring's `docs-refresh` moon (its name keeps
+  off, the moon is under the card).
 - [ ] T21 (§7 Night 5 E) `docs/wall.md`: the look (the defaults and why), moons, the card (actions, `later` buttons), the
   gestures (mouse and touch: right-click, double-click/tap, drag in a system, Back steps); not the "Show commands" or handle
   sections; demo data for every feature named — done when: `test/wall-docs.test.mjs` (extended) finds the new sections and
