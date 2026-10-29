@@ -328,9 +328,11 @@ export function boot() {
   let parkedSaid = false;
   // The banner steps down while the camera holds a site, plate up or not (night 5 T23): read after a
   // move and each frame of a flight (a landing changes no version), before the names place themselves
-  // round the fleet line's new box; a settled camera reads nothing.
+  // round the fleet line's new box; a settled camera reads nothing. A parked still (`?at=`) aims the
+  // camera itself each frame, its want untouched: its site is the hold (hud.hold does nothing while unchanged).
   let holdSeen = -1, holdFlying = false;
   cam.onDraw(() => {
+    if (park) { hud.hold(parked()?.id ?? null); return; }
     const v = cam.version();
     if (v === holdSeen && !holdFlying) return;
     holdSeen = v;

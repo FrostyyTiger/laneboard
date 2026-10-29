@@ -151,4 +151,6 @@ test('galaxy/main.js reads the hold each frame of a move as the test does, befor
     at = i;
   }
   assert.ok(js.indexOf('hud.hold(') < js.indexOf('cam.onDraw(labels.draw)'), 'the names place round the new box');
+  // A parked still (`?at=`) aims the camera itself, its want never set: the parked site is the hold.
+  assert.ok(js.includes("if (park) { hud.hold(parked()?.id ?? null); return; }"));
 });
