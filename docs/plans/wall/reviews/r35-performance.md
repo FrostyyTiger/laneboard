@@ -171,7 +171,7 @@ score fx-activity calm 4
 
 Touch is scored on the gesture walks made after T13 and T14 (`r33-t13-back`, `r34-t14-return`) and on my own wake → tap
 site → tap planet run (`r35-perf`). From the performance side:
-- The taps in my run landed with no long task (`spikes.txt` has one long task in 40 s, mostly idle).
+- After the taps in my run, no rAF callback with the ring open took over 13.2 ms under 4x (`r35-perf`, `raf-wrap`). I did not time the tap itself.
 - The ring opens with no long task.
 - The Back out-flight at 1.5 s (`r33-t13-back/10-out-1.5s.png`) is mid-ease with no tear.
 - The extra millisecond per frame with a ring open (finding 3) is the one cost a finger adds.
