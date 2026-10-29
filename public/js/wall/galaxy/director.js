@@ -260,11 +260,13 @@ export function createDirector(cam, opts = {}) {
       cut: (id, zoom, fo) => { step(ev(site(id, zoom, true, fo?.member))); },
       fit: (fo) => { step(ev(OVERVIEW, fo?.ms)); },
       fly: (pose, fo) => { if (pose) step(ev({ kind: 'free', pose }, fo?.ms)); },
-      steer: (pose) => {
+      steer: (pose, so) => {
         // A finger steers once it has the page: its own explore, or a show's (it takes the camera from it).
+        // `{ hold: true }` (night 5 T12): a turn round a held system's star keeps that system held.
         if (source !== 'touch' || state.driver === 'tour' || !pose) return;
         step({ type: 'touch' });
-        call('touch', 'steer', pose);
+        if (so?.hold) call('touch', 'steer', pose, { hold: true });
+        else call('touch', 'steer', pose);
       },
     };
     views.set(source, view);

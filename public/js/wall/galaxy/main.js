@@ -40,8 +40,11 @@
 // site's sheet (T11, hud.js sheetCaption: every line, worst first); in an
 // open system a tap on a planet shows the planet's sheet where the camera is.
 // Back (T13, touch.js backStep): the big control top right (only while
-// exploring away from the overview) and a tap on empty sky each go one step
-// back, planet → system → overview, the sheet going with its step.
+// exploring away from the overview) goes one step back, planet → system →
+// overview, the sheet going with its step. A tap on empty sky does nothing
+// (night 5 T12, README §7 Night 5 C2). In a held system a drag turns it round
+// its own star (touch.js orbitRound), the star staying where it is on
+// screen and the system held and open.
 // Moons (night 5 T8, scene.js openMoons): a tapped planet's moons open onto a
 // ring round it (a tapped moon keeps its planet's open), named and targets
 // while open; another planet, its system or the overview folds them.
@@ -505,13 +508,18 @@ export function boot() {
     }
   };
   // Drag, pinch and the wheel in `explore` (T8): the orbit's far end is the overview, as fitted.
+  // In a held system (night 5 T12) a drag turns it round its own star, the system staying held and open.
   const gestures = touch && !reduced ? createGestures(document.getElementById('galaxy-stage'), touch, finger, {
     limits: () => orbitLimits(cam.home(), galaxy.world?.sites ?? []),
     view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
+    pivot: () => {
+      const w = cam.want();
+      return w.kind === 'site' ? galaxy.world?.byId.get(w.id)?.home ?? null : null;
+    },
   }) : null;
   // A tap on a site (T10): the camera flies there at the tour's zoom and opens
-  // it, the brackets close on it at once, its plate comes as the camera does.
-  // A tap on empty sky is a step back (T13).
+  // it, the brackets close on it at once, its plate comes as the camera arrives.
+  // A tap on empty sky does nothing (night 5 T12: it no longer steps back).
   const stageEl = stage;
   // A site's sheet; the camera flies there unless it already holds it (a step back from a planet).
   const openSite = (id) => {
@@ -599,7 +607,7 @@ export function boot() {
       return member ?? hitNearest(tapPoints(galaxy.world?.sites, cam.screenOf, names, beams), x - o.left, y - o.top, reach);
     },
     tap: (hit) => {
-      if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack();
+      if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); // empty sky: nothing (T12)
     },
   }) : null;
 

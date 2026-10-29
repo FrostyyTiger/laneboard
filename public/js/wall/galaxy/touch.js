@@ -18,6 +18,12 @@
 // `orbitPose`, `orbitStep`, `zoomStep`, `inertia` and `planeAt` are pure;
 // `createGestures` turns pointer events into them and steers the camera
 // (camera.js `steer`, which only this sets).
+// Inside an open system (night 5 T12, README §7 Night 5 C2) the orbit is
+// round the held system's own star (`orbitRound`): both axes turn it, the
+// pitch clamped, and the star stays on the very screen point it was on (the
+// orbit keeps the star's direction in the camera's frame, not an aim
+// offset in the world), so the first drag never shifts the system; the
+// camera is steered with `{ hold: true }`, so the system stays held and open.
 //
 // A tap (T10, README §7 Night 3 C3): a finger down and up within TAP.ms and
 // the drag's slop, alone and not a palm. `hitNearest` finds the site under it
@@ -274,13 +280,70 @@ export function orbitOf(pose, { pitch = ORBIT.pitch } = {}) {
   };
 }
 
+/** The unit vector from the camera at `yaw`, `pitch` (rad) toward what it sees. */
+const ahead = (yaw, pitch) => ({ x: Math.cos(pitch) * Math.sin(yaw), y: Math.sin(pitch), z: Math.cos(pitch) * Math.cos(yaw) });
+/** A view direction's right and up (planeAt's: right = f × world up, up = right × f). */
+function frameOf(f) {
+  const r = norm({ x: -f.z, y: 0, z: f.x });
+  return { r, u: { x: r.y * f.z - r.z * f.y, y: r.z * f.x - r.x * f.z, z: r.x * f.y - r.y * f.x } };
+}
+const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+/** The margin (rad) a round orbit's pitch keeps from the view turning over the top. */
+const OVER = 0.05;
+
+/**
+ * The orbit round `pivot` (a held system's star, night 5 T12) that a pose
+ * stands in: `{ pivot, yaw, pitch, dist, see, range }`, the camera at
+ * `dist` from the pivot at `yaw`/`pitch` (orbitOf's sense), `see` the
+ * pivot's direction in the camera's own frame (right, up, ahead), which
+ * orbitPose keeps: whatever the turn, the pivot stays on the same screen
+ * point. `range` is the pitch's clamp: ORBIT's, widened to take in where the
+ * camera stands (the first drag never jumps) and narrowed where the view
+ * would turn over the top. The pose comes back exactly at no turn. Pure.
+ */
+export function orbitRound(pose, pivot, { pitch = ORBIT.pitch } = {}) {
+  const v = { x: pose.pos.x - pivot.x, y: pose.pos.y - pivot.y, z: pose.pos.z - pivot.z };
+  const dist = Math.hypot(v.x, v.y, v.z) || 1;
+  const f = norm({ x: pose.look.x - pose.pos.x, y: pose.look.y - pose.pos.y, z: pose.look.z - pose.pos.z });
+  const { r, u } = frameOf(f);
+  const w = { x: -v.x / dist, y: -v.y / dist, z: -v.z / dist };
+  const see = { r: dot(w, r), u: dot(w, u), f: dot(w, f) };
+  const p0 = Math.asin(clamp(v.y / dist, -1, 1));
+  // The highest the camera may stand: the pivot still seen where it is, the view not over the top.
+  const a = Math.hypot(see.u, see.f), phi = Math.atan2(see.u, see.f);
+  const top = Math.asin(clamp(a * Math.cos(Math.max(0, phi) + OVER), 0, 1));
+  const range = [Math.min(pitch[0], p0), Math.max(Math.min(pitch[1], top), p0)];
+  return { pivot: { ...pivot }, look: { ...pivot }, yaw: Math.atan2(v.x, v.z), pitch: p0, dist, see, range };
+}
+
 /** The pose `{ pos, look }` of an orbit. Pure. */
 export function orbitPose(o) {
+  if (o.pivot) return roundPose(o);
   const c = Math.cos(o.pitch);
   return {
     pos: { x: o.look.x + o.dist * c * Math.sin(o.yaw), y: o.look.y + o.dist * Math.sin(o.pitch), z: o.look.z + o.dist * c * Math.cos(o.yaw) },
     look: { ...o.look },
   };
+}
+
+/**
+ * A round orbit's pose (orbitRound): the camera on its sphere round the
+ * pivot, turned so the pivot's direction in its frame is `see` again; the
+ * view keeps world up (no roll), its pitch and heading solved in closed form.
+ */
+function roundPose(o) {
+  const P = o.pivot, d = ahead(o.yaw, o.pitch);
+  const pos = { x: P.x + o.dist * d.x, y: P.y + o.dist * d.y, z: P.z + o.dist * d.z };
+  const w = { x: -d.x, y: -d.y, z: -d.z };
+  const { r: qr, u: qu, f: qf } = o.see;
+  // w.y = qu cos θ + qf sin θ: the view's pitch θ.
+  const a = Math.hypot(qu, qf) || 1;
+  const lim = Math.PI / 2 - OVER / 2;
+  const theta = clamp(Math.asin(clamp(w.y / a, -1, 1)) - Math.atan2(qu, qf), -lim, lim);
+  // Level, w is (qf cos θ - qu sin θ) ahead and qr right of the view: its heading ψ.
+  const psi = Math.atan2(w.x, w.z) - Math.atan2(-qr, qf * Math.cos(theta) - qu * Math.sin(theta));
+  const f = { x: Math.cos(theta) * Math.sin(psi), y: Math.sin(theta), z: Math.cos(theta) * Math.cos(psi) };
+  return { pos, look: { x: pos.x + f.x * o.dist, y: pos.y + f.y * o.dist, z: pos.z + f.z * o.dist } };
 }
 
 /**
@@ -290,7 +353,8 @@ export function orbitPose(o) {
  */
 export function orbitStep(o, dx, dy, { perPx = ORBIT.perPx, pitch = ORBIT.pitch } = {}) {
   if (!dx && !dy) return o;
-  return { ...o, yaw: o.yaw - dx * perPx, pitch: clamp(o.pitch + dy * perPx, pitch[0], pitch[1]) };
+  const [lo, hi] = o.range ?? pitch; // a round orbit's own clamp (orbitRound)
+  return { ...o, yaw: o.yaw - dx * perPx, pitch: clamp(o.pitch + dy * perPx, lo, hi) };
 }
 
 /**
@@ -304,6 +368,8 @@ export function orbitStep(o, dx, dy, { perPx = ORBIT.perPx, pitch = ORBIT.pitch 
 export function zoomStep(o, factor, limits, at = null) {
   const { near, far } = limits;
   const dist = clamp(o.dist * (factor > 0 ? factor : 1), near, far);
+  // Round a star (T12): only the distance; the star keeps its screen point.
+  if (o.pivot) return dist === o.dist ? o : { ...o, dist };
   let look = o.look;
   if (at && dist < o.dist) {
     const k = 1 - dist / o.dist;
@@ -383,7 +449,10 @@ export function orbitLimits(overview, sites = [], { near = ORBIT.near } = {}) {
  * orbit is handed to the camera then (one steer a frame, however many
  * pointer events came). `moved()` (optional) is told each time a gesture
  * starts to move the camera from rest (for what belongs to the overview's
- * pose). Returns `{ frame, busy(), stop() }`.
+ * pose). `pivot()` (optional, night 5 T12) is the held system's star, or
+ * null: a gesture that starts while it gives one turns round it
+ * (`orbitRound`) and steers with `{ hold: true }`, the system kept held.
+ * Returns `{ frame, busy(), stop() }`.
  */
 export function createGestures(stage, touch, cam, opts = {}) {
   const o = { clock: () => performance.now(), ...opts };
@@ -397,16 +466,20 @@ export function createGestures(stage, touch, cam, opts = {}) {
   let last = null;
   let far = 0;
 
+  let close = Infinity; // a picked planet's shot may stand nearer than ORBIT.near: no jump out on a pinch (T12)
   const limits = () => {
     const l = o.limits();
-    return { ...l, far: Math.max(l.far, far) };
+    return { ...l, near: Math.min(l.near, close), far: Math.max(l.far, far) };
   };
   const take = () => {
     if (orbit) return orbit;
     const p = cam.pose?.();
     if (!p) return null;
-    orbit = orbitOf(p);
+    // In a held system (T12): round its star, the system kept held.
+    const pivot = o.pivot?.() ?? null;
+    orbit = pivot ? orbitRound(p, pivot) : orbitOf(p);
     far = orbit.dist; // a fitted overview may stand farther back than the plain one: it stays reachable
+    close = pivot ? orbit.dist : Infinity;
     return orbit;
   };
   let still = true; // no gesture has moved the camera since it was last at rest
@@ -508,7 +581,8 @@ export function createGestures(stage, touch, cam, opts = {}) {
       vel = inertia(vel, dt);
     }
     if (dirty && orbit) {
-      cam.steer(orbitPose(orbit));
+      if (orbit.pivot) cam.steer(orbitPose(orbit), { hold: true });
+      else cam.steer(orbitPose(orbit));
       dirty = false;
     }
     // At rest with no finger down, the camera is free for others (a tap's flight, T10; the tour, T14):

@@ -17,7 +17,9 @@
 // a page that passes the option gets `steer(pose)`; the tour never does, and
 // without it `steer` does nothing. A steered pose is held as given, no
 // flight (the gesture is its own motion), every system folded; the next
-// `focus` or `fit` flies from it. `fly(pose, { ms })` (night 4 T4, back to
+// `focus` or `fit` flies from it. `steer(pose, { hold: true })` (night 5
+// T12, a turn round a held system's star) keeps the site the want, held
+// and open, the finger's pose its shot (`want().turned`, no drift). `fly(pose, { ms })` (night 4 T4, back to
 // where a finger left the overview) flies to a free pose and holds it there.
 //
 // `still` (reduced motion, T11, still.js): the camera never leaves the
@@ -331,6 +333,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   const target = (now) => {
     if (still && !want.cut) return overview(now);
     if (want.kind === 'free') return want.pose;
+    if (want.kind === 'site' && want.turned) return want.turned; // a finger's turn round its star (T12)
     if (want.kind === 'site') {
       const s = siteOf(want.id);
       if (s) {
@@ -496,14 +499,18 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     // Where the camera is now (`{ pos, look }`), null before its first frame.
     pose: () => (pose ? { pos: { ...pose.pos }, look: { ...pose.look } } : null),
     // A finger's pose (T8): held from the next frame on, the flight under way dropped.
-    steer: (p) => {
+    // `{ hold: true }` (night 5 T12, a turn round a held system's star): the site stays the want, held
+    // and open, its shot the finger's pose (`turned`, no drift) until the next move; else a free pose.
+    steer: (p, opts) => {
       if (!steer || still || !p) return;
       from = null;
       fromEnd = null;
       flying = null;
-      fromId = want.kind === 'site' ? want.id : fromId;
-      want = { kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, t0: null };
+      const turned = { pos: { ...p.pos }, look: { ...p.look } };
       version += 1;
+      if (opts?.hold && want.kind === 'site') { want = { ...want, turned }; return; }
+      fromId = want.kind === 'site' ? want.id : fromId;
+      want = { kind: 'free', pose: turned, t0: null };
     },
     // A show's free pose (fitNodes, setCamera, an undo; cockpit screens.md §9.2 M2, M4): on any page,
     // flown in `ms`, or on it from the next frame with `cut` or in still mode (reduced motion jumps).
