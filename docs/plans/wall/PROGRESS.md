@@ -475,13 +475,37 @@ Notes for every builder round (planner, round 7):
   (`?demo=1`, cpu 4x) 34.1 fps, worst gap 305 ms, 0 errors (the tour never opens a card). **Seen:** the pick framing still
   keeps the planet right of the remembered plate box, so the card stands in the plate's old place (fine now; T18's taller
   card may want `pickBox` to count the card instead of the plate); the leader crosses the ring's orbit line.
-- [ ] T18 (§7 Night 5 D2) [ui] [variant:galaxy] The card's content: status dot, name, type chip, parent path (`hv1 › vm-a`),
+- [x] T18 (§7 Night 5 D2) [ui] [variant:galaxy] The card's content: status dot, name, type chip, parent path (`hv1 › vm-a`),
   a 48 px ×; 3-4 key stats from the model where only the off value takes a status hue; a "Below" strip of child chips (tap:
   select and fly there; `+N`); a pure `describe(sel, model)` (the sketch's `card.js describe`) — done when: `describe` tests
   for a site, a room, a builder, a service moon and a lane moon (path, stats, below, `+N`), a test that a calm stat has no
   hue, and a page test tapping a Below chip selecting that node. (r40-stranger #3: a tapped planet's card is today empty,
   `• BA BUILDER ✕`, and the sheet's status and named problems are gone; the content must carry the node's status word and
-  its named problems, not stats only.)
+  its named problems, not stats only.) (commit 5ad5a89)
+  Notes (builder, round 42): `card.js describe(sel, world)` (pure; `CARD_SAYS` {stats 4, problems 3, below 6}) →
+  `{ name, kind, tone, chip, path, status: {word, text, tone}, problems, more, stats, below, belowMore }`. The dot is
+  the worse of its own tone and the worst below it; the status row is its **own** word and why (`OK builder-a · 3 lanes`,
+  the word grey when calm); the problems are the troubles below it grouped as the plate groups them (a lane's waiting
+  session is named under the lane, as the plate does), `▲ ATTENTION FEAT-SEARCH · waiting on…`, full text wrapped, never
+  clipped; stats in order rooms up (site) · lanes/waiting (builder) · cpu/mem/disk · cost/context/age · detail (ID goes to
+  the chip `ROOM · 201`); a word value (a branch) spans two columns. Below: direct children, trouble first by severity,
+  else model order, `+N` past six (plain text, not a button: no dead tap). A chip is a 48 px button `Fly to <name>`
+  → `onPick` → `openPlanet(id, place.site)` (main.js, shared helper the same). `wall.css`: rules added only, one scale
+  24 / 20 / 15 / 11 px, hue only on the status word, a problem's mark and word, an off value and a chip's border.
+  **cardPlace fix:** the taller card (≈350 px) no longer fits beside a moon near the right edge, and the dock covered the
+  selected moon itself so its leader was null (`r42-t18-card` first take, 04); the dock now keeps off its own node, tries
+  the right edge then the left, and a dock above/below the node meets the card's edge. Tests (6 new in
+  `test/wall-galaxy-card.test.mjs`): describe for a site, a room, a builder, a service moon and a lane moon; a calm stat
+  without tone and off ones with; the card's DOM (no innerHTML, chip 48 px/pressed/manipulation, reopen clears); the page
+  taps BA's `feat-search` chip and lands on the lane moon with its card; the dock never over its node, the left edge.
+  Looked at (`$RUN_DIR/shots/r42-t18-card/sheet.png` + `crop-*.png`, CDP touch, `--size large`,
+  `$RUN_DIR/tools/r42-t18.mjs`): BA card left of it with leader, the lane chip → lane card docked left with its leader,
+  Back → BA, HV2 → STORAGE card → `nfs` chip → NFS card (`HV2 › STORAGE`, `OK 18 TB`); × closes; 0 console errors.
+  `r42-galaxy` (`?demo=1`, cpu 4x) 35.7 fps, worst gap 206 ms, 0 errors; this VM was loaded (load avg 5-6): two other takes
+  gave 26.3 and 31.4, the commit before gave 27.1 in the same minute; the tour never opens a card, so it is noise.
+  **Seen:** in the first take a tap on `scr('storage')` while HV1's BA was framed (HV2 not on screen) left the camera
+  very close to HV1's star with BA's card still up (frames 07-08 of that take, overwritten): a tap on a point from a
+  node off the frame; worth a look by T35/T36's rounds. The site's tap keeps its sheet (T19 decides the site card).
 - [ ] T19 (§7 Night 5 D3+D4) [ui] [variant:galaxy] The card's actions per type, at most 4 and `…`: site (Open, What's below,
   Board, Pin; `…` Proxmox link), room (Logs, Board, What's below, Pin; `…` Fly to, Terminal link, Proxmox link), builder (Run
   log, What's below, Board, Pin), service moon (Logs, Board, Pin, Fly to), lane moon (Log, PR, Pin, Fly to). Navigation
