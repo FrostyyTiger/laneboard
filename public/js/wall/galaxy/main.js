@@ -326,6 +326,18 @@ export function boot() {
   // `touring`: the tour runs its legs (and so ends a cleared crit's hold at its overview) only while it drives.
   const hud = createHud({ caption, frame, tour: park ? null : tour, touring: () => director.driver() === 'tour', size: galaxy.size, lock });
   let parkedSaid = false;
+  // The banner steps down while the camera holds a site, plate up or not (night 5 T23): read after a
+  // move and each frame of a flight (a landing changes no version), before the names place themselves
+  // round the fleet line's new box; a settled camera reads nothing.
+  let holdSeen = -1, holdFlying = false;
+  cam.onDraw(() => {
+    const v = cam.version();
+    if (v === holdSeen && !holdFlying) return;
+    holdSeen = v;
+    holdFlying = cam.flight() != null;
+    const w = cam.want();
+    hud.hold(w.kind === 'site' && !holdFlying ? w.id : null);
+  });
 
   // The names, over the scene and under the words: placed after each frame
   // where the camera is now, clear of the caption plate, the fleet line and

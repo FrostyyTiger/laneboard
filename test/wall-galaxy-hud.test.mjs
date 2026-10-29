@@ -791,8 +791,12 @@ test('wall.css (T30): the far line steps down under a crit plate only; the echo 
   const css = read('css/wall.css');
   const steps = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*)\{[^}]*font-size: var\(--cap-(?:name|why)\)/g)].map((x) => x[1].trim())
     .filter((sel) => sel.includes('wall-fleet'));
-  assert.deepEqual(steps, ['.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line'],
-    'only a crit plate steps the far line down (T19: to the why step)');
+  // Night 5 T23: a crit hold (the camera on it, plate up or not) takes the same step; test/wall-galaxy-hold.test.mjs.
+  assert.deepEqual(steps, [
+    '.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line',
+    '.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-line',
+  ], 'only a crit plate or a crit hold steps the far line down (T19: to the why step)');
+  assert.doesNotMatch(css, /\[data-hold="warn"\]/, 'a warn hold leaves the 3 m size too');
   assert.doesNotMatch(css, /\[data-plate(="warn"|="grey")?\] \.wall-fleet\[data-step="far"\]/, 'a milder plate leaves the 3 m size');
   // The 3 m size is larger than the plate's name step under a milder plate: 14vmin (fitted, 9 at the least) > 6.9vmin.
   assert.match(css, /--fleet-far: 14vmin;/);

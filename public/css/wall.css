@@ -607,6 +607,42 @@ html.wall body {
    that drops out; `2 CRIT · HV2 · HV1` stays the line, the other crit in sight. */
 .wall-frame-layer[data-plate] .wall-fleet[data-echo=""] { visibility: hidden; }
 .wall-frame-layer[data-plate] .wall-fleet[data-echo="why"] .wall-fleet-sub-why { visibility: hidden; }
+/* One hero per held frame (night 5 T23, r10-film-ui 3): the step follows the
+   camera, not the plate. From the moment the camera lands on a site (galaxy
+   hud.js sets data-hold to the tone of its worst; a tour hold, a tapped site
+   with its card, a parked still) until it leaves it, plate up or not:
+   - over a crit hold the far line is the one-line size it takes under a crit
+     plate (T19 above), so the frames before the plate types match the ones after;
+   - over a calm hold it drops one step, to the hero's least (caption.js
+     STEPS.heroMin), still a clear step above the calm name (night 3 T22);
+   - over a warn hold it keeps its 3 m size: the crit elsewhere is the worst
+     thing, so it stays the loudest (night 3 T30, README §2.1).
+   Flights, the overview and a free pose have no data-hold: the 3 m size. */
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  max-width: calc(64vw + 2.4vmin + var(--frame-x));
+}
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-line {
+  flex: none;
+  font-size: var(--cap-why);
+  line-height: 1;
+}
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub {
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  gap: 0;
+}
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub .wall-fleet-more { margin-left: 2.4vmin; }
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub-why::before {
+  content: "·";
+  margin: 0 0.25em;
+}
+.wall-frame-layer[data-hold="grey"] .wall-fleet[data-step="far"] .wall-fleet-line {
+  font-size: min(var(--fleet-far), 9vmin);
+}
 .wall-fleet-sub {
   display: flex;
   justify-content: flex-end;
