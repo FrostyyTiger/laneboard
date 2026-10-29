@@ -610,11 +610,34 @@ Notes for every builder round (planner, round 7):
   touches, and every patch written for a fenced file; the 3 m check (an overview still shrunk to 3 m) and a `?demo=1` film
   of the new defaults — done when: the list names every commit of the night that touched those files (`git log` check in the
   notes) and the film's sheet is read in the notes.
-- [ ] T23 (triage, r10-film-ui #3) [ui] [variant:galaxy] One hero per held frame: the banner drops to its one-line size
+- [x] T23 (triage, r10-film-ui #3) [ui] [variant:galaxy] One hero per held frame: the banner drops to its one-line size
   whenever the camera holds a site, not only once the plate is up (frames 1-4 of `r9-galaxy` show `■ HV2 · STORAGE` at full
   size over a hold on HV1); full size stays at the overview — done when: a test finds the banner's size step follow the
   camera's hold state (overview full, any hold one-line, plate up or not), and a `?demo=1` film's held frames before the plate
-  types show the one-line banner.
+  types show the one-line banner. (commit 17fd358, wip e5f02c4)
+  Notes (builder, round 48): **Deviation, on purpose: "any hold one-line" is not built for a warn hold.** The review's
+  frame 4 is the camera on HV1 (warn) with HV2's crit banner the loudest thing; shrinking it there would make a warn's
+  plate louder than the crit, against README §2.1 ("it is the loudest thing on screen") and night 3 T30/T22, which put
+  it there on purpose. So the step follows the camera (not the plate) by the held site's tone: `frame.hold(tone)` →
+  `data-hold` on `#wall-frame` (crit, warn, low, grey; none at the overview, in a flight, in a free pose); `wall.css`
+  (rules added only, the T19 crit-plate rules twinned): over a crit hold one line at `--cap-why`, over a calm hold one
+  step down to `STEPS.heroMin` (`min(var(--fleet-far), 9vmin)`, still ≥ 1.25x the calm name), over a warn or low hold
+  the 3 m size. `hud.hold(siteId)` reads the tone (`captionLines` of the site, its worst) only when the site or the model
+  changes; `main.js` calls it from an `onDraw` gated on `cam.version()` and a flight under way (a settled camera reads
+  nothing), and for a parked still from `parked()` (it aims the camera itself, `want` stays `overview`). The card's
+  explore hold (no plate) now steps the banner too. Tests: new `test/wall-galaxy-hold.test.mjs` (5: the tone per site and
+  a newer model; `frame.hold` re-reads the far box; the page harness tapping HV2: none in the flight, `crit` landed with
+  no plate, kept through a turn, none leaving, `warn` on HV1, none at the overview; the css twins, the calm step, no warn
+  rule; main.js's read pinned); the T30 css test in `wall-galaxy-hud.test.mjs` accepts the hold twin and pins no warn
+  rule. Looked at (`$RUN_DIR/shots/r48-galaxy`, `r48-t23/`, probe `r48-t23-probe.json`, `$RUN_DIR/tools/r48-t23*.mjs`):
+  `r48-galaxy` (`?demo=1`, cpu 4x) 34.4 fps, worst gap 220 ms, 0 errors; CLOUD and REMOTE calm holds show the banner a
+  step down, HV1 warn holds keep it full, HV2 crit holds hide it (the echo, as before); the 200 ms probe sees `data-hold`
+  land with the camera (flight 121 px, calm hold 82 px, crit hold 39 px, warn hold 121 px); `park-home-1.png`
+  (`?at=home`, crit `HV1 · VM-C` standing): the red banner at 82 px over the white `HOME` at 6.9 vmin, clearly one hero.
+  The demo's crit had cleared when the touch probe tapped HV2 (hold `grey`, the banner a warn line, untouched): a crit
+  explore hold is pinned by the page test only. **Seen:** HV2's card still read `CRIT STORAGE` after the model had
+  cleared it (the card is described at open, not followed); a drag's coast still steers over a later `focus` (the test
+  waits it out; as noted under T19b, for T35/T36).
 - [ ] T24 (triage, r10-film-ui #4) [ui] [variant:galaxy] The plate's text never truncates and has three levels:
   `FEAT-SEARCH · WAITING ON A PERMIS…` is cut at the plate's edge; the site name `HV1` is smaller than the line above it and
   the status lines compete with the headline. Wrap (or grow one line) instead of cutting; headline, subject, facts on one
@@ -910,6 +933,10 @@ slim top bar of fleet totals, map modes.
 - (triage r35, decision, not a task) r35 #2: every rAF renders all day with no frame cap; a kiosk on all day is the heat worst case (§2.4). Proposal: `?cap=30`, off by default (or on for the kiosk URL). Unchanged since r31; needs your call. Also unattributed: listeners 27 flat (r60 had 23), layouts ~10 a second; only the Surface's `?perf=1` can say how the iGPU fills 5 MP at 2x.
 
 - (triage r40, idea, not a task) From the stranger: borrow `fx=beacon`'s plain-mark idea for calm sites, one quiet mark that says "fine" at overview size (T42 puts the words; a mark is a look decision). The stranger would hang `galaxy` with `fx=beacon` in their hallway: the beacon is the one effect that adds meaning at overview size. No new `fx` task this review.
+- (builder r48, T23, decision) r10-film-ui #3 asked for the banner at one-line size at **any** hold. Built for crit holds
+  (one line) and calm holds (one step down, still above the name); a warn hold keeps the crit banner at its 3 m size, as
+  night 3 T30 decided, because README §2.1 says trouble stays the loudest thing. If you want the film reviewer's "one hero"
+  over a warn hold too, it is one rule in `wall.css` (`[data-hold="warn"]`) and the T30 css test.
 - (triage r45, idea, not a task) Across variants, from the accessibility reviewer: every fx should copy `beacon`'s honesty (one steady shape meaning trouble without colour or motion); the card should borrow the plate's `■ 1 CRIT  ▲ 2 ATTENTION` status line (T44 does the header); the plate should get the card's real named buttons for `+N MORE`. No new `fx` task this review.
 
 ## Reviews
