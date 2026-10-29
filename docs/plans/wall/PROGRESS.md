@@ -1198,9 +1198,10 @@ checked only by `ci` on the PR.
 
 ### Research
 
-- Q19 (moons and nested selection, `research/Q19-moons-nested-selection.md`): the source games space moons on screen, open
-  them on selection and step back one level at a time. This backed T8's ring with no picker, T11's screen-space hits and
-  T13's Back levels. Sources were partly blocked, and the hit-radius evidence is thin.
+- Q19 (moons and nested selection, `research/Q19-moons-nested-selection.md`): the space maps it could read do not fan
+  small bodies out. They change which level is shown (SpaceEngine's zoom levels), step down by centring on a body and
+  back up by a key or button, and keep labels in check by importance weights (Celestia). No source gives a hit radius,
+  so T8's ring, T11's 48/28 px targets and T13's Back levels are the Wall's own choices.
 - Q20 (node card placement, `research/Q20-node-card-placement.md`): anchor the card beside its body with a leader and
   dock it at the edge when there is no room, then close on an empty tap or Esc. This became T17/T20. The Apple HIG page
   did not load, so that part is a summary only.
