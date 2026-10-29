@@ -643,7 +643,7 @@ test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flie
   assert.match(js, /hitNearest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, names, beams\), x - o\.left, y - o\.top, reach\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /finger\.focus\(id, TIMING\.zoom\)/);
-  assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \|\| reduced \? 0 : FLIGHT\.ms \}\)/, 'a cut (reduced motion, T14) has its plate at once');
+  assert.match(open, /pickCard\(id, id\);/, 'its card (night 5 T19b), which waits for the landing; a cut (reduced motion, T14) has it at once');
 });
 
 test('memberPoints (T11): the members of an open system only, at their drawn points, in their own tone', () => {

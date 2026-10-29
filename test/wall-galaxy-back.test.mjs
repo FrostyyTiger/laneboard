@@ -165,7 +165,7 @@ test('page: the walk moon → planet → system → overview, one Back kind each
   p.doubleTap(31, SKY);
   p.tick(16);
   assert.deepEqual([p.place().level, p.place().site], ['site', 'lab']);
-  assert.deepEqual([p.sheets.at(-1), p.card.shown()], ['lab', false], 'the system\'s sheet, the card gone');
+  assert.deepEqual([p.sheets.at(-1), p.card.selected()], [null, 'lab'], 'the system\'s card, no sheet (T19b)');
   assert.equal(p.galaxy.moonsOpen(), null, 'builder-a\'s moons fold');
   assert.equal(p.moves.length, n, 'no camera move');
   p.run(1000);

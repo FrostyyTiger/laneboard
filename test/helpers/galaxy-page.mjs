@@ -86,7 +86,11 @@ export function page() {
   // main.js's cardAct (night 5 T19), as written there.
   const cardAct = (act, id) => {
     touch?.poke();
-    if (act === 'open' && galaxy.world?.byId.has(id)) openSite(id);
+    if (act === 'open' && galaxy.world?.byId.has(id)) {
+      const w = cam.want();
+      if (w.kind === 'site' && w.id === id && w.turned != null) finger.focus(id, TIMING.zoom);
+      openSite(id);
+    }
     else if (act === 'fly' && id != null && place.site != null) finger.focus(place.site, TIMING.zoom, { member: id });
   };
   cam.onDraw(card.draw);
@@ -107,8 +111,7 @@ export function page() {
     const w = cam.want();
     const there = w.kind === 'site' && w.id === id && w.member == null;
     if (!there) finger.focus(id, TIMING.zoom);
-    card.close();
-    hud.open({ id });
+    pickCard(id, id);
     place = placeOf(id);
   };
   const hostOf = (site, id) => {
@@ -128,8 +131,7 @@ export function page() {
     const w = cam.want();
     const kept = w.kind === 'site' && w.id === id && (w.turned != null || w.member == null);
     if (!kept) finger.focus(id, TIMING.zoom, ZOOM_OUT);
-    card.close();
-    hud.open({ id });
+    pickCard(id, id);
     place = placeOf(id);
   };
   const goBack = () => {
@@ -170,7 +172,7 @@ export function page() {
     back.show(backControl(m, place));
     const moonsFor = moonsAt(place);
     if (moonsFor !== moonsAsked) { moonsAsked = moonsFor; galaxy.openMoons(moonsFor); }
-    if (card.shown() && card.selected() !== (place.moon ?? place.planet)) card.close();
+    if (card.shown() && card.selected() !== (place.moon ?? place.planet ?? place.site)) card.close();
     director.tick();
     gestures.frame(now);
     cam.frame(now);

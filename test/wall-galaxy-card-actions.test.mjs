@@ -205,8 +205,9 @@ test('galaxy/main.js passes the card\'s actions to cardAct: a touch, Open a site
   assert.match(js, /onAct: \(act, id\) => cardAct\(act, id\),/);
   const act = js.slice(js.indexOf('const cardAct = '), js.indexOf('\n  };', js.indexOf('const cardAct = ')));
   assert.match(act, /touch\?\.poke\(\);/);
-  assert.match(act, /act === 'open' && galaxy\.world\?\.byId\.has\(id\)\) openSite\(id\);/);
+  const open = /act === 'open' && galaxy\.world\?\.byId\.has\(id\)\) \{\s*const w = cam\.want\(\);\s*if \(w\.kind === 'site' && w\.id === id && w\.turned != null\) finger\.focus\(id, TIMING\.zoom\);\s*openSite\(id\);/;
+  assert.match(act, open);
   assert.match(act, /finger\.focus\(place\.site, TIMING\.zoom, \{ member: id \}\);/);
   const helper = fs.readFileSync(new URL('./helpers/galaxy-page.mjs', import.meta.url), 'utf8');
-  assert.match(helper, /act === 'open' && galaxy\.world\?\.byId\.has\(id\)\) openSite\(id\);/, 'the page helper as main.js');
+  assert.match(helper, open, 'the page helper as main.js');
 });

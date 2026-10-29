@@ -540,10 +540,30 @@ Notes for every builder round (planner, round 7):
   Fly to after a drag frames the lane again, STORAGE's `… · ACK · SNOOZE`; 0 console errors. `r43-galaxy` (`?demo=1`,
   cpu 4x) 34.7 fps, worst gap 239 ms, 0 errors (the tour opens no card). **Not done here:** a site still keeps its
   sheet, so the site's actions are tested pure only: T19b.
-- [ ] T19b (split from T19) [ui] [variant:galaxy] The site's card: a tapped site gets the card (its `describe` and
+- [x] T19b (split from T19) [ui] [variant:galaxy] The site's card: a tapped site gets the card (its `describe` and
   `Open · What's below · Board · Pin`) or keeps the plate, decided against README D5 ("the caption and the fleet line
   stay") and the e2e cockpit selectors (`e2e/cockpit/*.mjs`, grep `galaxy-caption`/sheet first) — done when: a page test
-  taps a site and finds what was decided (card with its actions and `Open` flying in, or the plate), and a still.
+  taps a site and finds what was decided (card with its actions and `Open` flying in, or the plate), and a still. (commit SHA)
+  Notes (builder, round 44): **Decided: the card.** README D5 says "the old left-hand sheet for a tapped node gives way
+  to the card"; the site's sheet *was* the left-hand plate (`hud.open`, sheetCaption), so it goes as a planet's did in
+  T17, and the owner's sketch (`sk_card=1`) did the same (`hud.release()` on a site). "The caption and the fleet line
+  stay" is read as the fleet line and the tag, as T17 read it. No e2e or cockpit test names `galaxy-caption`, a sheet
+  or the card (grepped). `main.js`: `openSite` and `backToSite` call `pickCard(id, id)` instead of `hud.open`; the
+  frame's card check keeps a site's card (`place.moon ?? place.planet ?? place.site`); `FLIGHT` import dropped (unused).
+  `hud.open` stays in hud.js (a show or test may use it) but no finger's tap calls it now; the sheet's bracket step
+  (T25) goes with it, the card's spot ring marks the site. `cardAct('open')` from the site's own card after a drag-turn
+  flies back to the system's hold (else `openSite` would see "already there" and do nothing). Tests: new
+  `test/wall-galaxy-site-card.test.mjs` (2: tap HV1 → its card, no sheet, hidden while flying, row
+  `open · below · board · pin`, a leader from the star, no planet under it; Back from BA → the system's card, Open
+  after a turn flies to the hold and keeps the card, Back → overview closes it); five tests that pinned the site's
+  sheet updated (`card`, `card-actions`, `touch`, `walk`, `back`). Looked at (`$RUN_DIR/shots/r44-t19b/sheet.png`,
+  `crop-*.png`, CDP touch, `--size large`, `$RUN_DIR/tools/r44-t19b.mjs`): HV1's card (519 px tall) docks left at
+  the landing, clear of the opening system, the banner and the tag; Back from BA gives it again; HV2's card docks
+  right with `CRIT STORAGE · pool 97% full` and no Board (no builder there); 0 console errors. `r44-galaxy`
+  (`?demo=1`, cpu 4x) 33.2 fps, worst gap 176 ms, 0 errors (the tour opens no card). **Found:** a drag's coast still
+  running (≈2 s after the finger lifts) re-turns the camera over a card's `Open` or `Fly to` (the coast steers with
+  `hold`); worth a line in T35/T36's rounds. The site card is tall (≈520 px with three problems); T20's manners
+  round may want the problems capped lower for a site.
 - [ ] T20 (§7 Night 5 D5+D6) [ui] [variant:galaxy] The card's manners: grey glass from tokens, the site tint only as a 2 px top
   edge, a 150 ms fade, the galaxy dimmed slightly behind it; closes on ×, Esc, an empty tap, a second tap on its node, a
   sideways swipe, or 60 s idle (then the tour may resume as now, B237); a labelled region, real named buttons, focus moves in

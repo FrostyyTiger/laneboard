@@ -36,9 +36,9 @@
 // createGestures steering camera.js's free pose). Reduced motion: no steering
 // (a turning galaxy is the motion D5 refuses); taps and back work (T14).
 // A tap on a site (T10, touch.js createTaps, hitNearest) flies there and opens
-// it: brackets at once, the plate as the camera arrives. The plate is then the
-// site's sheet (T11, hud.js sheetCaption: every line, worst first); in an
-// open system a tap on a planet shows the planet's sheet where the camera is.
+// it; its card comes as the camera arrives (night 5 T19b: the site's sheet, T11,
+// gave way to the card as a planet's did, T17); in an open system a tap on a
+// planet shows the planet's card.
 // Back (T13, touch.js backStep): the big control top right (only while
 // exploring away from the overview), a right-click or a double tap (double-click)
 // on empty sky goes one step back, moon → planet → system → overview (night 5
@@ -113,7 +113,7 @@ import { arrivedTimingFor, createCaption, coverOf, STILL_CAPTION_TIMING } from '
 import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
-import { FIT, FLIGHT, createGalaxyCamera, fitPose, showFlightMs } from './camera.js';
+import { FIT, createGalaxyCamera, fitPose, showFlightMs } from './camera.js';
 import { cardBodies, cardRing, createCard, describe } from './card.js';
 import { createHud } from './hud.js';
 import { createGalaxyLock } from './lock.js';
@@ -535,7 +535,7 @@ export function boot() {
   // it, the brackets close on it at once, its plate comes as the camera arrives.
   // A tap on empty sky does nothing (night 5 T12: it no longer steps back).
   const stageEl = stage;
-  // A site's sheet; the camera flies there unless it already holds it (a step back from a planet).
+  // A site's card; the camera flies there unless it already holds it (a step back from a planet).
   const openSite = (id) => {
     left.leave(place, cam); // off the overview: where the finger had it is where back returns
     const w = cam.want();
@@ -545,9 +545,9 @@ export function boot() {
       finger.cut(id, TIMING.zoom);
       fade?.cut();
     } else if (!there) finger.focus(id, TIMING.zoom);
-    // A sheet says what was touched, not the tour's count (T25).
-    card?.close();
-    hud.open({ id, arriveMs: there || reduced ? 0 : FLIGHT.ms });
+    // Its card (night 5 T19b, README §7 Night 5 D5: the old left-hand sheet gives way to the card, as a
+    // planet's does): the plate goes, the fleet line and the tag stay; the card comes as the camera lands.
+    pickCard(id, id);
     place = placeOf(id);
   };
   // A planet in an open system (T11) is asked first: its sheet comes at once, and the camera flies
@@ -574,11 +574,16 @@ export function boot() {
     card?.open(describe({ id, site }, galaxy.world));
   };
   // A card's action (night 5 T19, card.js cardActions): it counts as a touch (the card's presses never
-  // reach the stage); `Open` flies into a site, `Fly to` frames its node again (after a turn, it is back
-  // in the free box). Links open their app view by themselves; `later` buttons only say so.
+  // reach the stage); `Open` flies into a site (from its own card after a turn, back to its hold: T19b),
+  // `Fly to` frames its node again (after a turn, it is back in the free box). Links open their app view
+  // by themselves; `later` buttons only say so.
   const cardAct = (act, id) => {
     touch?.poke();
-    if (act === 'open' && galaxy.world?.byId.has(id)) openSite(id);
+    if (act === 'open' && galaxy.world?.byId.has(id)) {
+      const w = cam.want();
+      if (w.kind === 'site' && w.id === id && w.turned != null) finger.focus(id, TIMING.zoom);
+      openSite(id);
+    }
     else if (act === 'fly' && id != null && place.site != null) {
       if (reduced) {
         finger.cut(place.site, TIMING.zoom, { member: id });
@@ -600,11 +605,10 @@ export function boot() {
       finger.cut(id, TIMING.zoom);
       fade?.cut();
     } else if (!kept) finger.focus(id, TIMING.zoom, ZOOM_OUT);
-    card?.close();
-    hud.open({ id, arriveMs: kept || reduced ? 0 : ZOOM_OUT.ms });
+    pickCard(id, id); // the system's card again (T19b)
     place = placeOf(id);
   };
-  // One step back (T13; night 5 T13): a moon's sheet gives way to its planet's (the camera stays: a
+  // One step back (T13; night 5 T13): a moon's card gives way to its planet's (the camera stays: a
   // moon's shot is its planet's), a planet's to its system's, a system to the overview.
   const goBack = () => {
     touch?.poke(); // the control's press never reaches the stage: it counts as a touch here
@@ -732,7 +736,7 @@ export function boot() {
       const moonsFor = moonsAt(place);
       if (moonsFor !== moonsAsked) { moonsAsked = moonsFor; galaxy.openMoons(moonsFor); }
       // The card goes with its node's place (a show's flight, the hand-back).
-      if (card?.shown() && card.selected() !== (place.moon ?? place.planet)) card.close();
+      if (card?.shown() && card.selected() !== (place.moon ?? place.planet ?? place.site)) card.close();
       // MANUAL says a person drives: not while a show holds the camera.
       sayManual(director.driver() === 'show' ? null : manualLine(touch.left()));
     }

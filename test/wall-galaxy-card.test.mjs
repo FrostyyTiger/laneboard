@@ -169,7 +169,7 @@ test('createCard: a new card waits for the camera to land, then stays put on its
   assert.deepEqual([card.el.hidden, card.place().side], [false, 'right'], 'shown and on its side while the camera moves again');
 });
 
-test('the page: a tapped planet gets a card, no sheet, its leader joining card and node; its system\'s step closes it', () => {
+test('the page: a tapped planet gets a card, no sheet, its leader joining card and node; its system\'s step gives the system\'s card', () => {
   const p = page();
   p.toBuilder();
   assert.equal(p.card.shown(), true, 'a card');
@@ -191,14 +191,15 @@ test('the page: a tapped planet gets a card, no sheet, its leader joining card a
   for (const b of cardBodies(p.galaxy.world, 'lab', BA, p.cam.screenOf)) {
     assert.ok(distToCircle(b, r) >= Math.max(b.r, CARD.bodyPx), 'no planet under the card');
   }
-  // Back to the system: its sheet again, the card gone.
+  // Back to the system (T19b): the system's card, not its sheet; it waits for the camera to land.
   p.press();
   p.tick(16);
-  assert.deepEqual([p.place().level, p.card.shown(), p.card.el.hidden, p.sheets.at(-1)], ['site', false, true, 'lab']);
+  assert.deepEqual([p.place().level, p.card.selected(), p.card.el.hidden, p.sheets.at(-1)], ['site', 'lab', true, null]);
   p.run(FLIGHT.ms + OPEN_MS);
+  assert.equal(p.card.el.hidden, false, 'the system\'s card once landed');
 });
 
-test('galaxy/main.js makes the card under the stage, a tapped planet or moon gets it, a site and the overview close it', () => {
+test('galaxy/main.js makes the card under the stage, a tapped site, planet or moon gets it, the overview closes it', () => {
   const js = fs.readFileSync(new URL('../public/js/wall/galaxy/main.js', import.meta.url), 'utf8');
   assert.match(js, /card = touch \? createCard\(stage, \{/);
   assert.match(js, /covers: \(\) => \[\.\.\.hud\.covers\(\), \.\.\.touchCovers\(\), \.\.\.showCovers\(\)\]/);
@@ -207,10 +208,11 @@ test('galaxy/main.js makes the card under the stage, a tapped planet or moon get
   assert.match(pick, /hud\.release\(\);\s*card\?\.open\(describe\(\{ id, site \}, galaxy\.world\)\);/);
   assert.match(js, /onPick: \(id\) => openPlanet\(id, place\.site\),/, 'a Below chip opens its node as a tap on it would');
   const site = js.slice(js.indexOf('const openSite = '), js.indexOf('\n  };', js.indexOf('const openSite = ')));
-  assert.match(site, /card\?\.close\(\);\s*hud\.open\(/);
+  assert.match(site, /pickCard\(id, id\);/, 'a site\'s card (T19b), not its sheet');
+  assert.doesNotMatch(js, /hud\.open\(/, 'no sheet for a finger\'s tap any more');
   const over = js.slice(js.indexOf('const toOverview = '), js.indexOf('\n  };', js.indexOf('const toOverview = ')));
   assert.match(over, /card\?\.close\(\);/);
-  assert.match(js, /if \(card\?\.shown\(\) && card\.selected\(\) !== \(place\.moon \?\? place\.planet\)\) card\.close\(\);/);
+  assert.match(js, /if \(card\?\.shown\(\) && card\.selected\(\) !== \(place\.moon \?\? place\.planet \?\? place\.site\)\) card\.close\(\);/);
 });
 
 // The large demo's world, as scene.js lays it out.

@@ -81,7 +81,7 @@ test('the walk: site → planet → turn → empty tap → moon → Back ×3 →
   assert.equal(p.galaxy.moonsOpen(), BA);
   p.press();
   p.tick(16);
-  assert.deepEqual([p.place().level, p.place().site, p.sheets.at(-1), p.card.shown()], ['site', 'lab', 'lab', false]);
+  assert.deepEqual([p.place().level, p.place().site, p.sheets.at(-1), p.card.selected()], ['site', 'lab', null, 'lab'], 'the system\'s card (T19b)');
   assert.equal(flown(p), 0, 'Back to the system: no flight');
   assert.equal(p.galaxy.moonsOpen(), null, 'the moons fold');
   assert.equal(p.moves.length, n, 'the camera never moved since the turn');
