@@ -1,0 +1,23 @@
+/* The Products view: one card per product, one row per goal. A goal that is not ready lists why. */
+#view-products { overflow: auto; padding-top: var(--sp-2); padding-inline: var(--sp-2); }
+.pd-page { display: grid; gap: var(--sp-3); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+.pd-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-3); margin-block-end: var(--sp-1); }
+.pd-title { margin: 0; font-size: var(--fs-12); color: var(--text-1); }
+.pd-engine { color: var(--text-3); }
+.pd-goals, .pd-reasons { list-style: none; margin: 0; padding: 0; }
+.pd-goal { padding-block: var(--sp-1); border-bottom: var(--bw) solid var(--line-weak); }
+.pd-goal-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-height: var(--row-comfy); }
+.pd-state { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 12ch; }
+.pd-state-t { font-family: var(--font-label); font-size: var(--fs-11); font-weight: 600; letter-spacing: var(--ls-label); text-transform: uppercase; }
+.pd-state[data-p="2"] .pd-state-t { color: var(--p2); }
+.pd-goal-id, .pd-reason-k { color: var(--text-3); }
+.pd-goal-t { color: var(--text-1); flex: 1 1 16ch; min-width: 0; }
+.pd-runs { display: inline-flex; flex-wrap: wrap; gap: var(--sp-2); }
+.pd-reasons { display: grid; gap: var(--sp-1); padding-block-start: var(--sp-1); padding-inline-start: 12ch; }
+.pd-reason { display: grid; grid-template-columns: 9ch 8ch minmax(0, 1fr); gap: var(--sp-2); }
+.pd-reason-t { overflow-wrap: anywhere; }
+@media (width < 700px) {
+  .pd-reasons { padding-inline-start: 0; }
+  .pd-reason { grid-template-columns: 9ch minmax(0, 1fr); }
+  .pd-reason-t { grid-column: 1 / -1; }
+}

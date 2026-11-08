@@ -34,16 +34,16 @@ import { activateView } from '../views/index.js';
 // the capture-pane rate drops on its own while you are elsewhere.
 // Every view has a section (index.html `#view-<id>`) and a registry entry; a
 // view the page has no section for still lands on the default view.
-export const VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs'];
+export const VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs', 'products'];
 /** Drill-down views: routable, never in the nav. */
 export const HIDDEN_VIEWS = ['diff'];
 export const DEFAULT_VIEW = 'runs';
 /**
  * The `g <key>` view chord (plan §4 2.6, authoritative). `g m` is the map now
- * and morning moved to `g o`; `g p` is packages (it was the map); `g r` is runs. ui/hotkeys.js
+ * and morning moved to `g o`; `g p` is products, packages moved to `g k`; `g r` is runs. ui/hotkeys.js
  * (D8) reads this table; the router only registers the routes.
  */
-export const VIEW_KEYS = Object.freeze({ m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs' });
+export const VIEW_KEYS = Object.freeze({ m: 'map', b: 'board', i: 'inbox', p: 'products', k: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs' });
 export const OPEN_KINDS = ['term', 'transcript'];
 
 const ROUTABLE = new Set([...VIEWS, ...HIDDEN_VIEWS]);

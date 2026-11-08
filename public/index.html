@@ -29,6 +29,7 @@
 <link rel="stylesheet" href="/css/views/packages.css">
 <link rel="stylesheet" href="/css/views/audit.css">
 <link rel="stylesheet" href="/css/views/runs.css">
+<link rel="stylesheet" href="/css/views/products.css">
 <link rel="stylesheet" href="/css/views/fleet-views.css">
 <link rel="stylesheet" href="/css/cockpit.css">
 <link rel="stylesheet" href="/vendor/xterm.css">
@@ -60,12 +61,13 @@
     <button class="nav-tab" type="button" data-view="map" title="Map (g m)" aria-label="Map"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-map"/></svg><span class="nav-l">MAP</span></button>
     <button class="nav-tab" type="button" data-view="board" title="Board (g b)" aria-label="Board"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-board"/></svg><span class="nav-l">BRD</span></button>
     <button class="nav-tab" type="button" data-view="inbox" title="Inbox (g i)" aria-label="Inbox"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-inbox"/></svg><span class="nav-l">INBX</span></button>
-    <button class="nav-tab" type="button" data-view="packages" title="Packages (g p)" aria-label="Packages"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-packages"/></svg><span class="nav-l">PKG</span></button>
+    <button class="nav-tab" type="button" data-view="packages" title="Packages (g k)" aria-label="Packages"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-packages"/></svg><span class="nav-l">PKG</span></button>
     <button class="nav-tab" type="button" data-view="morning" title="Morning (g o)" aria-label="Morning"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-morning"/></svg><span class="nav-l">MORN</span></button>
     <button class="nav-tab" type="button" data-view="credit" title="Credit (g c)" aria-label="Credit"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-credit"/></svg><span class="nav-l">CRED</span></button>
     <button class="nav-tab" type="button" data-view="box" title="Box (g x)" aria-label="Box"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-box"/></svg><span class="nav-l">BOX</span></button>
     <button class="nav-tab" type="button" data-view="audit" title="Audit (g a)" aria-label="Audit"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-audit"/></svg><span class="nav-l">AUD</span></button>
     <button class="nav-tab" type="button" data-view="runs" title="Runs (g r)" aria-label="Runs"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-runs"/></svg><span class="nav-l">RUNS</span></button>
+    <button class="nav-tab" type="button" data-view="products" title="Products (g p)" aria-label="Products"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-packages"/></svg><span class="nav-l">PROD</span></button>
   </nav>
   <div class="scope" id="scope" role="toolbar" aria-label="Scope"></div>
   <div class="topbar-gauges" id="topbar-gauges"></div>
@@ -176,6 +178,7 @@
 <section class="view" id="view-audit" aria-label="Audit" hidden></section>
 
 <section class="view" id="view-runs" aria-label="Runs" hidden></section>
+<section class="view" id="view-products" aria-label="Products" hidden></section>
 
 <section class="view" id="view-diff" aria-label="Diff" hidden></section>
 

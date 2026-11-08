@@ -83,7 +83,7 @@ test('GET /api/runs answers byte-for-byte as before, after every engine route wa
 
 test('the engines module adds read-only GET routes only', () => {
   const mine = routes.filter((r) => r.pattern.startsWith('/api/engine'));
-  assert.ok(mine.length === READS.length + 2);
+  assert.ok(mine.length === READS.length + 3);
   assert.ok(mine.every((r) => r.method === 'GET'));
 });
 

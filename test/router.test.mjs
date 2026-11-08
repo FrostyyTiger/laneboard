@@ -20,13 +20,13 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const LOCAL = { localId: 'builder-a' };
 
 test('the view list: eight views plus the hidden diff, Runs by default', () => {
-  assert.deepEqual(VIEWS, ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs']);
+  assert.deepEqual(VIEWS, ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs', 'products']);
   assert.deepEqual(HIDDEN_VIEWS, ['diff']);
   assert.equal(DEFAULT_VIEW, 'runs');
 });
 
 test('the view chord registers a route for every nav view (plan §4 2.6)', () => {
-  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs' });
+  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'products', k: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs' });
   assert.deepEqual(Object.values(VIEW_KEYS).sort(), [...VIEWS].sort(), 'one chord per nav view, none for diff');
 });
 
@@ -187,7 +187,7 @@ test('every routable view is registered with the view shape', () => {
     assert.ok(VIEW_META[id].short.length <= 4, `${id}: labels are at most 4 characters`);
   }
   assert.equal(getView('nonsense'), null);
-  assert.equal(views().size, 10);
+  assert.equal(views().size, 11);
   for (const id of ['inbox', 'packages', 'audit', 'runs', 'diff']) assert.equal(getView(id).legacy, undefined, `${id} is a real default export`);
   for (const id of ['board', 'map', 'morning', 'credit', 'box']) {
     // Until their owners add a default export, the F1-moved views use the adapter.
