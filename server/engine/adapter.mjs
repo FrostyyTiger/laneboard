@@ -102,12 +102,16 @@ export function createContractEngine(opts) {
 
   /** One call to the engine, deduplicated per key, under the timeout. Resolves `{raw}` or `{err}`. */
   function send(key, verb, args, meta) {
-    if (inflight.has(key)) return inflight.get(key);
-    const p = withTimeout(Promise.resolve().then(() => call(verb, args, meta)), timeoutMs)
-      .then((raw) => ({ raw }), (err) => ({ err }))
-      .finally(() => inflight.delete(key));
-    inflight.set(key, p);
-    return p;
+    // One underlying call per key, kept until the engine itself settles, so a
+    // slow engine is waited out, never stacked. The timeout is the caller's.
+    let underlying = inflight.get(key);
+    if (!underlying) {
+      underlying = Promise.resolve().then(() => call(verb, args, meta))
+        .then((raw) => ({ raw }), (err) => ({ err }))
+        .finally(() => inflight.delete(key));
+      inflight.set(key, underlying);
+    }
+    return withTimeout(underlying, timeoutMs).catch((err) => ({ err }));
   }
 
   function fromSnapshot(key, code, reason) {
@@ -130,7 +134,7 @@ export function createContractEngine(opts) {
     if (!shaped.ok) { st.degraded.set(verb, shaped.reason); return refuse('degraded', shaped.reason); }
     st.degraded.delete(verb);
     if (shaped.dropped) st.dropped[verb] = (st.dropped[verb] ?? 0) + shaped.dropped;
-    return { ok: true, data: shaped.value, at: env.at, engineVersion: env.engine, dropped: shaped.dropped };
+    return { ok: true, data: shaped.value, at: env.at, contract: env.contract, engineVersion: env.engine, dropped: shaped.dropped };
   }
 
   async function handshake() {
@@ -142,6 +146,13 @@ export function createContractEngine(opts) {
     // says it speaks, and must pass too.
     const v = checkVersion(a.data.contract);
     if (!v.ok) { st.incompatible = v.reason; return refuse('incompatible', v.reason); }
+    if (a.data.contract !== a.contract) {
+      // The hello schema says both are the same version; an engine that
+      // disagrees with itself is not one laneboard can trust.
+      const reason = `hello says contract ${a.data.contract} but its envelope says ${a.contract}`;
+      st.incompatible = reason;
+      return refuse('incompatible', reason);
+    }
     st.incompatible = null;
     st.hello = { ...a.data, at: a.at };
     snapshots.set('hello', { data: a.data, at: a.at, gotAt: now() });

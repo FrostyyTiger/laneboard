@@ -29,7 +29,7 @@ export const ACCEPTED = '1.x';
 /** `{ok, major, minor}` for a contract version laneboard speaks, else `{ok: false, reason}`. */
 export function checkVersion(v) {
   const m = typeof v === 'string' ? /^([0-9]{1,4})\.([0-9]{1,4})$/.exec(v) : null;
-  if (!m) return { ok: false, reason: `contract version ${JSON.stringify(v) ?? String(v)} is not MAJOR.MINOR` };
+  if (!m) return { ok: false, reason: `contract version ${(JSON.stringify(v) ?? String(v)).slice(0, 64)} is not MAJOR.MINOR` };
   const major = Number(m[1]);
   const minor = Number(m[2]);
   if (major !== ACCEPTS_MAJOR) return { ok: false, reason: `engine speaks contract ${v}, laneboard accepts ${ACCEPTED}` };
@@ -81,7 +81,7 @@ const MAX_STR = 64 * 1024;
 
 const str = (v) => (typeof v === 'string' && v.length <= MAX_STR ? v : null);
 const need = (v, what) => str(v) ?? bad(`${what} missing`);
-const oneOf = (v, vocab, what) => (vocab.has(v) ? v : bad(`${what} ${JSON.stringify(v) ?? 'missing'} is not known`));
+const oneOf = (v, vocab, what) => (vocab.has(v) ? v : bad(`${what} ${(JSON.stringify(v) ?? 'missing').slice(0, 64)} is not known`));
 const maybeOf = (v, vocab) => (vocab.has(v) ? v : null);
 const ms = (v) => (typeof v === 'string' && TS.test(v) ? Date.parse(v) : null);
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);

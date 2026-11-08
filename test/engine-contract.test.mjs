@@ -261,6 +261,29 @@ describe('version handshake', () => {
     assert.equal((await e.hello()).code, 'incompatible');
   });
 
+  test('hello and its envelope must agree on the version (review of PR #30, fix 2)', async () => {
+    const e = fake.create({ override: { hello: { ...hello, contract: '1.0', data: { ...hello.data, contract: '1.9' } } } });
+    const h = await e.hello();
+    assert.equal(h.code, 'incompatible');
+    assert.match(h.reason, /1\.9.*1\.0/);
+    assert.equal(e.status().state, 'incompatible');
+  });
+
+  test('a reason never carries more than 64 chars of the engine\'s own text (review of PR #30, fix 1)', async () => {
+    const big = 'x'.repeat(3_000_000);
+    const e = fake.create({ override: { hello: { ...hello, contract: big } } });
+    const h = await e.hello();
+    assert.equal(h.code, 'incompatible');
+    assert.ok(h.reason.length < 200, `reason is ${h.reason.length} chars`);
+    assert.ok(e.status().reason.length < 200);
+    const runs = fixture('runs.json');
+    const e2 = fake.create({ override: { runs: { ...runs, data: { runs: [{ ...runs.data.runs[0], state: big }] } } } });
+    const r = await e2.runs();
+    assert.equal(r.ok, true);
+    assert.equal(r.dropped, 1);
+    assert.ok(JSON.stringify(e2.status()).length < 4000);
+  });
+
   test('an answer in another major after a good hello makes the engine incompatible', async () => {
     const runs = fixture('runs.json');
     const e = fake.create({ override: { runs: { ...runs, contract: '2.1' } } });
@@ -555,5 +578,30 @@ describe('exec: execFile, a timeout, an output cap, no shell', () => {
     const r = await cli('refuse').act('start', { target: 'acme-shop:G4' }, META());
     assert.equal(r.ok, false);
     assert.equal(r.code, 'refused');
+  });
+});
+
+describe('the adapter waits a slow engine out, it never stacks calls (review of PR #30, fix 3)', () => {
+  test('five reads during one 300 ms call start one engine call, each caller gets its own timeout', async () => {
+    const hello = fixture('hello.json');
+    const runs = fixture('runs.json');
+    let calls = 0;
+    const e = createContractEngine({
+      id: 'slow', kind: 'test', timeoutMs: 40,
+      call: (verb) => {
+        if (verb === 'hello') return JSON.stringify(hello);
+        calls += 1;
+        const delay = calls === 1 ? 300 : 0; // only the first call is slow
+        return new Promise((resolve) => setTimeout(() => resolve(JSON.stringify(runs)), delay));
+      },
+    });
+    assert.equal((await e.hello()).ok, true);
+    const results = [];
+    for (let i = 0; i < 5; i += 1) results.push(await e.runs());
+    assert.equal(calls, 1, 'one underlying engine call');
+    for (const r of results) assert.equal(r.code, 'engine-down', 'each caller timed out on its own');
+    await new Promise((resolve) => setTimeout(resolve, 320));
+    assert.equal((await e.runs()).ok, true, 'once the engine answered, the next read succeeds');
+    assert.equal(calls, 2);
   });
 });
