@@ -2,7 +2,10 @@
 //
 //   engines  [{id, kind, ...}]  the run engines laneboard reads, default [].
 //            id         lower-case slug, unique, not `jsonl` (that one is always on)
-//            kind       `none` | `fake` (server/engine/index.mjs TABLE)
+//            kind       `none` | `fake` | `foundry-cli` (server/engine/index.mjs TABLE)
+//            bin        foundry-cli only, required: the CLI, absolute
+//            config     foundry-cli only, required: its config file, absolute (FOUNDRY_CONFIG)
+//            cwd        foundry-cli only: its working directory, absolute
 //            dir        fake only: the fixture folder, absolute; default the
 //                       contract's published examples (test/fixtures/engine/v1)
 //            timeoutMs  one call's limit, default 10000 (100..120000)
@@ -16,11 +19,11 @@
 import path from 'node:path';
 
 /** The kinds a config entry may name; server/engine/index.mjs asserts its table agrees. */
-export const ENGINE_KINDS = Object.freeze(['none', 'fake']);
+export const ENGINE_KINDS = Object.freeze(['none', 'fake', 'foundry-cli']);
 export const MAX_ENGINES = 8;
 export const RESERVED_IDS = Object.freeze(['jsonl']);
 const ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
-const KEYS = ['id', 'kind', 'dir', 'timeoutMs', 'staleMs', 'downMs'];
+const KEYS = ['id', 'kind', 'dir', 'bin', 'config', 'cwd', 'timeoutMs', 'staleMs', 'downMs'];
 export const LIMITS = Object.freeze({
   timeoutMs: [100, 120_000],
   staleMs: [1000, 24 * 3600_000],
@@ -57,6 +60,16 @@ export function validate(c, bad) {
       if (e.kind !== 'fake') bad(`${at}.dir is only for kind fake`);
       if (typeof e.dir !== 'string' || !path.isAbsolute(e.dir) || e.dir.split('/').includes('..') || e.dir.includes('\0')) {
         bad(`${at}.dir must be an absolute path without "..", got ${J(e.dir)}`);
+      }
+    }
+    for (const k of ['bin', 'config', 'cwd']) {
+      if (e[k] === undefined) {
+        if (k !== 'cwd' && e.kind === 'foundry-cli') bad(`${at}.${k} is required for kind foundry-cli`);
+        continue;
+      }
+      if (e.kind !== 'foundry-cli') bad(`${at}.${k} is only for kind foundry-cli`);
+      if (typeof e[k] !== 'string' || !path.isAbsolute(e[k]) || e[k].split('/').includes('..') || e[k].includes('\0')) {
+        bad(`${at}.${k} must be an absolute path without "..", got ${J(e[k])}`);
       }
     }
     for (const [k, [lo, hi]] of Object.entries(LIMITS)) {

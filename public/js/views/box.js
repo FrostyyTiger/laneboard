@@ -574,6 +574,44 @@ export function renderBox() {
   } else if (m.hub && m.rows.length) {
     host.append(el('p', 'empty', 'Pick one builder (b=) for its guard, CI queue and agent slots.'));
   }
+  if (!m.hub) {
+    const block = enginesBlock(enginesSeen.rows);
+    if (block) host.append(block);
+    refreshEngines();
+  }
+}
+
+/** The run engines as GET /api/engines last said, and when it was asked. */
+const enginesSeen = { rows: [], at: -Infinity, loading: false };
+const ENGINES_TTL_MS = 15_000;
+
+function refreshEngines(fetchImpl = globalThis.fetch) {
+  if (typeof fetchImpl !== 'function' || enginesSeen.loading || Date.now() - enginesSeen.at < ENGINES_TTL_MS) return;
+  enginesSeen.loading = true;
+  enginesSeen.at = Date.now();
+  Promise.resolve().then(() => fetchImpl('/api/engines', { headers: { accept: 'application/json' } }))
+    .then((r) => (r?.ok ? r.json() : null))
+    .then((b) => { enginesSeen.rows = Array.isArray(b?.engines) ? b.engines.filter((e) => e?.kind !== 'jsonl') : []; })
+    .catch(() => {})
+    .finally(() => { enginesSeen.loading = false; renderBox(); });
+}
+
+const ENGINE_LAMP = Object.freeze({ up: 'ok', stale: '3', down: '1', degraded: '2', incompatible: '1' });
+
+/** One line per run engine: state, contract, version, why it is not up. Null with no engine. */
+export function enginesBlock(rows) {
+  if (!Array.isArray(rows) || !rows.length) return null;
+  const sec = el('section', 'mblock');
+  sec.dataset.block = 'engines';
+  sec.append(el('h3', 'rail-h', 'Run engines'));
+  for (const e of rows) {
+    const line = el('div', 'marker-line');
+    line.dataset.engine = String(e.id ?? '').slice(0, 32);
+    line.append(lamp(ENGINE_LAMP[e.state] ?? 'off', { label: String(e.state ?? '') }), el('span', 'mk-kind', String(e.state ?? '?').slice(0, 16)),
+      el('span', null, [e.id, e.contract && `contract ${e.contract}`, e.version && `engine ${e.version}`, e.reason].filter(Boolean).map((x) => String(x).slice(0, 160)).join(' · ')));
+    sec.append(line);
+  }
+  return sec;
 }
 
 /** The guard, the CI queue and the slots: Box sections, and rail blocks on the 49". */

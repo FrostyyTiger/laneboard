@@ -10,7 +10,7 @@
 // | jsonl | today's run.jsonl runs (always on, needs no config) |
 // | none | no engine |
 // | fake | replays the contract's published examples |
-// | foundry-cli | phase 9: `foundry <verb> --json` through exec.mjs |
+// | foundry-cli | `foundry <verb> --json` through exec.mjs |
 //
 // Every engine has the same members: `id`, `kind`, `capabilities`, `hello()`,
 // `health()`, `products()`, `runs()`, `run(id)`, `events(runId, since)`,
@@ -22,8 +22,9 @@ import { ENGINE_KINDS } from '../config/engines.mjs';
 import * as none from './none.mjs';
 import * as fake from './fake.mjs';
 import * as jsonl from './jsonl.mjs';
+import * as foundryCli from './foundry-cli.mjs';
 
-const TABLE = { none, fake };
+const TABLE = { none, fake, 'foundry-cli': foundryCli };
 
 for (const k of Object.keys(TABLE).concat(ENGINE_KINDS)) {
   if (!TABLE[k] || !ENGINE_KINDS.includes(k)) throw new Error(`engines: config/engines.mjs and the engine table disagree about ${k}`);

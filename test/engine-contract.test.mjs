@@ -20,6 +20,7 @@ import path from 'node:path';
 import * as fake from '../server/engine/fake.mjs';
 import * as jsonl from '../server/engine/jsonl.mjs';
 import * as none from '../server/engine/none.mjs';
+import * as foundryCli from '../server/engine/foundry-cli.mjs';
 import { createContractEngine, MEMBERS } from '../server/engine/adapter.mjs';
 import { execJson } from '../server/engine/exec.mjs';
 import { checkShape, READ_VERBS, RESULT_CODES, revisionOf } from '../server/engine/contract.mjs';
@@ -129,26 +130,32 @@ readSuite('jsonl', jsonlEngine);
 
 readSuite('none', () => none.create());
 
-// A real engine: LANEBOARD_ENGINE_BIN is its CLI. The argument lists follow
-// contract v1 (`<verb> [id] [--flag value] --json`); the real adapter is
-// phase 9's foundry-cli.mjs, this is only enough to read.
+// A real engine: LANEBOARD_ENGINE_BIN is its CLI, FOUNDRY_CONFIG its config when
+// set, through the real adapter (foundry-cli.mjs).
 const BIN = process.env.LANEBOARD_ENGINE_BIN;
-function cliArgs(verb, args = {}) {
-  const out = [verb];
-  if (args.id) out.push(args.id);
-  if (args.product) out.push(args.product);
-  if (verb === 'events') out.push('--since', String(args.since ?? 0));
-  for (const k of ['for', 'kind', 'status', 'limit', 'cursor']) if (args[k] !== undefined) out.push(`--${k}`, String(args[k]));
-  if (verb === 'knowledge' && args.id) out.push('--id', args.id);
-  out.push('--json');
-  return out;
-}
-readSuite('real engine (LANEBOARD_ENGINE_BIN)', () => createContractEngine({
-  id: 'real',
-  kind: 'cli',
-  call: (verb, args) => (READ_VERBS.includes(verb) ? execJson(BIN, cliArgs(verb, args), { timeoutMs: 10_000, env: { PATH: process.env.PATH ?? '' } })
-    : Promise.reject(new Error('the suite never writes to a real engine'))),
-}), { skip: BIN ? false : 'LANEBOARD_ENGINE_BIN is not set' });
+const realEngine = () => foundryCli.create({ id: 'real', bin: BIN, config: process.env.FOUNDRY_CONFIG, timeoutMs: 10_000 });
+readSuite('real engine (LANEBOARD_ENGINE_BIN)', realEngine, { skip: BIN ? false : 'LANEBOARD_ENGINE_BIN is not set' });
+
+// Refusals change nothing, so they are safe against a real engine.
+describe('real engine: refusals and retries', { skip: BIN ? false : 'LANEBOARD_ENGINE_BIN is not set' }, () => {
+  const EXPECT = 'sha256:0000000000000000';
+  test('an unknown item is not-found, and the same request id answers the same', async () => {
+    const e = realEngine();
+    const first = await e.act('approve', { target: 'acme-shop/nope-1', expect: EXPECT }, META(901));
+    assert.equal(first.code, 'not-found');
+    const again = await e.act('approve', { target: 'acme-shop/nope-1', expect: EXPECT }, META(901));
+    assert.equal(again.code, 'not-found');
+    assert.equal(again.request, first.request);
+  });
+  test('a stale revision is refused and names the current one', async () => {
+    const e = realEngine();
+    const item = (await e.waiting({})).data.items[0];
+    assert.ok(item, 'the world has something waiting');
+    const r = await e.act('approve', { target: item.id, expect: EXPECT }, META(902));
+    assert.equal(r.code, 'stale-revision');
+    assert.equal(r.current, item.revision);
+  });
+});
 
 // --- fake: the published examples, mapped whole -------------------------------
 
@@ -612,4 +619,29 @@ test('a feature node\'s single requirement id becomes a list', async () => {
   const f = a.data.run.tree.find((n) => n.level === 'feature');
   assert.deepEqual(f.requirements, ['REQ-1']);
   assert.ok(f.acceptanceTests.length > 0);
+});
+
+describe('foundry-cli: the call it makes', () => {
+  const run = async (verb, args, meta) => {
+    const seen = [];
+    const hello = fixture('hello.json');
+    const e = foundryCli.create({ id: 'x', bin: '/bin/engine', config: '/c.json', cwd: '/w', exec: async (bin, a, o) => { seen.push({ bin, a, o }); return JSON.stringify(a[0] === 'hello' ? hello : fixture(`${a[0]}.json`)); } });
+    await (verb === 'act' ? e.act(...args) : e[verb](...args));
+    return seen.at(-1);
+  };
+  test('a fixed list, --json last, cwd and exactly PATH + FOUNDRY_CONFIG', async () => {
+    const c = await run('events', ['R-1', 5]);
+    assert.deepEqual(c.a, ['events', 'R-1', '--since', '5', '--json']);
+    assert.equal(c.o.cwd, '/w');
+    assert.deepEqual(Object.keys(c.o.env).sort(), ['FOUNDRY_CONFIG', 'PATH']);
+    assert.equal(c.o.env.FOUNDRY_CONFIG, '/c.json');
+  });
+  test('write metadata becomes --by --via --request-id', () => {
+    assert.deepEqual(foundryCli.argsFor('approve', { target: 'g', expect: 'sha256:1', choice: 'a' }, { user: 'o', via: 'l', requestId: 'r-1' }),
+      ['approve', 'g', '--expect', 'sha256:1', '--choice', 'a', '--by', 'o', '--via', 'l', '--request-id', 'r-1', '--json']);
+  });
+  test('a value that reads as a flag is refused, not passed on', () => {
+    assert.throws(() => foundryCli.argsFor('run', { id: '--evil' }), /not a value/);
+    assert.throws(() => foundryCli.argsFor('knowledge', { product: 'p', cursor: '--x' }), /not a value/);
+  });
 });

@@ -15,7 +15,7 @@ routes below and `laneboard engine check`.
 | `jsonl` | the run files of [runs.md](runs.md), through the runs collector's store | no: always on, id `jsonl` |
 | `none` | nothing; says so | an entry |
 | `fake` | the contract's published example answers (an invented shop), for tests and the demo | an entry |
-| `foundry-cli` | later: an engine's CLI, `<verb> --json`, through `execFile` | an entry |
+| `foundry-cli` | an engine's CLI, `<verb> --json`, through `execFile` | an entry with `bin` and `config` |
 
 ```
 server/engine/
@@ -23,7 +23,7 @@ server/engine/
   adapter.mjs      createContractEngine: handshake, checks, timeout, last good answer, status
   contract.mjs     laneboard shapes, the envelope and version check, the per-verb mapping
   exec.mjs         how a CLI engine is called: execFile, timeout, output cap
-  none.mjs  jsonl.mjs  fake.mjs
+  none.mjs  jsonl.mjs  fake.mjs  foundry-cli.mjs
 ```
 
 ## The interface
@@ -62,6 +62,15 @@ it and answers exactly as before.
 ```json
 { "engines": [{ "id": "main", "kind": "fake" }] }
 ```
+
+A real engine:
+
+```json
+{ "engines": [{ "id": "main", "kind": "foundry-cli", "bin": "/opt/foundry/runtime/bin/foundry", "config": "/etc/foundry/config.json" }] }
+```
+
+The child's environment is exactly `PATH` and `FOUNDRY_CONFIG` (`config`).
+The Box view shows each engine's state, contract and version.
 
 `engines` defaults to `[]`: then the table holds only `jsonl`, and nothing
 changes. Each entry takes `timeoutMs`, `staleMs` and `downMs`; a `fake` takes
@@ -125,7 +134,7 @@ non-zero, answers garbage or sends bad rows.
 
 ```sh
 node --test test/engine-contract.test.mjs
-LANEBOARD_ENGINE_BIN=/path/to/engine-cli node --test test/engine-contract.test.mjs   # also a real engine, reads only
+LANEBOARD_ENGINE_BIN=/path/to/engine-cli FOUNDRY_CONFIG=/path/to/config.json node --test test/engine-contract.test.mjs   # also a real engine: reads, and refusals that change nothing
 ```
 
 The fixtures in `test/fixtures/engine/v1/` are the engine's published

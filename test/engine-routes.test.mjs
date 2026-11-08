@@ -206,3 +206,16 @@ test('a round\'s usage reaches the event shape, and the demo pages open', async 
   for (const r of list.data.runs) assert.equal((await e.run(r.id)).ok, true, r.id);
   assert.equal((await e.run('R-20200101-nope-1')).code, 'not-found');
 });
+
+test('Box: one line per engine, state and version; nothing with no engine', async () => {
+  const { makeDocument } = await import('./helpers/fakedom.mjs');
+  const prev = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    const { enginesBlock } = await import('../public/js/views/box.js');
+    assert.equal(enginesBlock([]), null);
+    const b = enginesBlock([{ id: 'main', state: 'up', contract: '1.0', version: '0.1.0' }]);
+    assert.match(b.textContent, /up/);
+    assert.match(b.textContent, /contract 1\.0 · engine 0\.1\.0/);
+  } finally { globalThis.document = prev; }
+});

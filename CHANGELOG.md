@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**A real run engine (runs-first phase 9).** `kind: "foundry-cli"` reads an
+engine's CLI through `execFile`, with only `PATH` and `FOUNDRY_CONFIG` in its
+environment. The Box view shows each engine's state and version. See
+docs/engines.md.
+
 **Knowledge (runs-first phase 5).** `#/knowledge?product=<id>`, opened from a
 product: claims, open questions, requirements and source summaries, linked to
 each other. Read-only, and never raw sources. See docs/knowledge.md.
