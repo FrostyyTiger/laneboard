@@ -11,7 +11,7 @@ reasons. Each reason names what it is about:
 | Kind | Means | Links to |
 | --- | --- | --- |
 | `question` | a question is still open | the question |
-| `intent` | an intent item is not approved | the intent item |
+| `requirement` | a requirement is not approved | the requirement |
 | `claim` | it rests on a low-confidence claim | the claim |
 | `budget` | the usage window is too tight | nothing |
 

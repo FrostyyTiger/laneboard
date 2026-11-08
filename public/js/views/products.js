@@ -9,7 +9,7 @@ import { lamp, panel, setPanel } from '../ui/components.js';
 export const PRODUCTS_URL = '/api/engines/products';
 export const POLL_MS = 60_000;
 
-const REASON_WORD = Object.freeze({ 'question-open': 'question', 'intent-unapproved': 'intent', 'low-claim': 'claim', budget: 'budget' });
+const REASON_WORD = Object.freeze({ 'question-open': 'question', 'intent-unapproved': 'requirement', 'requirement-unapproved': 'requirement', 'low-claim': 'claim', budget: 'budget' });
 
 export const EMPTY_HOW = Object.freeze([
   'No products yet. A product shows up here when a run engine reports it.',

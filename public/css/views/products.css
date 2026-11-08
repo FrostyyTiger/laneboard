@@ -14,10 +14,10 @@
 .pd-goal-t { color: var(--text-1); flex: 1 1 16ch; min-width: 0; }
 .pd-runs { display: inline-flex; flex-wrap: wrap; gap: var(--sp-2); }
 .pd-reasons { display: grid; gap: var(--sp-1); padding-block-start: var(--sp-1); padding-inline-start: 12ch; }
-.pd-reason { display: grid; grid-template-columns: 9ch 8ch minmax(0, 1fr); gap: var(--sp-2); }
+.pd-reason { display: grid; grid-template-columns: 12ch 8ch minmax(0, 1fr); gap: var(--sp-2); }
 .pd-reason-t { overflow-wrap: anywhere; }
 @media (width < 700px) {
   .pd-reasons { padding-inline-start: 0; }
-  .pd-reason { grid-template-columns: 9ch minmax(0, 1fr); }
+  .pd-reason { grid-template-columns: 12ch minmax(0, 1fr); }
   .pd-reason-t { grid-column: 1 / -1; }
 }
