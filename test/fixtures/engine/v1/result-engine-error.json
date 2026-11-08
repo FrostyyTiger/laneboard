@@ -1,0 +1,15 @@
+{
+  "contract": "1.0",
+  "engine": "0.1.0",
+  "at": "2026-11-01T10:45:00Z",
+  "data": {
+    "verb": "answer",
+    "target": "acme-shop:Q-3",
+    "request": "0b6f0107-3c1e-4a7d-9f20-5e8a1c7d0107",
+    "by": "owner",
+    "via": "laneboard",
+    "ok": false,
+    "code": "engine-error",
+    "reason": "The knowledge home could not be written (push failed). Nothing was applied; the same request id can be sent again."
+  }
+}

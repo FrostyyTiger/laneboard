@@ -1,0 +1,118 @@
+{
+  "contract": "1.0",
+  "engine": "0.1.0",
+  "at": "2026-11-01T10:45:00Z",
+  "data": {
+    "products": [
+      {
+        "id": "acme-shop",
+        "title": "Acme Shop",
+        "url": "https://git.example.com/acme/acme-shop/tree/main/discovery",
+        "repo": "https://git.example.com/acme/acme-shop",
+        "goals": [
+          {
+            "id": "G1",
+            "title": "Guest checkout",
+            "intent": [
+              "I-1",
+              "I-2"
+            ],
+            "readiness": "ready",
+            "reasons": [],
+            "runs": [
+              "R-20261101-acme-shop-1"
+            ],
+            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g1",
+            "updated": "2026-11-01T08:12:00Z"
+          },
+          {
+            "id": "G2",
+            "title": "Wish list",
+            "intent": [
+              "I-3"
+            ],
+            "readiness": "ready",
+            "reasons": [],
+            "runs": [
+              "R-20261024-acme-shop-1"
+            ],
+            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g2",
+            "updated": "2026-10-27T16:20:00Z"
+          },
+          {
+            "id": "G3",
+            "title": "Product reviews",
+            "intent": [
+              "I-4"
+            ],
+            "readiness": "ready",
+            "reasons": [],
+            "runs": [
+              "R-20261029-acme-shop-1"
+            ],
+            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g3",
+            "updated": "2026-10-29T07:30:00Z"
+          },
+          {
+            "id": "G4",
+            "title": "Order history",
+            "intent": [
+              "I-5"
+            ],
+            "readiness": "not-ready",
+            "reasons": [
+              {
+                "kind": "intent-unapproved",
+                "ref": "I-5",
+                "text": "I-5 is a draft, not approved yet.",
+                "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-5.md"
+              },
+              {
+                "kind": "question-open",
+                "ref": "Q-3",
+                "text": "Q-3 is open: reorder in one step, or only look up?",
+                "url": "https://git.example.com/acme/acme-shop/blob/main/discovery/questions/Q-3.md"
+              },
+              {
+                "kind": "low-claim",
+                "ref": "C-9",
+                "text": "I-5 rests on C-9, which has low confidence.",
+                "url": "https://git.example.com/acme/acme-shop/blob/main/discovery/claims/C-9.md"
+              },
+              {
+                "kind": "budget",
+                "ref": null,
+                "text": "The estimate needs about 30% of the 7-day window; 36% is left and G1's run is still going."
+              }
+            ],
+            "runs": [],
+            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g4",
+            "updated": "2026-10-28T12:00:00Z"
+          }
+        ],
+        "updated": "2026-11-01T08:12:00Z"
+      },
+      {
+        "id": "acme-returns",
+        "title": "Acme Returns",
+        "url": "https://git.example.com/acme/acme-returns-knowledge/tree/main",
+        "repo": null,
+        "goals": [
+          {
+            "id": "G1",
+            "title": "Return label",
+            "intent": [
+              "I-1"
+            ],
+            "readiness": "ready",
+            "reasons": [],
+            "runs": [],
+            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g1",
+            "updated": "2026-10-31T10:00:00Z"
+          }
+        ],
+        "updated": "2026-10-31T10:00:00Z"
+      }
+    ]
+  }
+}

@@ -211,6 +211,7 @@ human starts. The guard flags and pushes; it never acts.
 | [docs/map.md](docs/map.md) | the Map: the topology file, the feed format, pushing a feed from a hypervisor, builders on the Map |
 | [docs/wall.md](docs/wall.md) | the Wall: a tablet in kiosk mode, touch, the URL switches, the effects, the feed fields it paints |
 | [docs/runs.md](docs/runs.md) | the run protocol: how an unattended agent loop tells laneboard its goal, rounds, scores, cost and needs |
+| [docs/engines.md](docs/engines.md) | run engines: the interface laneboard reads runs through, the version check, the contract suite |
 | [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | `npm test`, the hygiene gate, what is deliberate |
 

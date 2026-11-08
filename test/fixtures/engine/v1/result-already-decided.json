@@ -1,0 +1,15 @@
+{
+  "contract": "1.0",
+  "engine": "0.1.0",
+  "at": "2026-11-01T10:45:00Z",
+  "data": {
+    "verb": "approve",
+    "target": "R-20261101-acme-shop-1/recipe-1",
+    "request": "0b6f0103-3c1e-4a7d-9f20-5e8a1c7d0103",
+    "by": "owner",
+    "via": "laneboard",
+    "ok": false,
+    "code": "already-decided",
+    "reason": "R-20261101-acme-shop-1/recipe-1 was approved at 2026-11-01T08:12:00Z."
+  }
+}

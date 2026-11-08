@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+**Run engines (runs-first phase 0).** An interface laneboard reads runs
+through, without knowing which engine drives them: `server/engine/` with a
+`jsonl` engine (today's run files, always on), `none` and a `fake` that replays
+the engine contract's published examples. Contract major 1 with any minor is
+accepted, anything else is `incompatible`; answers are checked and mapped into
+laneboard's own shapes. Read-only `GET /api/engines` and
+`GET /api/engine/<id>/…`, the `engines` config key (default `[]`: nothing
+changes), `laneboard engine check`, and a contract suite. No UI change;
+`GET /api/runs` answers as before. See docs/engines.md.
+
 **Fleet mode.** Several builders behind one hub. Every machine that runs
 agents keeps its own laneboard (a builder); a separate laneboard in
 `mode: "hub"` shows and drives all of them, and each builder keeps working on
