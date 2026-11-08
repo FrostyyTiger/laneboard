@@ -1,0 +1,16 @@
+{
+  "contract": "1.0",
+  "engine": "0.1.0",
+  "at": "2026-11-01T10:45:00Z",
+  "data": {
+    "verb": "approve",
+    "target": "R-20261101-acme-shop-1/recipe-2",
+    "request": "0b6f0104-3c1e-4a7d-9f20-5e8a1c7d0104",
+    "by": "owner",
+    "via": "laneboard",
+    "ok": false,
+    "code": "stale-revision",
+    "reason": "The recipe changed since it was read. Read it again before deciding.",
+    "current": "sha256:758b02b76a44f28c"
+  }
+}

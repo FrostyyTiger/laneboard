@@ -1,0 +1,417 @@
+{
+  "contract": "1.0",
+  "engine": "0.1.0",
+  "at": "2026-11-01T10:45:00Z",
+  "data": {
+    "run": {
+      "id": "R-20261101-acme-shop-1",
+      "product": "acme-shop",
+      "goal": "G1",
+      "recipe": {
+        "id": "R-20261101-acme-shop-1/recipe",
+        "revision": 1,
+        "kind": "build",
+        "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/recipe.md"
+      },
+      "state": "running",
+      "stop_reason": null,
+      "node": "G1.F1.T3",
+      "rooms": [
+        {
+          "name": "room-7f3a",
+          "host": "heavy-1",
+          "state": "up",
+          "expires": "2026-11-02T08:12:30Z",
+          "purpose": "run"
+        },
+        {
+          "name": "room-c210",
+          "host": "heavy-1",
+          "state": "up",
+          "expires": "2026-11-01T20:00:00Z",
+          "purpose": "suite"
+        }
+      ],
+      "usage": {
+        "tokens": {
+          "in": 371000,
+          "out": 83000,
+          "cache_read": 2490000,
+          "cache_write": 222000
+        },
+        "usd_notional": 4.38,
+        "by_role": {
+          "test-writer": {
+            "tokens": {
+              "in": 64000,
+              "out": 23000,
+              "cache_read": 210000,
+              "cache_write": 52000
+            },
+            "usd_notional": 1.33
+          },
+          "builder": {
+            "tokens": {
+              "in": 286000,
+              "out": 58000,
+              "cache_read": 2220000,
+              "cache_write": 161000
+            },
+            "usd_notional": 3
+          },
+          "blame": {
+            "tokens": {
+              "in": 21000,
+              "out": 2000,
+              "cache_read": 60000,
+              "cache_write": 9000
+            },
+            "usd_notional": 0.05
+          }
+        },
+        "by_tier": {
+          "large": {
+            "tokens": {
+              "in": 64000,
+              "out": 23000,
+              "cache_read": 210000,
+              "cache_write": 52000
+            },
+            "usd_notional": 1.33
+          },
+          "mid": {
+            "tokens": {
+              "in": 286000,
+              "out": 58000,
+              "cache_read": 2220000,
+              "cache_write": 161000
+            },
+            "usd_notional": 3
+          },
+          "small": {
+            "tokens": {
+              "in": 21000,
+              "out": 2000,
+              "cache_read": 60000,
+              "cache_write": 9000
+            },
+            "usd_notional": 0.05
+          }
+        }
+      },
+      "events_path": "/var/lib/foundry/state/runs/R-20261101-acme-shop-1/events.jsonl",
+      "last_seq": 83,
+      "pr": {
+        "id": "41",
+        "url": "https://git.example.com/acme/acme-shop/pull/41",
+        "state": "draft",
+        "title": "Guest checkout (run R-20261101-acme-shop-1)",
+        "updated": "2026-11-01T08:43:40Z"
+      },
+      "started": "2026-11-01T08:00:00Z",
+      "ended": null,
+      "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1",
+      "updated": "2026-11-01T10:27:28Z",
+      "tree": [
+        {
+          "id": "G1",
+          "level": "goal",
+          "parent": null,
+          "title": "Guest checkout",
+          "state": "building",
+          "intent": [
+            "I-1",
+            "I-2"
+          ],
+          "check": "full suite, CI, code review",
+          "last_check": null,
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.md",
+          "updated": "2026-11-01T08:14:11Z"
+        },
+        {
+          "id": "G1.F1",
+          "level": "feature",
+          "parent": "G1",
+          "title": "A guest can buy without an account",
+          "state": "building",
+          "intent": "I-1",
+          "journeys": [
+            "J-I1-1",
+            "J-I1-2",
+            "J-I1-3"
+          ],
+          "areas": [
+            "shop/checkout",
+            "shop/orders",
+            "mail"
+          ],
+          "depends_on": [],
+          "check": "journeys J-I1-1..3 + persona and code review",
+          "last_check": null,
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F1.md",
+          "updated": "2026-11-01T08:14:12Z"
+        },
+        {
+          "id": "G1.F2",
+          "level": "feature",
+          "parent": "G1",
+          "title": "A buyer sees the full price before paying",
+          "state": "paused",
+          "reason": "knowledge change: C-4 superseded by C-11, I-2 re-drafted",
+          "intent": "I-2",
+          "journeys": [
+            "J-I2-1",
+            "J-I2-2"
+          ],
+          "areas": [
+            "shop/shipping",
+            "shop/checkout/totals"
+          ],
+          "depends_on": [],
+          "check": "journeys J-I2-1..2 + code review",
+          "last_check": null,
+          "blocked_by": [
+            "acme-shop:C-4",
+            "R-20261101-acme-shop-1/change-1"
+          ],
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F2.md",
+          "updated": "2026-11-01T10:03:43Z"
+        },
+        {
+          "id": "G1.F1.T1",
+          "level": "task",
+          "parent": "G1.F1",
+          "title": "Order without an account (back end)",
+          "state": "frozen",
+          "areas": [
+            "shop/orders"
+          ],
+          "depends_on": [],
+          "check": "order tests + tests importing shop/orders",
+          "last_check": {
+            "name": "task tests",
+            "pass": true,
+            "counts": {
+              "passed": 14,
+              "failed": 0,
+              "skipped": 0
+            },
+            "output": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/checks/32.txt",
+            "path": "checks/32.txt",
+            "at": "2026-11-01T08:43:33Z",
+            "seq": 32
+          },
+          "attempts": {
+            "rounds": 1,
+            "tiers": [
+              "mid"
+            ]
+          },
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F1.T1.md",
+          "updated": "2026-11-01T08:43:35Z"
+        },
+        {
+          "id": "G1.F1.T2",
+          "level": "task",
+          "parent": "G1.F1",
+          "title": "Cart totals for guest orders",
+          "state": "reopened",
+          "reason": "blame: the suite's cart rounding failures trace to this task; fix queued after T3",
+          "areas": [
+            "shop/checkout/totals"
+          ],
+          "depends_on": [
+            "G1.F1.T1"
+          ],
+          "check": "totals tests + checkout tests",
+          "last_check": {
+            "name": "task tests",
+            "pass": true,
+            "counts": {
+              "passed": 21,
+              "failed": 0,
+              "skipped": 1
+            },
+            "output": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/checks/55.txt",
+            "path": "checks/55.txt",
+            "at": "2026-11-01T09:45:04Z",
+            "seq": 55
+          },
+          "attempts": {
+            "rounds": 2,
+            "tiers": [
+              "mid",
+              "mid"
+            ]
+          },
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F1.T2.md",
+          "updated": "2026-11-01T10:05:23Z"
+        },
+        {
+          "id": "G1.F1.T3",
+          "level": "task",
+          "parent": "G1.F1",
+          "title": "Confirmation e-mail with a link to the order",
+          "state": "building",
+          "areas": [
+            "mail",
+            "shop/orders"
+          ],
+          "depends_on": [
+            "G1.F1.T1"
+          ],
+          "check": "mail tests + order tests",
+          "last_check": null,
+          "attempts": {
+            "rounds": 2,
+            "tiers": [
+              "mid",
+              "mid"
+            ]
+          },
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F1.T3.md",
+          "updated": "2026-11-01T10:05:24Z"
+        },
+        {
+          "id": "G1.F1.T4",
+          "level": "task",
+          "parent": "G1.F1",
+          "title": "Payment step for card and invoice",
+          "state": "blocked",
+          "reason": "two directions for the payment step: waits for a pick",
+          "areas": [
+            "shop/checkout/payment"
+          ],
+          "depends_on": [
+            "G1.F1.T2"
+          ],
+          "check": "payment tests",
+          "last_check": null,
+          "attempts": {
+            "rounds": 0,
+            "tiers": []
+          },
+          "blocked_by": [
+            "R-20261101-acme-shop-1/variant-1"
+          ],
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F1.T4.md",
+          "updated": "2026-11-01T10:27:11Z"
+        },
+        {
+          "id": "G1.F2.T1",
+          "level": "task",
+          "parent": "G1.F2",
+          "title": "Shipping cost service",
+          "state": "frozen",
+          "areas": [
+            "shop/shipping"
+          ],
+          "depends_on": [],
+          "check": "shipping tests",
+          "last_check": {
+            "name": "task tests",
+            "pass": true,
+            "counts": {
+              "passed": 9,
+              "failed": 0,
+              "skipped": 0
+            },
+            "output": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/checks/42.txt",
+            "path": "checks/42.txt",
+            "at": "2026-11-01T09:04:18Z",
+            "seq": 42
+          },
+          "attempts": {
+            "rounds": 1,
+            "tiers": [
+              "mid"
+            ]
+          },
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F2.T1.md",
+          "updated": "2026-11-01T09:04:20Z"
+        },
+        {
+          "id": "G1.F2.T2",
+          "level": "task",
+          "parent": "G1.F2",
+          "title": "Total with shipping before payment",
+          "state": "paused",
+          "reason": "its feature is paused",
+          "areas": [
+            "shop/checkout/totals"
+          ],
+          "depends_on": [
+            "G1.F2.T1"
+          ],
+          "check": "totals tests + shipping tests",
+          "last_check": null,
+          "attempts": {
+            "rounds": 1,
+            "tiers": [
+              "mid"
+            ]
+          },
+          "blocked_by": [
+            "acme-shop:C-4",
+            "R-20261101-acme-shop-1/change-1"
+          ],
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F2.T2.md",
+          "updated": "2026-11-01T10:03:44Z"
+        }
+      ],
+      "gates": [
+        {
+          "id": "R-20261101-acme-shop-1/recipe-1",
+          "kind": "recipe",
+          "state": "decided",
+          "for": "owner",
+          "opened": "2026-11-01T08:00:01Z",
+          "decided": {
+            "decision": "approved",
+            "by": "owner",
+            "via": "laneboard",
+            "at": "2026-11-01T08:12:00Z",
+            "request": "0b6f0001-3c1e-4a7d-9f20-5e8a1c7d0001"
+          },
+          "updated": "2026-11-01T08:12:00Z"
+        },
+        {
+          "id": "R-20261101-acme-shop-1/change-1",
+          "kind": "change",
+          "state": "open",
+          "for": "owner",
+          "node": "G1.F2",
+          "opened": "2026-11-01T10:03:45Z",
+          "updated": "2026-11-01T10:03:45Z"
+        },
+        {
+          "id": "R-20261101-acme-shop-1/variant-1",
+          "kind": "variant",
+          "state": "open",
+          "for": "owner",
+          "node": "G1.F1.T4",
+          "opened": "2026-11-01T10:27:12Z",
+          "updated": "2026-11-01T10:27:12Z"
+        },
+        {
+          "id": "R-20261101-acme-shop-1/recipe-2",
+          "kind": "recipe",
+          "state": "open",
+          "for": "owner",
+          "opened": "2026-11-01T10:27:22Z",
+          "updated": "2026-11-01T10:27:22Z"
+        }
+      ],
+      "prs": [
+        {
+          "id": "41",
+          "url": "https://git.example.com/acme/acme-shop/pull/41",
+          "state": "draft",
+          "title": "Guest checkout (run R-20261101-acme-shop-1)",
+          "updated": "2026-11-01T08:43:40Z"
+        }
+      ],
+      "report": null
+    }
+  }
+}

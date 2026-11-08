@@ -1,0 +1,15 @@
+{
+  "contract": "1.0",
+  "engine": "0.1.0",
+  "at": "2026-11-01T10:45:00Z",
+  "data": {
+    "verb": "stop",
+    "target": "R-20261101-acme-shop-1",
+    "request": "0b6f0106-3c1e-4a7d-9f20-5e8a1c7d0106",
+    "by": "owner",
+    "via": "laneboard",
+    "ok": false,
+    "code": "busy",
+    "reason": "R-20261101-acme-shop-1 is finishing a step for an earlier pause; try again once it is paused."
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "contract": "1.0",
+  "engine": "0.1.0",
+  "at": "2026-11-01T10:45:00Z",
+  "data": {
+    "contract": "1.0",
+    "engine": "0.1.0",
+    "oldest_contract": "1.0",
+    "served": [
+      {
+        "contract": "1.0",
+        "until": null
+      }
+    ],
+    "verbs": [
+      "hello",
+      "health",
+      "products",
+      "runs",
+      "run",
+      "events",
+      "waiting",
+      "knowledge",
+      "approve",
+      "reject",
+      "answer",
+      "accept-risk",
+      "add-source",
+      "start",
+      "pause",
+      "resume",
+      "stop",
+      "host-away",
+      "host-back"
+    ]
+  }
+}
