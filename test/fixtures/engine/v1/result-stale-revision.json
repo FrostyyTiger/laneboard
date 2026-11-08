@@ -11,6 +11,6 @@
     "ok": false,
     "code": "stale-revision",
     "reason": "The recipe changed since it was read. Read it again before deciding.",
-    "current": "sha256:758b02b76a44f28c"
+    "current": "sha256:8ed771e8d2fc03fd"
   }
 }

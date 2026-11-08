@@ -13,59 +13,59 @@
           {
             "id": "G1",
             "title": "Guest checkout",
-            "intent": [
-              "I-1",
-              "I-2"
+            "requirements": [
+              "REQ-1",
+              "REQ-2"
             ],
             "readiness": "ready",
             "reasons": [],
             "runs": [
               "R-20261101-acme-shop-1"
             ],
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g1",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/goals.md#g1",
             "updated": "2026-11-01T08:12:00Z"
           },
           {
             "id": "G2",
             "title": "Wish list",
-            "intent": [
-              "I-3"
+            "requirements": [
+              "REQ-3"
             ],
             "readiness": "ready",
             "reasons": [],
             "runs": [
               "R-20261024-acme-shop-1"
             ],
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g2",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/goals.md#g2",
             "updated": "2026-10-27T16:20:00Z"
           },
           {
             "id": "G3",
             "title": "Product reviews",
-            "intent": [
-              "I-4"
+            "requirements": [
+              "REQ-4"
             ],
             "readiness": "ready",
             "reasons": [],
             "runs": [
               "R-20261029-acme-shop-1"
             ],
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g3",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/goals.md#g3",
             "updated": "2026-10-29T07:30:00Z"
           },
           {
             "id": "G4",
             "title": "Order history",
-            "intent": [
-              "I-5"
+            "requirements": [
+              "REQ-5"
             ],
             "readiness": "not-ready",
             "reasons": [
               {
-                "kind": "intent-unapproved",
-                "ref": "I-5",
-                "text": "I-5 is a draft, not approved yet.",
-                "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-5.md"
+                "kind": "requirement-unapproved",
+                "ref": "REQ-5",
+                "text": "REQ-5 is a draft, not approved yet.",
+                "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-5.md"
               },
               {
                 "kind": "question-open",
@@ -76,7 +76,7 @@
               {
                 "kind": "low-claim",
                 "ref": "C-9",
-                "text": "I-5 rests on C-9, which has low confidence.",
+                "text": "REQ-5 rests on C-9, which has low confidence.",
                 "url": "https://git.example.com/acme/acme-shop/blob/main/discovery/claims/C-9.md"
               },
               {
@@ -86,7 +86,7 @@
               }
             ],
             "runs": [],
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g4",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/goals.md#g4",
             "updated": "2026-10-28T12:00:00Z"
           }
         ],
@@ -101,13 +101,13 @@
           {
             "id": "G1",
             "title": "Return label",
-            "intent": [
-              "I-1"
+            "requirements": [
+              "REQ-1"
             ],
             "readiness": "ready",
             "reasons": [],
             "runs": [],
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/goals.md#g1",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/goals.md#g1",
             "updated": "2026-10-31T10:00:00Z"
           }
         ],

@@ -119,9 +119,9 @@
           "parent": null,
           "title": "Guest checkout",
           "state": "building",
-          "intent": [
-            "I-1",
-            "I-2"
+          "requirements": [
+            "REQ-1",
+            "REQ-2"
           ],
           "check": "full suite, CI, code review",
           "last_check": null,
@@ -134,11 +134,11 @@
           "parent": "G1",
           "title": "A guest can buy without an account",
           "state": "building",
-          "intent": "I-1",
-          "journeys": [
-            "J-I1-1",
-            "J-I1-2",
-            "J-I1-3"
+          "requirements": "REQ-1",
+          "acceptance_tests": [
+            "A-1-1",
+            "A-1-2",
+            "A-1-3"
           ],
           "areas": [
             "shop/checkout",
@@ -146,7 +146,7 @@
             "mail"
           ],
           "depends_on": [],
-          "check": "journeys J-I1-1..3 + persona and code review",
+          "check": "acceptance tests A-1-1..3 + persona and code review",
           "last_check": null,
           "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/tree/G1.F1.md",
           "updated": "2026-11-01T08:14:12Z"
@@ -157,18 +157,18 @@
           "parent": "G1",
           "title": "A buyer sees the full price before paying",
           "state": "paused",
-          "reason": "knowledge change: C-4 superseded by C-11, I-2 re-drafted",
-          "intent": "I-2",
-          "journeys": [
-            "J-I2-1",
-            "J-I2-2"
+          "reason": "knowledge change: C-4 superseded by C-11, REQ-2 re-drafted",
+          "requirements": "REQ-2",
+          "acceptance_tests": [
+            "A-2-1",
+            "A-2-2"
           ],
           "areas": [
             "shop/shipping",
             "shop/checkout/totals"
           ],
           "depends_on": [],
-          "check": "journeys J-I2-1..2 + code review",
+          "check": "acceptance tests A-2-1..2 + code review",
           "last_check": null,
           "blocked_by": [
             "acme-shop:C-4",

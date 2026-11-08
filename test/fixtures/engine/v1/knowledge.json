@@ -9,8 +9,8 @@
     },
     "items": [
       {
-        "type": "intent",
-        "id": "I-1",
+        "type": "requirement",
+        "id": "REQ-1",
         "title": "A guest can buy without an account",
         "status": "approved",
         "because": [
@@ -41,31 +41,32 @@
           ],
           "acceptance": [
             {
-              "journey": "J-I1-1",
+              "test": "A-1-1",
               "text": "Given a cart, when a guest pays by card, then the order exists and no account was created"
             },
             {
-              "journey": "J-I1-2",
+              "test": "A-1-2",
               "text": "Given a guest order, when it is placed, then a confirmation e-mail links to the order"
             },
             {
-              "journey": "J-I1-3",
+              "test": "A-1-3",
               "text": "Given a guest order past its retention period, when the cleanup runs, then the address is gone"
             }
           ],
           "left_to_build": [
             "layout and order of the fields",
             "whether e-mail comes before the address"
-          ]
+          ],
+          "fixed": []
         },
-        "written_by": "agent:intent-writer R-20261013-acme-shop-1",
+        "written_by": "agent:requirements-writer R-20261013-acme-shop-1",
         "date": "2026-10-21",
         "updated": "2026-10-21T12:00:00Z",
-        "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-1.md"
+        "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-1.md"
       },
       {
-        "type": "intent",
-        "id": "I-2",
+        "type": "requirement",
+        "id": "REQ-2",
         "title": "A buyer sees the full price, shipping included, before paying",
         "status": "approved",
         "because": [
@@ -92,27 +93,28 @@
           ],
           "acceptance": [
             {
-              "journey": "J-I2-1",
+              "test": "A-2-1",
               "text": "Given a cart and an address, when the buyer reaches payment, then the total includes shipping"
             },
             {
-              "journey": "J-I2-2",
+              "test": "A-2-2",
               "text": "Given an order, when it is charged, then the charge equals the total shown"
             }
           ],
           "left_to_build": [
             "where the total sits",
             "whether shipping is a separate line"
-          ]
+          ],
+          "fixed": []
         },
-        "written_by": "agent:intent-writer R-20261013-acme-shop-1",
+        "written_by": "agent:requirements-writer R-20261013-acme-shop-1",
         "date": "2026-10-21",
         "updated": "2026-10-21T12:00:00Z",
-        "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-2.md"
+        "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-2.md"
       },
       {
-        "type": "intent",
-        "id": "I-3",
+        "type": "requirement",
+        "id": "REQ-3",
         "title": "A signed-in buyer keeps a wish list",
         "status": "built",
         "because": [
@@ -138,27 +140,36 @@
           ],
           "acceptance": [
             {
-              "journey": "J-I3-1",
+              "test": "A-3-1",
               "text": "Given a product, when a signed-in buyer saves it, then it is on their wish list on another device"
             },
             {
-              "journey": "J-I3-2",
+              "test": "A-3-2",
               "text": "Given a wish list, when the buyer moves a product to the cart, then it leaves the list"
             }
           ],
           "left_to_build": [
             "the control that saves",
             "list or grid"
+          ],
+          "fixed": [
+            {
+              "test": "A-3-3",
+              "text": "On phones, the wish list opens from the bottom bar, as in the demo",
+              "claim": "C-12",
+              "by": "owner",
+              "on": "2026-10-28"
+            }
           ]
         },
-        "written_by": "agent:intent-writer R-20261013-acme-shop-1",
+        "written_by": "agent:requirements-writer R-20261013-acme-shop-1",
         "date": "2026-10-22",
         "updated": "2026-10-22T12:00:00Z",
-        "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-3.md"
+        "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-3.md"
       },
       {
-        "type": "intent",
-        "id": "I-4",
+        "type": "requirement",
+        "id": "REQ-4",
         "title": "A buyer can rate a product, with text optional",
         "status": "approved",
         "because": [
@@ -187,27 +198,28 @@
           ],
           "acceptance": [
             {
-              "journey": "J-I4-1",
+              "test": "A-4-1",
               "text": "Given a delivered order, when the buyer gives stars without text, then the rating is accepted"
             },
             {
-              "journey": "J-I4-2",
+              "test": "A-4-2",
               "text": "Given a new rating, when nobody has checked it, then other buyers do not see it"
             }
           ],
           "left_to_build": [
             "star control",
             "where the rating entry starts"
-          ]
+          ],
+          "fixed": []
         },
-        "written_by": "agent:intent-writer R-20261013-acme-shop-1",
+        "written_by": "agent:requirements-writer R-20261013-acme-shop-1",
         "date": "2026-10-27",
         "updated": "2026-10-27T12:00:00Z",
-        "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-4.md"
+        "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-4.md"
       },
       {
-        "type": "intent",
-        "id": "I-5",
+        "type": "requirement",
+        "id": "REQ-5",
         "title": "A returning buyer finds a past order",
         "status": "draft",
         "because": [
@@ -234,23 +246,24 @@
           ],
           "acceptance": [
             {
-              "journey": "J-I5-1",
+              "test": "A-5-1",
               "text": "Given three past orders, when the buyer opens past orders, then all three are listed newest first"
             },
             {
-              "journey": "J-I5-2",
+              "test": "A-5-2",
               "text": "Given another buyer's order id, when the buyer asks for it, then it is refused"
             }
           ],
           "left_to_build": [
             "list layout",
             "search or filter"
-          ]
+          ],
+          "fixed": []
         },
-        "written_by": "agent:intent-writer R-20261013-acme-shop-1",
+        "written_by": "agent:requirements-writer R-20261013-acme-shop-1",
         "date": "2026-10-28",
         "updated": "2026-10-28T12:00:00Z",
-        "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-5.md"
+        "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-5.md"
       },
       {
         "type": "question",
@@ -259,7 +272,7 @@
         "ask": "owner",
         "status": "answered",
         "blocks": [
-          "I-1"
+          "REQ-1"
         ],
         "answer": "C-3",
         "written_by": "agent:synthesizer R-20261013-acme-shop-1",
@@ -288,7 +301,7 @@
         "ask": "owner",
         "status": "open",
         "blocks": [
-          "I-5",
+          "REQ-5",
           "C-9"
         ],
         "for": "owner",
@@ -303,7 +316,7 @@
         "question": "Should guests be able to keep a wish list?",
         "ask": "owner",
         "status": "dropped",
-        "reason": "Wish lists need an account (I-3); guests stay out of scope.",
+        "reason": "Wish lists need an account (REQ-3); guests stay out of scope.",
         "written_by": "agent:synthesizer R-20261013-acme-shop-1",
         "date": "2026-10-16",
         "updated": "2026-10-16T12:00:00Z",
@@ -530,6 +543,25 @@
         "url": "https://git.example.com/acme/acme-shop/blob/main/discovery/claims/C-11.md"
       },
       {
+        "type": "claim",
+        "id": "C-12",
+        "kind": "decision",
+        "statement": "On phones, the wish list stays in the bottom bar, where the demo put it.",
+        "evidence": [
+          {
+            "source": "S-2026-10-28-owner-demo-feedback",
+            "at": "wish list",
+            "says": "keep it in the bottom bar on phones"
+          }
+        ],
+        "status": "active",
+        "decided_by": "owner",
+        "written_by": "agent:synthesizer R-20261013-acme-shop-1",
+        "date": "2026-10-28",
+        "updated": "2026-10-28T12:00:00Z",
+        "url": "https://git.example.com/acme/acme-shop/blob/main/discovery/claims/C-12.md"
+      },
+      {
         "type": "source",
         "id": "S-2026-10-12-buyer-interviews",
         "kind": "interview",
@@ -611,6 +643,20 @@
         "summary": "Answer to Q-1: guests should get a confirmation e-mail with a link to the order. First version: card and invoice only.",
         "url": "https://git.example.com/acme/acme-shop/blob/main/discovery/sources/S-2026-10-20-owner-answer.md",
         "updated": "2026-10-20T12:00:00Z"
+      },
+      {
+        "type": "source",
+        "id": "S-2026-10-28-owner-demo-feedback",
+        "kind": "owner-feedback",
+        "date": "2026-10-28",
+        "who": "owner",
+        "added_by": "owner",
+        "via": "manual",
+        "storage": "inline",
+        "language": "en",
+        "summary": "After the wish-list demo: keep the wish list in the bottom bar on phones, the way the demo shows it.",
+        "url": "https://git.example.com/acme/acme-shop/blob/main/discovery/sources/S-2026-10-28-owner-demo-feedback.md",
+        "updated": "2026-10-28T12:00:00Z"
       },
       {
         "type": "source",

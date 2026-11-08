@@ -9,7 +9,7 @@ import { lamp, panel, setPanel } from '../ui/components.js';
 export const PRODUCTS_URL = '/api/engines/products';
 export const POLL_MS = 60_000;
 
-const REASON_WORD = Object.freeze({ 'question-open': 'question', 'intent-unapproved': 'requirement', 'requirement-unapproved': 'requirement', 'low-claim': 'claim', budget: 'budget' });
+const REASON_WORD = Object.freeze({ 'question-open': 'question', 'requirement-unapproved': 'requirement', 'low-claim': 'claim', budget: 'budget' });
 
 export const EMPTY_HOW = Object.freeze([
   'No products yet. A product shows up here when a run engine reports it.',
@@ -41,11 +41,18 @@ function extLink(cls, text, href) {
   return a;
 }
 
-function reasonRow(r) {
+/** A reason's id opens that item in the Knowledge view. */
+function knowledgeLink(product, ref) {
+  const a = el('a', 'pd-ref', rnClean(ref, 48));
+  a.href = `#/knowledge?q=${encodeURIComponent(ref)}&product=${encodeURIComponent(product.id)}`;
+  return a;
+}
+
+function reasonRow(r, product) {
   const li = el('li', 'pd-reason');
   li.dataset.kind = rnClean(r.kind, 24) ?? '';
   li.append(el('span', 'pd-reason-k', REASON_WORD[r.kind] ?? rnClean(r.kind, 24) ?? ''));
-  li.append(r.ref ? extLink('pd-ref', rnClean(r.ref, 48), r.url) : el('span', 'pd-ref', '—'));
+  li.append(r.ref ? knowledgeLink(product, r.ref) : el('span', 'pd-ref', '—'));
   li.append(el('span', 'pd-reason-t', rnClean(r.text, 400) ?? ''));
   return li;
 }
@@ -70,7 +77,7 @@ function goalRow(g, product) {
   li.append(head);
   if (!ready && g.reasons?.length) {
     const ul = el('ul', 'pd-reasons');
-    for (const r of g.reasons) ul.append(reasonRow(r));
+    for (const r of g.reasons) ul.append(reasonRow(r, product));
     li.append(ul);
   }
   return li;
@@ -83,7 +90,9 @@ export function productCard(p) {
   const head = el('header', 'pd-head');
   head.append(el('h3', 'pd-title', rnClean(p.title) ?? rnClean(p.id, 64) ?? ''), el('span', 'pd-engine', `${rnClean(p.id, 64)} · ${rnClean(p.engine, 32)}`));
   if (safeHref(p.repo)) head.append(extLink('pd-link', 'repo', p.repo));
-  if (safeHref(p.url)) head.append(extLink('pd-link', 'knowledge home', p.url));
+  const know = el('a', 'pd-link', 'knowledge');
+  know.href = `#/knowledge?product=${encodeURIComponent(p.id)}`;
+  head.append(know);
   card.append(head);
   const ul = el('ul', 'pd-goals');
   for (const g of Array.isArray(p.goals) ? p.goals : []) ul.append(goalRow(g, p));

@@ -36,6 +36,7 @@ import * as auditModule from './audit.js';
 import * as diffModule from './diff.js';
 import * as runsModule from './runs.js';
 import * as productsModule from './products.js';
+import * as knowledgeModule from './knowledge.js';
 
 /**
  * Nav metadata per view, in nav order: icon concept (core/icons.js), the long
@@ -53,6 +54,7 @@ export const VIEW_META = Object.freeze({
   runs: { icon: 'runs', title: 'Runs', short: 'RUNS' },
   products: { icon: 'packages', title: 'Products', short: 'PROD' },
   diff: { icon: 'review', title: 'Diff', short: 'DIFF' },
+  knowledge: { icon: 'review', title: 'Knowledge', short: 'KNOW' },
 });
 
 const noop = () => {};
@@ -94,6 +96,7 @@ export function views() {
   add('runs', pick(runsModule, legacyView('runs')));
   add('products', pick(productsModule, legacyView('products')));
   add('diff', pick(diffModule, legacyView('diff')));
+  add('knowledge', pick(knowledgeModule, legacyView('knowledge')));
   return registry;
 }
 

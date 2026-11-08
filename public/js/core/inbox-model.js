@@ -450,7 +450,7 @@ function waitingRows(items) {
     if (!it || typeof it !== 'object' || typeof it.id !== 'string' || typeof it.engine !== 'string') continue;
     rows.push({
       id: `w:${it.engine}:${it.id}`, group: 'waiting', kind: 'waiting', builder: null, fkey: null, name: null, lane: null, p: '2',
-      word: it.kind === 'intent' ? 'requirement' : inboxClip(str(it.kind), 24), reason: inboxClip(str(it.title), LIMITS.reason) ?? '',
+      word: inboxClip(str(it.kind), 24), reason: inboxClip(str(it.title), LIMITS.reason) ?? '',
       product: inboxClip(str(it.product), 64), since: isNum(it.openedAt) ? it.openedAt : 0, engine: it.engine, item: it,
     });
   }

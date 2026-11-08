@@ -11,7 +11,7 @@ export const NEEDS_PHASE_4 = 'needs phase 4';
 const MAX_DEPTH = 5;
 const TEXT_MAX = 20000;
 
-const LABELS = Object.freeze({ intent: 'requirement', journeys: 'acceptance tests', journey: 'acceptance test', accepted_risks: 'accepted risks' });
+const LABELS = Object.freeze({ acceptance_tests: 'acceptance tests', test: 'acceptance test', because: 'because of', accepted_risks: 'accepted risks' });
 
 /** GET /api/engines/waiting -> {items, engines}, or null when there is no such route (a hub). Never throws. */
 export async function loadWaiting(fetchFn = globalThis.fetch) {
@@ -59,7 +59,7 @@ function valueNode(v, key, depth) {
   return el('span', 'wt-none', '—');
 }
 
-function fieldsNode(obj, depth = 0) {
+export function fieldsNode(obj, depth = 0) {
   const box = el('div', 'wt-fields');
   for (const [k, v] of Object.entries(obj)) {
     const row = el('div', 'wt-field');
@@ -116,4 +116,4 @@ export function waitingBody(item, engine) {
   return body;
 }
 
-export const waitingKindWord = (kind) => ({ intent: 'requirement' }[kind] ?? rnClean(kind, 24) ?? '');
+export const waitingKindWord = (kind) => rnClean(kind, 24) ?? '';

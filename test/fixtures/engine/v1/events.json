@@ -88,7 +88,7 @@
         "node": "G1.F2",
         "parent": "G1",
         "state": "paused",
-        "reason": "knowledge change: C-4 superseded by C-11, I-2 re-drafted"
+        "reason": "knowledge change: C-4 superseded by C-11, REQ-2 re-drafted"
       },
       {
         "v": 1,
@@ -124,7 +124,7 @@
         "level": "feature",
         "node": "G1.F2",
         "parent": "G1",
-        "text": "Approve the re-drafted I-2 so G1.F2 can resume.",
+        "text": "Approve the re-drafted REQ-2 so G1.F2 can resume.",
         "for": "owner"
       },
       {
