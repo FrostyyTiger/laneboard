@@ -71,7 +71,7 @@ export async function allRuns(engines = list()) {
   const errors = [];
   for (const [e, a] of answers) {
     if (!a.ok) { errors.push({ engine: e.id, code: a.code, reason: a.reason }); continue; }
-    for (const r of a.data.runs) runs.push({ ...r, engine: e.id, key: `${e.id}/${r.id}`, stale: a.stale === true });
+    for (const r of a.data.runs) runs.push({ ...r, engine: e.id, key: `${e.id}/${r.id}`, stale: a.stale === true, age: a.age ?? null });
   }
   runs.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   return { runs, errors };

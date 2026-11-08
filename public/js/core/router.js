@@ -1,10 +1,10 @@
 // Views and the hash router. Moved from public/app.js (fleet F1); router v1
-// (fleet F8a, plan §1 2.5), extended by §4 D4: the Map is home (DEFAULT_VIEW),
+// (fleet F8a, plan §1 2.5), extended by §4 D4; Runs is home (DEFAULT_VIEW, runs-first phase 1),
 // views mount through the registry (views/index.js), and navigate/onRoute/
 // current give the shell and later views one way to move.
 //
 // Grammar: #/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>&run=<run id>
-// (`run` is a run id as the protocol checks it: the Runs view opens that run's page;
+// (`run` is a run id as the protocol checks it, or `<engine>/<run id>`: the Runs view opens that run's page;
 // `#/runs/<run id>` is the same page, T24, and an unknown view says so in a toast).
 // `sel` is a lane/session fkey, `run:<run id>` for a run node on the Map (T10),
 // or `node:<map node id>` for any other Map node (the palette's NODE rows, T11).
@@ -16,6 +16,7 @@
 // dispatches an action (security review S20): this module does not import
 // core/actions.js, and applyHash() only shows a view and opens the sheet.
 import { $ } from './dom.js';
+import { parseRunKey } from './run-tree.js';
 import { BUILDER_ID_RX, fkey, isFkey } from './keys.js';
 import { localBuilderId, store, toIndexKey } from './store.js';
 import { scheduleVisible } from './net.js';
@@ -36,7 +37,7 @@ import { activateView } from '../views/index.js';
 export const VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs'];
 /** Drill-down views: routable, never in the nav. */
 export const HIDDEN_VIEWS = ['diff'];
-export const DEFAULT_VIEW = 'map';
+export const DEFAULT_VIEW = 'runs';
 /**
  * The `g <key>` view chord (plan §4 2.6, authoritative). `g m` is the map now
  * and morning moved to `g o`; `g p` is packages (it was the map); `g r` is runs. ui/hotkeys.js
@@ -53,6 +54,7 @@ const MAX_Q = 200;
 const MAX_SEL = 300;
 /** A run id, the protocol's own pattern (server/runs/protocol.mjs RUN_ID). */
 export const RUN_RX = new RegExp('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$');
+const isRunParam = (v) => RUN_RX.test(v ?? '') || parseRunKey(v) !== null;
 /** A Map run node's `sel`, `run:<run id>` (server/map/runs.mjs). */
 export const isRunSel = (v) => typeof v === 'string' && v.startsWith('run:') && RUN_RX.test(v.slice(4));
 /** Any other Map node's `sel`, `node:<id>` (map/model.js idForSel); the id is opaque text. */
@@ -94,7 +96,7 @@ export function parseHash(h, opts) {
 /**
  * parseHash plus why it fell back (T24): {route, reason}, `reason` null when
  * the hash says what it shows, else one line for the user ("no view “x”,
- * showing the Map"). An empty hash is home, not a miss.
+ * showing Runs"). An empty hash is home, not a miss.
  */
 export function resolveHash(h, { localId } = {}) {
   const raw = String(h ?? '').replace(/^#/, '');
@@ -125,18 +127,18 @@ export function resolveHash(h, { localId } = {}) {
   if (typeof p.q === 'string' && p.q !== '' && !CONTROL_RX.test(p.q)) r.q = p.q.slice(0, MAX_Q);
   if (typeof p.sel === 'string' && p.sel.length <= MAX_SEL && !CONTROL_RX.test(p.sel) && (isFkey(p.sel) || isRunSel(p.sel) || isNodeSel(p.sel))) r.sel = p.sel;
   if (OPEN_KINDS.includes(p.open)) r.open = p.open;
-  if (RUN_RX.test(p.run ?? '')) r.run = p.run;
+  if (isRunParam(p.run)) r.run = p.run;
   if (runPath) {
     // The path's id wins over a `run=` beside it.
     const id = safeDecode(runPath[1]);
-    if (id !== null && RUN_RX.test(id)) r.run = id;
+    if (id !== null && isRunParam(id)) r.run = id;
     else reason = `“${clip(id ?? runPath[1])}” is not a run id, showing the run list`;
   }
   return { route: r, reason };
 }
 
 const clip = (s) => (s.length > 40 ? `${s.slice(0, 39)}…` : s).replace(/[\u0000-\u001f\u007f]/g, '');
-const missReason = (name) => `no view “${clip(String(name))}”, showing the Map`;
+const missReason = (name) => `no view “${clip(String(name))}”, showing Runs`;
 
 /**
  * A route -> its hash, in the stable key order view, b, s, q, sel, open, run.
@@ -152,7 +154,7 @@ export function formatHash(r = {}) {
     if (k === 'b' && v === 'all') continue;
     parts.push(`${k}=${encodeURIComponent(String(v))}`);
   }
-  const path = view === DEFAULT_VIEW ? '' : view;
+  const path = view === DEFAULT_VIEW && !r.run ? '' : view;
   return `#/${path}${parts.length ? `?${parts.join('&')}` : ''}`;
 }
 

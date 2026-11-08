@@ -44,6 +44,13 @@ import { confirmAction } from '../ui/confirm.js';
 import { needAckRef, PR_STATES } from '../core/inbox-model.js';
 import { toast } from '../ui/toast.js';
 import { sparkRange } from '../ui/spark.js';
+import { rnClean, safeHref } from '../core/run-text.js';
+import {
+  applyRun, bannersNode, engineBanners, engineNeedsYou, engineRow, loadEngineRun, loadEngineRuns, newPage, parseRunKey,
+  renderEnginePage, sourceLabel, toggleFold,
+} from './runs-engine.js';
+
+export { rnClean, safeHref };
 
 export const LIST_URL = '/api/runs';
 /** The list's own hash, and a run page's (router.js parses `run` with the protocol's RUN_ID). */
@@ -53,14 +60,12 @@ export const runUrl = (id) => `${LIST_URL}/${encodeURIComponent(id)}`;
 /** At most this many unknown events are shown, newest last; each clamped to RAW_MAX characters. */
 export const RAW_SHOW = 50;
 const RAW_MAX = 2000;
-const URL_MAX = 2000;
-export const POLL_MS = 15_000;
+export const POLL_MS = 5_000;
 /** The loop's own stop levels (README §7): a window at or past one is drawn as trouble. */
 export const WARN_5H = 90;
 export const WARN_7D = 85;
 /** At most this many scores per row, then `+n`. */
 export const SCORE_MAX = 3;
-const TEXT_MAX = 200;
 const DASH = '—';
 const SESSIONS_SHOW = 20; // sessions listed per round
 
@@ -68,29 +73,6 @@ const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 /** The protocol's run id (server/runs/protocol.mjs RUN_ID): only such ids get a page link. */
 export const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g;
-
-/** Untrusted -> a display string (or null): control characters replaced, length clamped. */
-export function rnClean(v, max = TEXT_MAX) {
-  if (isNum(v)) v = String(v);
-  if (typeof v !== 'string' || v === '') return null;
-  const s = (typeof v.toWellFormed === 'function' ? v.toWellFormed() : v).replace(CONTROL, '\ufffd');
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
-}
-
-/** A link from a loop -> an absolute http(s) URL, or null (never `javascript:` and friends). */
-export function safeHref(v) {
-  // eslint-disable-next-line no-control-regex
-  if (typeof v !== 'string' || v === '' || v.length > URL_MAX || /[\u0000-\u0020\u007f-\u009f]/.test(v)) return null;
-  try {
-    const u = new URL(v);
-    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
-  } catch {
-    return null;
-  }
-}
 
 // ---------------------------------------------------------------- pure models
 
@@ -261,6 +243,7 @@ export function ackedNeedsOf(run, now = Date.now()) {
 
 /** A `wait` need is the loop sleeping (rate limit); every other kind needs a person. */
 export function needsYou(row) {
+  if (row?.engineRow) return engineNeedsYou(row);
   return needsOf(row).some((n) => n.kind !== 'wait');
 }
 
@@ -362,7 +345,7 @@ function stateNode(row, stop = null, list = false) {
  * The goal and, on its second line, the run id and branch. A list row puts its
  * open need on that line too (`extra`, T31): a last column clipped it at 1440.
  */
-function goalNode(row, asLink = false, extra = null) {
+function goalNode(row, asLink = false, extra = null, source = null) {
   const n = el('span', 'rn-f rn-goal');
   const id = rnClean(row.run, 64) ?? '?';
   const goal = rnClean(row.goal);
@@ -370,6 +353,7 @@ function goalNode(row, asLink = false, extra = null) {
     const a = el('a', 'rn-goal-t rn-open', goal ?? id);
     a.href = runHref(row.run);
     n.append(a);
+    if (source) n.append(source);
   } else {
     n.append(el('span', 'rn-goal-t', goal ?? id));
   }
@@ -528,6 +512,7 @@ function needsNode(row) {
 
 /** One `.rn-row` <li> for a summary row at `now`. */
 export function runRow(row, now = Date.now()) {
+  if (row.engineRow) return engineRow(row, now);
   const li = el('li', 'rn-row');
   li.dataset.run = rnClean(row.run, 64) ?? '';
   li.dataset.state = STATE_META[row.state] ? row.state : 'running';
@@ -538,7 +523,7 @@ export function runRow(row, now = Date.now()) {
   if (stopP && stopP !== 'ok') leftEl.dataset.p = stopP;
   li.append(
     stateNode(row, null, true),
-    goalNode(row, true, needsNode(row)),
+    goalNode(row, true, needsNode(row), sourceLabel(null, 'jsonl')),
     rnField('rn-round', roundText(row), `round ${roundText(row)}${isNum(row.rounds) ? `, ${row.rounds} recorded` : ''}`),
     scoresNode(row),
     burnNode(row),
@@ -553,7 +538,7 @@ export const EMPTY_HOW = Object.freeze([
   'No runs yet. A run shows up here when a loop reports itself:',
   'laneboard run start --run nightly --goal "Make the tests green"',
   'or appends JSON lines to .laneboard/run.jsonl in a lane (runs.files reads other places).',
-  'The protocol is in docs/runs.md.',
+  'The protocol is in docs/runs.md. A run engine shows up here too: docs/engines.md.',
 ]);
 
 /** What a server without a runs route (a hub) says: where runs live, what to do. */
@@ -597,6 +582,7 @@ export function renderRuns(container, runs, st = { status: 'ok' }, now = Date.no
   }
   if (container) {
     container.textContent = '';
+    if (st.banners?.length) container.append(bannersNode(st.banners));
     container.append(out);
   }
   return { list: out, rows };
@@ -1264,10 +1250,19 @@ export function renderRunPage(container, run, st = { status: 'ok' }, now = Date.
 const STATE_OF = { view: null };
 
 /** The run id the route asks for (router.js already checked it), or null for the list. */
-const routeRun = (ctx) => (typeof ctx?.route?.run === 'string' && RUN_ID_RX.test(ctx.route.run) ? ctx.route.run : null);
+const routeRun = (ctx) => {
+  const r = ctx?.route?.run;
+  return typeof r === 'string' && (RUN_ID_RX.test(r) || parseRunKey(r)) ? r : null;
+};
 
 function rnPaint(st) {
   if (!st.panel) return;
+  if (st.page) {
+    setPanel(st.panel.root, { scope: st.runId, n: null });
+    st.panel.root.dataset.page = '';
+    renderEnginePage(st.panel.body, st.runId, st.page, { status: st.status, message: st.message }, Date.now());
+    return;
+  }
   if (st.runId) {
     setPanel(st.panel.root, { scope: st.runId, n: null });
     st.panel.root.dataset.page = '';
@@ -1277,15 +1272,33 @@ function rnPaint(st) {
   const n = st.status === 'ok' ? st.runs.length : null;
   delete st.panel.root.dataset.page;
   setPanel(st.panel.root, { scope: null, n });
-  renderRuns(st.panel.body, st.runs, { status: st.status, message: st.message }, Date.now());
+  renderRuns(st.panel.body, st.runs, { status: st.status, message: st.message, banners: st.banners }, Date.now());
+}
+
+async function refreshEnginePage(st, seq) {
+  const { page, runId } = st;
+  const res = await loadEngineRun(runId, page.next, st.fetchFn);
+  if (STATE_OF.view !== st || seq !== st.seq || runId !== st.runId) return;
+  if (res.kind === 'ok') { st.status = 'ok'; applyRun(page, res); }
+  else if (res.kind === 'missing') { st.status = 'missing'; page.run = null; }
+  else { st.status = 'error'; st.message = res.message; }
+  rnPaint(st);
 }
 
 async function rnRefresh(st) {
   const seq = ++st.seq;
+  if (st.page) return refreshEnginePage(st, seq);
   const id = st.runId;
-  const res = id ? await loadRun(id, st.fetchFn) : await loadRuns(st.fetchFn);
+  const [res, eng] = await Promise.all([
+    id ? loadRun(id, st.fetchFn) : loadRuns(st.fetchFn),
+    id ? null : loadEngineRuns(st.fetchFn),
+  ]);
   if (STATE_OF.view !== st || seq !== st.seq || id !== st.runId) return; // unmounted, newer load, or moved
-  if (res.kind === 'ok') {
+  if (eng) st.banners = engineBanners(eng.engines, eng.failed);
+  if (eng?.rows.length && (res.kind === 'unavailable' || res.kind === 'ok')) {
+    st.status = 'ok';
+    st.runs = [...(res.kind === 'ok' ? res.runs : []), ...eng.rows];
+  } else if (res.kind === 'ok') {
     st.status = 'ok';
     if (id) st.run = res.run;
     else st.runs = res.runs;
@@ -1351,10 +1364,12 @@ export function mountRuns(host, ctx = {}, { fetchFn = globalThis.fetch, postFn =
   host.textContent = '';
   const st = {
     el: host, ctx, fetchFn, postFn, busy: new Set(), status: 'loading', message: null, runs: [], run: null,
-    runId: routeRun(ctx), seq: 0, timer: null, panel: null,
+    runId: routeRun(ctx), seq: 0, timer: null, panel: null, banners: [], page: null,
   };
+  st.page = parseRunKey(st.runId) ? newPage() : null;
   st.panel = panel({ name: 'Runs' });
   host.append(st.panel.root);
+  st.panel.body.addEventListener?.('click', (e) => { if (st.page && toggleFold(st.page, e.target)) rnPaint(st); });
   STATE_OF.view = st;
   rnPaint(st);
   if (poll && typeof setInterval === 'function') {
@@ -1384,6 +1399,7 @@ export function updateRuns(_store, ctx = {}) {
   const want = routeRun(st.ctx);
   if (want !== st.runId) {
     st.runId = want;
+    st.page = parseRunKey(want) ? newPage() : null;
     st.status = 'loading';
     st.message = null;
     st.run = null;

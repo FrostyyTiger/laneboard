@@ -83,7 +83,7 @@ test('GET /api/runs answers byte-for-byte as before, after every engine route wa
 
 test('the engines module adds read-only GET routes only', () => {
   const mine = routes.filter((r) => r.pattern.startsWith('/api/engine'));
-  assert.ok(mine.length === READS.length + 1);
+  assert.ok(mine.length === READS.length + 2);
   assert.ok(mine.every((r) => r.method === 'GET'));
 });
 
@@ -187,4 +187,22 @@ test('allRuns merges every engine\'s runs, newest first, named <engine>/<run>', 
   assert.ok(runs.some((r) => r.key === 'jsonl/readiness'));
   assert.ok(runs.some((r) => r.key === 'main/R-20261101-acme-shop-1'));
   for (let i = 1; i < runs.length; i++) assert.ok((runs[i - 1].updatedAt ?? 0) >= (runs[i].updatedAt ?? 0));
+});
+
+test('GET /api/engines/runs: contract engines only, goal titles from products, engine states', async () => {
+  const { status, body } = await call('GET', '/api/engines/runs');
+  assert.equal(status, 200);
+  assert.ok(body.runs.length > 0);
+  assert.ok(body.runs.every((r) => r.engine === 'main' && r.key === `main/${r.id}`));
+  assert.ok(body.runs.some((r) => r.goalTitle));
+  assert.deepEqual(body.engines.map((e) => [e.id, e.state]), [['main', 'up']]);
+});
+
+test('a round\'s usage reaches the event shape, and the demo pages open', async () => {
+  const e = engines.get('main');
+  const a = await e.events('R-20261101-acme-shop-1', 0);
+  assert.ok(a.data.events.some((x) => typeof x.usd === 'number' && x.usd > 0));
+  const list = await e.runs();
+  for (const r of list.data.runs) assert.equal((await e.run(r.id)).ok, true, r.id);
+  assert.equal((await e.run('R-20200101-nope-1')).code, 'not-found');
 });
