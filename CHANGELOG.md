@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Knowledge (runs-first phase 5).** `#/knowledge?product=<id>`, opened from a
+product: claims, open questions, requirements and source summaries, linked to
+each other. Read-only, and never raw sources. See docs/knowledge.md.
+
 **Waiting in the Inbox (runs-first phase 3).** A new Inbox group lists what run
 engines wait for, each opening in full; Morning lists them too. Read-only: the
 decision buttons are disabled until phase 4. See docs/waiting.md.

@@ -15,7 +15,7 @@ reasons. Each reason names what it is about:
 | `claim` | it rests on a low-confidence claim | the claim |
 | `budget` | the usage window is too tight | nothing |
 
-Links go to the engine's own web page for that id, for now. Refreshes every 60 s.
+Links open that item in the [Knowledge](knowledge.md) view. Refreshes every 60 s.
 
 ## Try it
 

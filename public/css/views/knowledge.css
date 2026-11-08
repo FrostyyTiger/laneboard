@@ -1,0 +1,9 @@
+/* The Knowledge view: one card per claim, question, requirement or source. */
+#view-knowledge { overflow: auto; padding-top: var(--sp-2); padding-inline: var(--sp-2); }
+.kn-page { display: grid; gap: var(--sp-2); max-width: var(--runs-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+.kn-filters, .kn-head, .kn-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
+.kn-filter { min-height: 28px; background: var(--bg-hover); color: var(--text-1); border: var(--bw) solid var(--line-weak); font: inherit; }
+.kn-item { display: grid; gap: var(--sp-1); padding-block: var(--sp-2); border-bottom: var(--bw) solid var(--line-weak); }
+.kn-type { font-family: var(--font-label); font-size: var(--fs-11); font-weight: 600; letter-spacing: var(--ls-label); text-transform: uppercase; }
+.kn-id, .kn-status, .kn-k { color: var(--text-3); }
+.kn-text { margin: 0; color: var(--text-1); overflow-wrap: anywhere; }
