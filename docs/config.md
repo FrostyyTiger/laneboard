@@ -380,6 +380,20 @@ own `.laneboard/run.jsonl`, and a machine without any shows no runs.
 | `runs.stuck.shorterRounds` | `3` | The last this many rounds were each shorter than the one before: a hint at a usage limit (0..100). |
 | `runs.stuck.deadlineMin` | `30` | Kept for one version, no longer a threshold: `0` turns the deadline rule off, any other value (0..10080) is accepted and ignored. The rule fires once the deadline has passed and the run has no `run.stop`. |
 
+### `engines` — run engines
+
+The run engines laneboard reads ([engines.md](engines.md)). The `jsonl` engine
+(the run files above) is always on and needs no entry, so with no config
+nothing changes. No env layer.
+
+| Key | Default | What |
+| --- | --- | --- |
+| `engines` | `[]` | A list of `{id, kind, ...}`, at most 8. `id` is a lower-case slug (`main`), unique, not `jsonl`; `kind` is `none` or `fake` (`foundry-cli` arrives with the real engine). |
+| `engines[].dir` | the published examples | `fake` only: the folder of answers it replays (absolute). Default `test/fixtures/engine/v1`. |
+| `engines[].timeoutMs` | `10000` | One call's limit; after it the engine counts as not answering (100..120000). |
+| `engines[].staleMs` | `30000` | No good answer for this long: the engine is `stale` and reads serve the last good answer with its age (1000..86400000). |
+| `engines[].downMs` | `120000` | No good answer for this long (or a CLI that cannot start): `down` (not below `staleMs`). |
+
 ### `cockpit` — the cockpit's room
 
 The cockpit (a pane where the owner types and an agent answers from the board)
