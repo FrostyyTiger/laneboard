@@ -23,7 +23,7 @@
 // Pure at import time: the dialog is built on the first open.
 import { store, builders, toIndexKey } from '../core/store.js';
 import { fkey, isFkey, BUILDER_ID_RX, deriveCode } from '../core/keys.js';
-import { currentRoute, navigate } from '../core/router.js';
+import { LANE_VIEWS, currentRoute, lanesOff, navigate } from '../core/router.js';
 import { act, tierOf } from '../core/actions.js';
 import { icon } from '../core/icons.js';
 import * as commands from '../core/commands.js';
@@ -173,6 +173,7 @@ export function paletteItems(ctx = {}) {
   const items = [];
   for (const c of commands.list(ctx)) {
     if (!c.palette) continue;
+    if (lanesOff() && c.id.startsWith('view.') && LANE_VIEWS.includes(c.id.slice(5))) continue;
     items.push({
       id: `cmd:${c.id}`, type: c.type === 'VIEW' ? 'VIEW' : 'ACT', label: c.title, sub: c.sub, icon: c.icon,
       hint: keysFor(c.id, ctx.view), run: () => commands.run(c.id, ctx),
@@ -186,7 +187,7 @@ export function paletteItems(ctx = {}) {
     });
   }
   const seen = new Set();
-  for (const l of s.lanes ?? []) {
+  for (const l of lanesOff() ? [] : s.lanes ?? []) {
     const k = selKey(l.builder, l.id ?? l.name, l.key);
     if (!k || seen.has(k)) continue;
     seen.add(k);
@@ -195,7 +196,7 @@ export function paletteItems(ctx = {}) {
       run: () => navigate({ sel: k }),
     });
   }
-  for (const sess of s.sessions?.values?.() ?? []) {
+  for (const sess of lanesOff() ? [] : s.sessions?.values?.() ?? []) {
     const k = selKey(sess.builder, sess.name, sess.key);
     if (!k || seen.has(k)) continue;
     seen.add(k);
@@ -204,7 +205,7 @@ export function paletteItems(ctx = {}) {
       run: () => navigate({ view: 'board', sel: k }),
     });
   }
-  for (const name of repoNames(s.packages)) {
+  for (const name of lanesOff() ? [] : repoNames(s.packages)) {
     items.push({
       id: `pkg:${name}`, type: 'PKG', label: clip(name), sub: 'package', icon: 'packages', hint: '',
       run: () => navigate({ view: 'packages', q: name.slice(0, 200) }),

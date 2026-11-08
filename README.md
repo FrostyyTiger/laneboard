@@ -16,18 +16,20 @@ signed, audited requests. Without one, nothing changes. See
 | View | Answers |
 | --- | --- |
 | **Map** `#/map` | What is all this running on, and where is the trouble? A live constellation of your sites, rooms, services, builders and lanes, with what depends on what, which lanes touch the same files and which conflict. Overlays for status, CI, cost, context and age; `\` splits it with a dense lane table. Fed by a topology file, snapshots other machines push, and HTTP probes; laneboard reaches out to nothing else. |
-| **Board** `#/board` | What is each lane doing, and which one wants me? One data block per lane and session: builder, state, stage, PR and checks, context, 5 h spend, age. Sorted by the most urgent thing inside. |
+| **Board** `#/board` | *Lanes only.* What is each lane doing, and which one wants me? One data block per lane and session: builder, state, stage, PR and checks, context, 5 h spend, age. Sorted by the most urgent thing inside. |
 | **Inbox** `#/inbox` | What is waiting for me? Pending approvals, lanes that need you, lanes ready for review, paused and stuck lanes, with keys to approve, deny, release and pause. |
-| **Packages** `#/packages` | What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |
+| **Packages** `#/packages` | *Lanes only.* What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |
 | **Morning** `#/morning` | Over a window (12 h / tonight / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), review waits, stuck incidents, what it cost. |
 | **Runs** `#/runs` | The home view. What is running, waiting or done? Runs from a [run engine](docs/runs-home.md), with their tree of work, next to run files. Is tonight's unattended loop getting anywhere? Each run's state, round, latest score and its trend, budget burn, time left and open needs; a run's page (`#/runs?run=<id>`, or `#/runs/<id>`) has the timeline of rounds, a chart per score, the stop reason and the PRs. Fed by run files a loop writes, see [docs/runs.md](docs/runs.md). |
 | **Products** `#/products` | Is each product ready for its next goal, and if not, why? Goals, readiness, reasons that link, from a run engine. See [docs/products.md](docs/products.md). |
 | **Credit** `#/credit` | Where the 5 h and 7 d rate-limit windows have been, per account, and what each builder and lane spent. |
 | **Box** `#/box` | The machine and its health, a live stack next to it and its guard, the CI queue, the agent slots; on a hub, every builder's link, version, latency and health. |
 | **Audit** `#/audit` | What was done, by whom? The hash-chained action log, and on a hub each relayed action's reconciliation with the builder's own log. |
-| **Diff** `#/diff` | A lane's changes, with line comments batched into one review sent to the lane. Opened from a lane. |
-| **Archive** `#/board?s=archive` | Retired lanes, searchable; restore one through a confirmed launch. |
+| **Diff** `#/diff` | *Lanes only.* A lane's changes, with line comments batched into one review sent to the lane. Opened from a lane. |
+| **Archive** `#/board?s=archive` | *Lanes only.* Retired lanes, searchable; restore one through a confirmed launch. |
 | **Wall** `/galaxy.html` | Is anything wrong, and where, seen from three metres? The Map for a tablet or a wall screen nobody sits at: the fleet as a galaxy that tours itself, trouble first, captioned in big type; a finger takes it over, a minute later the tour takes it back. Switches for a kiosk, a person's screen (`?role=explore`) and effects (`?fx=`); `/wall.html` is the 2D page. See [docs/wall.md](docs/wall.md). |
+
+*Lanes only* needs `lanes.enabled`, off by default; see [docs/lanes-flag.md](docs/lanes-flag.md).
 
 `g m` map · `g b` board · `g i` inbox · `g p` products · `g k` packages · `g o` morning ·
 `g r` runs · `g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`

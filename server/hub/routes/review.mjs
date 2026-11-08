@@ -17,6 +17,7 @@
 // Route auth (direct or local) is the hub boot path's, as for every hub route.
 // Imports only hub-safe modules: no server/state.mjs, db.mjs, config.mjs, routes/*.
 import path from 'node:path';
+import { lanesOn } from '../../config/lanes.mjs';
 import {
   mergeMorning, sanitizeBuilderMorning, fetchMorning, fetchArchive, mergeArchive,
   alarmIncidents, windowOf, sinceOf, FETCH_TIMEOUT_MS,
@@ -210,7 +211,7 @@ export function createModule({ now: nowOpt } = {}) {
     register(ctx) {
       base = ctx;
       ctx.route('GET', MORNING_PATH, onMorning);
-      ctx.route('GET', ARCHIVE_PATH, onArchive);
+      if (lanesOn(ctx.config)) ctx.route('GET', ARCHIVE_PATH, onArchive);
     },
     start(ctx) {
       // Services provided by later modules are read lazily through ctx.use; keep

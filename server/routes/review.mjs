@@ -19,6 +19,7 @@
 // Deps are injectable (createHandlers) so tests run against temp repos and
 // fixture transcripts without the live state.
 import { config as liveConfig } from '../config.mjs';
+import { lanesOn } from '../config/lanes.mjs';
 import { log as liveLog } from '../log.mjs';
 import { isSafeSessionName, WINDOWS } from '../util.mjs';
 import { addCapability } from '../fleet/api-v1.mjs';
@@ -194,7 +195,7 @@ export default {
   modes: ['builder'],
   register(ctx) {
     const h = createHandlers({ state: ctx.state, config: ctx.config, json: ctx.json, log: ctx.log });
-    for (const r of routes(h)) ctx.route(r.method, r.path, r.handler);
+    for (const r of routes(h)) if (r.name !== 'diff' || lanesOn(ctx.config)) ctx.route(r.method, r.path, r.handler);
     addCapability('review');
     addCapability('morning');
     registerSendReview(actionDeps(ctx));

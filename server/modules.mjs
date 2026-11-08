@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { config } from './config.mjs';
+import { lanesOn } from './config/lanes.mjs';
 import { log } from './log.mjs';
 import { route as httpRoute, json, readBody, readJson } from './http.mjs';
 import { upgradeHandlers, shutdownHooks } from './boot/common.mjs';
@@ -114,6 +115,9 @@ function shapeOf(ns, file) {
   return mod;
 }
 
+/** Modules that exist only with lanes on (docs/lanes-flag.md). */
+const LANE_MODULES = new Set(['packages', 'hub-packages', 'archive', 'launch-caps']);
+
 /**
  * Import and register every module of `dirs` (a dir or a list, relative to
  * server/) that runs in `opts.mode` (default `config.mode`). Returns the
@@ -131,6 +135,7 @@ export async function registerModules(dirs, ctx, opts = {}) {
       if (names.has(mod.name)) throw new ModuleError(`duplicate module name '${mod.name}' (${file})`);
       names.add(mod.name);
       if (!mod.modes.includes(mode)) continue;
+      if (LANE_MODULES.has(mod.name) && !lanesOn(ctx.config ?? config)) continue;
       try {
         await mod.register(ctx);
       } catch (err) {

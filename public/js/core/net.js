@@ -204,6 +204,22 @@ function deepLinkOnce() {
   applyHash();
 }
 
+/**
+ * GET /api/features before the first route: is this server's lanes flag on?
+ * Anything but a clear answer counts as on (an older server has no route).
+ */
+export async function loadFeatures() {
+  let lanes = true;
+  store.routeHold = true;
+  try {
+    const r = await fetch('/api/features');
+    if (r?.ok) lanes = (await r.json())?.lanes !== false;
+  } catch { /* keep the default */ }
+  store.lanes = lanes;
+  store.routeHold = false;
+  document.documentElement?.setAttribute?.('data-lanes', lanes ? 'on' : 'off');
+}
+
 /** GET /api/v1/hello once per page: capabilities and the live tier table. */
 function loadHello() {
   if (helloLoaded || store.source.kind === 'hub') return;
