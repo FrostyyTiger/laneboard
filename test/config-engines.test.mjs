@@ -42,8 +42,12 @@ test('bad entries are refused, each with a clear message', () => {
   refused({ engines: [{ id: 'jsonl', kind: 'fake' }] }, /reserved/);
   refused({ engines: [{ id: 'a', kind: 'fake' }, { id: 'a', kind: 'none' }] }, /used twice/);
   refused({ engines: [{ id: 'a', kind: 'foundry' }] }, /kind must be one of none, fake/);
-  refused({ engines: [{ id: 'a', kind: 'fake', bin: '/x' }] }, /engines\[0\]\.bin is not a known key/);
+  refused({ engines: [{ id: 'a', kind: 'fake', nope: '/x' }] }, /engines\[0\]\.nope is not a known key/);
   refused({ engines: [{ id: 'a', kind: 'none', dir: tmp }] }, /dir is only for kind fake/);
+  refused({ engines: [{ id: 'a', kind: 'foundry-cli', config: '/c' }] }, /bin is required/);
+  refused({ engines: [{ id: 'a', kind: 'foundry-cli', bin: '/b' }] }, /config is required/);
+  refused({ engines: [{ id: 'a', kind: 'foundry-cli', bin: 'rel', config: '/c' }] }, /bin must be an absolute path/);
+  refused({ engines: [{ id: 'a', kind: 'none', bin: '/b' }] }, /bin is only for kind foundry-cli/);
   refused({ engines: [{ id: 'a', kind: 'fake', dir: 'relative' }] }, /dir must be an absolute path/);
   refused({ engines: [{ id: 'a', kind: 'fake', timeoutMs: 5 }] }, /timeoutMs must be an integer from 100/);
   refused({ engines: [{ id: 'a', kind: 'fake', staleMs: 60000, downMs: 5000 }] }, /downMs must not be below staleMs/);

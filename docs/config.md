@@ -388,8 +388,11 @@ nothing changes. No env layer.
 
 | Key | Default | What |
 | --- | --- | --- |
-| `engines` | `[]` | A list of `{id, kind, ...}`, at most 8. `id` is a lower-case slug (`main`), unique, not `jsonl`; `kind` is `none` or `fake` (`foundry-cli` arrives with the real engine). |
+| `engines` | `[]` | A list of `{id, kind, ...}`, at most 8. `id` is a lower-case slug (`main`), unique, not `jsonl`; `kind` is `none`, `fake` or `foundry-cli`. |
 | `engines[].dir` | the published examples | `fake` only: the folder of answers it replays (absolute). Default `test/fixtures/engine/v1`. |
+| `engines[].bin` | required for `foundry-cli` | The engine's CLI, absolute. |
+| `engines[].config` | required for `foundry-cli` | Its config file, absolute; the child gets it as `FOUNDRY_CONFIG`. |
+| `engines[].cwd` | laneboard's own | `foundry-cli` only: the CLI's working directory, absolute. |
 | `engines[].timeoutMs` | `10000` | One call's limit; after it the engine counts as not answering (100..120000). |
 | `engines[].staleMs` | `30000` | No good answer for this long: the engine is `stale` and reads serve the last good answer with its age (1000..86400000). |
 | `engines[].downMs` | `120000` | No good answer for this long (or a CLI that cannot start): `down` (not below `staleMs`). |
