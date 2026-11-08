@@ -35,6 +35,7 @@ import * as packagesModule from './packages.js';
 import * as auditModule from './audit.js';
 import * as diffModule from './diff.js';
 import * as runsModule from './runs.js';
+import * as productsModule from './products.js';
 
 /**
  * Nav metadata per view, in nav order: icon concept (core/icons.js), the long
@@ -50,6 +51,7 @@ export const VIEW_META = Object.freeze({
   box: { icon: 'box', title: 'Box', short: 'BOX' },
   audit: { icon: 'audit', title: 'Audit', short: 'AUD' },
   runs: { icon: 'runs', title: 'Runs', short: 'RUNS' },
+  products: { icon: 'packages', title: 'Products', short: 'PROD' },
   diff: { icon: 'review', title: 'Diff', short: 'DIFF' },
 });
 
@@ -90,6 +92,7 @@ export function views() {
   add('box', pick(boxModule, legacyView('box', () => boxModule.renderBox())));
   add('audit', pick(auditModule, legacyView('audit')));
   add('runs', pick(runsModule, legacyView('runs')));
+  add('products', pick(productsModule, legacyView('products')));
   add('diff', pick(diffModule, legacyView('diff')));
   return registry;
 }

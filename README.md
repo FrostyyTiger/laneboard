@@ -21,6 +21,7 @@ signed, audited requests. Without one, nothing changes. See
 | **Packages** `#/packages` | What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |
 | **Morning** `#/morning` | Over a window (12 h / tonight / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), review waits, stuck incidents, what it cost. |
 | **Runs** `#/runs` | The home view. What is running, waiting or done? Runs from a [run engine](docs/runs-home.md), with their tree of work, next to run files. Is tonight's unattended loop getting anywhere? Each run's state, round, latest score and its trend, budget burn, time left and open needs; a run's page (`#/runs?run=<id>`, or `#/runs/<id>`) has the timeline of rounds, a chart per score, the stop reason and the PRs. Fed by run files a loop writes, see [docs/runs.md](docs/runs.md). |
+| **Products** `#/products` | Is each product ready for its next goal, and if not, why? Goals, readiness, reasons that link, from a run engine. See [docs/products.md](docs/products.md). |
 | **Credit** `#/credit` | Where the 5 h and 7 d rate-limit windows have been, per account, and what each builder and lane spent. |
 | **Box** `#/box` | The machine and its health, a live stack next to it and its guard, the CI queue, the agent slots; on a hub, every builder's link, version, latency and health. |
 | **Audit** `#/audit` | What was done, by whom? The hash-chained action log, and on a hub each relayed action's reconciliation with the builder's own log. |
@@ -28,7 +29,7 @@ signed, audited requests. Without one, nothing changes. See
 | **Archive** `#/board?s=archive` | Retired lanes, searchable; restore one through a confirmed launch. |
 | **Wall** `/galaxy.html` | Is anything wrong, and where, seen from three metres? The Map for a tablet or a wall screen nobody sits at: the fleet as a galaxy that tours itself, trouble first, captioned in big type; a finger takes it over, a minute later the tour takes it back. Switches for a kiosk, a person's screen (`?role=explore`) and effects (`?fx=`); `/wall.html` is the 2D page. See [docs/wall.md](docs/wall.md). |
 
-`g m` map · `g b` board · `g i` inbox · `g p` packages · `g o` morning ·
+`g m` map · `g b` board · `g i` inbox · `g p` products · `g k` packages · `g o` morning ·
 `g r` runs · `g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`
 `]` step through builders, `\` splits the Map, `?` shows every key.
 
@@ -211,6 +212,7 @@ human starts. The guard flags and pushes; it never acts.
 | [docs/map.md](docs/map.md) | the Map: the topology file, the feed format, pushing a feed from a hypervisor, builders on the Map |
 | [docs/wall.md](docs/wall.md) | the Wall: a tablet in kiosk mode, touch, the URL switches, the effects, the feed fields it paints |
 | [docs/runs.md](docs/runs.md) | the run protocol: how an unattended agent loop tells laneboard its goal, rounds, scores, cost and needs |
+| [docs/products.md](docs/products.md) | the Products view: readiness per goal and its reasons |
 | [docs/runs-home.md](docs/runs-home.md) | the Runs home view and the run tree: folding, what a row shows |
 | [docs/engines.md](docs/engines.md) | run engines: the interface laneboard reads runs through, the version check, the contract suite |
 | [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |

@@ -130,7 +130,7 @@ builder.
 | **Map** `#/map` | `g m` | Home. Every builder as a node under the room that hosts it, its lanes and sessions, the packages they touch, and touch, conflict, package and CI links; overlays for status, CI, cost, context and age (`o`). `\` splits it with a dense lane table. See [map.md](map.md). |
 | **Board** `#/board` | `g b` | One data block per lane and session: builder code, state, lane, stage, PR and checks, context, 5 h spend, age. |
 | **Inbox** `#/inbox` | `g i` | Pending approvals, lanes that need you, the review queue, paused and stuck lanes; `a` `d` `r` `p` approve, deny, release, pause. |
-| **Packages** `#/packages` | `g p` | Every package of every repo: CI on main, untested commits, touching lanes, PRs, conflicts, plans. See [fleet/packages.md](fleet/packages.md). |
+| **Packages** `#/packages` | `g k` | Every package of every repo: CI on main, untested commits, touching lanes, PRs, conflicts, plans. See [fleet/packages.md](fleet/packages.md). |
 | **Morning** `#/morning` | `g o` | The night by builder: what needs you, what finished, review waits, stuck incidents, approvals answered, cost by package, held notifications. |
 | **Credit** `#/credit` | `g c` | Per-builder cost and per-account rate-limit windows. |
 | **Box** `#/box` | `g x` | Every builder's link state, version, clock skew, latency and health with sparklines. |

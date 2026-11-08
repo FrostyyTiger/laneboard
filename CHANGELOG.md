@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Products (runs-first phase 2).** `#/products` (`g p`): one card per product
+from the run engines, readiness per goal, reasons that link. Packages moved to
+`g k`. Read-only. See docs/products.md.
+
 **Runs home and the run tree (runs-first phase 1).** Runs is the home view; the
 Map is `g m`. Engine runs and run-file runs share one list with product, goal,
 engine and state. An engine run's page shows its tree, folded to the level that

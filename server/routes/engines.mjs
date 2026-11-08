@@ -2,6 +2,7 @@
 //
 //   GET /api/engines                        -> {accepts, engines: [status + capabilities]}
 //   GET /api/engines/runs                   -> {runs, engines, errors}, every engine but jsonl (the Runs view)
+//   GET /api/engines/products               -> {products, engines}, every engine (the Products view)
 //   GET /api/engine/:id/hello               -> {engine, at, stale, age, dropped, data}
 //   GET /api/engine/:id/health              ... the same envelope for every read;
 //   GET /api/engine/:id/products            `data` is the laneboard shape of the verb
@@ -20,6 +21,7 @@ import { ACCEPTED } from '../engine/contract.mjs';
 
 export const LIST_PATH = '/api/engines';
 export const RUNS_PATH = '/api/engines/runs';
+export const PRODUCTS_PATH = '/api/engines/products';
 const BASE = '/api/engine/:id';
 
 const STATUS = { 'bad-request': 400, 'not-found': 404, unsupported: 404, incompatible: 502, degraded: 502, 'engine-down': 503 };
@@ -63,6 +65,19 @@ export async function runsBody(list = engines.list()) {
   return { runs, engines: states, errors };
 }
 
+/** The body of GET /api/engines/products: every engine's products, each with `engine`, and the engines' states. */
+export async function productsBody(list = engines.list()) {
+  const able = list.filter((e) => e.capabilities.includes('products'));
+  const products = [];
+  await Promise.all(able.map(async (e) => {
+    const a = await e.products();
+    if (a.ok) for (const p of a.data.products) products.push({ ...p, engine: e.id, stale: a.stale === true, age: a.age ?? null });
+  }));
+  products.sort((x, y) => x.id.localeCompare(y.id));
+  const states = able.map((e) => { const s = e.status(); return { id: e.id, kind: e.kind, state: s.state, reason: s.reason ?? null }; });
+  return { products, engines: states };
+}
+
 /** The read routes: [path suffix, (engine, req) -> answer promise]. */
 export const READS = [
   ['/hello', (e) => e.hello()],
@@ -86,6 +101,7 @@ export default {
   register(ctx) {
     ctx.route('GET', LIST_PATH, async (req, res) => ctx.json(res, await listBody()));
     ctx.route('GET', RUNS_PATH, async (req, res) => ctx.json(res, await runsBody()));
+    ctx.route('GET', PRODUCTS_PATH, async (req, res) => ctx.json(res, await productsBody()));
     for (const [suffix, fn] of READS) {
       ctx.route('GET', `${BASE}${suffix}`, async (req, res) => {
         const e = engines.get(req.params?.id);
