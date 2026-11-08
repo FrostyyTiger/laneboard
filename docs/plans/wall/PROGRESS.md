@@ -1177,9 +1177,14 @@ checked only by `ci` on the PR.
      Its silent-site cue is still invisible at 3 m (`## Later`).
 2. **The cockpit handover was not written (T22), and nothing was written under `patches/`.** The commits above changed
    the shared `galaxy/main.js`, `galaxy/touch.js`, `galaxy/director.js` and `public/css/wall.css` while C1b works on the same files.
-   Before merging, run `git log main..run/wall-n5 -- public/js/galaxy/main.js public/js/galaxy/touch.js
-   public/js/galaxy/director.js public/css/wall.css` and check it against C1b's branch. Also check that `ci` runs
+   Before merging, run `git log main..run/wall-n5 -- public/js/wall/galaxy/main.js public/js/wall/galaxy/touch.js
+   public/js/wall/galaxy/director.js public/css/wall.css` and check it against C1b's branch. Also check that `ci` runs
    `e2e/cockpit` (S-C1-01, S-SCR-0x) green: it never ran here. B237 and B239 are pinned by unit tests that stayed green.
+   **Handover for C1b (written at review, 2026-11-08, in place of T22):** this run changed `galaxy/main.js` (selection
+   levels site → planet → moon, the card, Back, the hold), `galaxy/touch.js` (orbit round an open system's star, double-tap
+   and right-click Back), the `galaxy/director.js` timings and `public/css/wall.css`. C1b's T34 (board-down and stale caption
+   and tag) builds on this `main.js`. Dead after this run: the `.galaxy-fan*` block in `wall.css` and the `#galaxy-fan` element
+   in the fenced `public/galaxy.html`; the picker it styled is gone (T11). Drop both in C1b.
 3. **`docs/wall.md` does not describe tonight's work (T21).** It lacks moons, the card, right-click and double-tap Back, and
    drag-to-turn. A stranger who reads the docs will not find the gestures.
 4. **Warn-hold banner size (T23's decision).** A warn hold keeps the banner at its 3 m size (README §2.1: trouble stays

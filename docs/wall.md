@@ -49,15 +49,22 @@ needs you, red for crit and down, amber for warn. A light's own colour
   galaxy. Nothing under that first touch is activated.
 - **One finger** turns the galaxy; **a pinch** (or the wheel) zooms between
   the overview and a close system. Both coast to rest.
-- **Tap a site** to fly there and open its sheet: every problem, worst first.
-  In an open system, tap a planet for its own sheet. There is no picker: the
-  nearest planet, moon or site wins, within 48 px of a finger (28 px of a
-  mouse pointer).
-- **Tap the fleet line** to open what it names.
-- **Back** (`‹ BACK`, top right) or a tap on empty sky goes one step back:
-  planet, system, overview. The plate, the fleet line and the clock are not
-  sky: a tap on them opens nothing and steps nothing back, except a sheet
-  row naming a planet, which opens it.
+- **Tap a site** to fly there and open its card: status, why, the problems
+  below it by name, a few key figures, and a strip of what is under it. In an
+  open system, tap a planet for its own card; its moons (services under a
+  room, lanes under a builder) open onto a ring round it, and a tap on a moon
+  flies in closer and gives it the card. There is no picker: the nearest
+  planet, moon or site wins, within 48 px of a finger (28 px of a mouse
+  pointer). The card stands beside the node and never covers it; a tap on the
+  card is neither a tap on the sky nor a turn.
+- **Drag inside an open system** to turn it round its own star, both axes;
+  the star stays where it was on the screen.
+- **Tap the fleet line** to open what it names. The card's fleet buttons
+  (restart, pause, ack, snooze, pin) say `later` and do nothing yet; its
+  links open the matching app view in a new tab.
+- **Back** goes one step at a time, moon, planet, system, overview: `‹ BACK`
+  (top right), a right-click, or a double tap on empty sky. A single tap on
+  empty sky does nothing. The plate, the fleet line and the clock are not sky.
 - **`MANUAL · TOUR IN 0:40`** under the tag says a person is driving and when
   the tour comes back.
 
