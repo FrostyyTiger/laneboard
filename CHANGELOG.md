@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Waiting in the Inbox (runs-first phase 3).** A new Inbox group lists what run
+engines wait for, each opening in full; Morning lists them too. Read-only: the
+decision buttons are disabled until phase 4. See docs/waiting.md.
+
 **Products (runs-first phase 2).** `#/products` (`g p`): one card per product
 from the run engines, readiness per goal, reasons that link. Packages moved to
 `g k`. Read-only. See docs/products.md.

@@ -3,6 +3,7 @@
 //   GET /api/engines                        -> {accepts, engines: [status + capabilities]}
 //   GET /api/engines/runs                   -> {runs, engines, errors}, every engine but jsonl (the Runs view)
 //   GET /api/engines/products               -> {products, engines}, every engine (the Products view)
+//   GET /api/engines/waiting                -> {items, engines}, every engine (the Inbox, Morning)
 //   GET /api/engine/:id/hello               -> {engine, at, stale, age, dropped, data}
 //   GET /api/engine/:id/health              ... the same envelope for every read;
 //   GET /api/engine/:id/products            `data` is the laneboard shape of the verb
@@ -22,6 +23,7 @@ import { ACCEPTED } from '../engine/contract.mjs';
 export const LIST_PATH = '/api/engines';
 export const RUNS_PATH = '/api/engines/runs';
 export const PRODUCTS_PATH = '/api/engines/products';
+export const WAITING_PATH = '/api/engines/waiting';
 const BASE = '/api/engine/:id';
 
 const STATUS = { 'bad-request': 400, 'not-found': 404, unsupported: 404, incompatible: 502, degraded: 502, 'engine-down': 503 };
@@ -78,6 +80,19 @@ export async function productsBody(list = engines.list()) {
   return { products, engines: states };
 }
 
+/** The body of GET /api/engines/waiting: what waits for a person, every engine, oldest first, each with `engine`. */
+export async function waitingBody(list = engines.list()) {
+  const able = list.filter((e) => e.capabilities.includes('waiting'));
+  const items = [];
+  await Promise.all(able.map(async (e) => {
+    const a = await e.waiting({});
+    if (a.ok) for (const it of a.data.items) items.push({ ...it, engine: e.id, stale: a.stale === true });
+  }));
+  items.sort((x, y) => (x.openedAt ?? 0) - (y.openedAt ?? 0));
+  const states = able.map((e) => { const s = e.status(); return { id: e.id, kind: e.kind, state: s.state, reason: s.reason ?? null }; });
+  return { items, engines: states };
+}
+
 /** The read routes: [path suffix, (engine, req) -> answer promise]. */
 export const READS = [
   ['/hello', (e) => e.hello()],
@@ -101,6 +116,7 @@ export default {
   register(ctx) {
     ctx.route('GET', LIST_PATH, async (req, res) => ctx.json(res, await listBody()));
     ctx.route('GET', RUNS_PATH, async (req, res) => ctx.json(res, await runsBody()));
+    ctx.route('GET', WAITING_PATH, async (req, res) => ctx.json(res, await waitingBody()));
     ctx.route('GET', PRODUCTS_PATH, async (req, res) => ctx.json(res, await productsBody()));
     for (const [suffix, fn] of READS) {
       ctx.route('GET', `${BASE}${suffix}`, async (req, res) => {

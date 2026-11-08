@@ -45,8 +45,9 @@ test('groups come in the plan order and the approvals header carries the S7 note
   const m = buildInbox(storeOf([]), { now: NOW });
   // No runs list (no runs route): the runs group is left out.
   assert.deepEqual(m.groups.map((g) => g.id), ['approvals', 'needs', 'review', 'paused', 'stale']);
-  assert.deepEqual(GROUPS, ['approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
-  assert.deepEqual(buildInbox(storeOf([]), { now: NOW, runs: [] }).groups.map((g) => g.id), GROUPS);
+  assert.deepEqual(GROUPS, ['waiting', 'approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
+  assert.deepEqual(buildInbox(storeOf([]), { now: NOW, runs: [], waiting: [] }).groups.map((g) => g.id), GROUPS);
+  assert.ok(!buildInbox(storeOf([]), { now: NOW, runs: [] }).groups.some((g) => g.id === 'waiting'), 'no engines route, no group');
   assert.equal(m.groups[0].note, COOPERATIVE_NOTE);
   assert.match(COOPERATIVE_NOTE, /^Approvals, pause, budget and kill are cooperative on the builder: an agent with a shell there can bypass them$/);
   assert.equal(m.count, 0);

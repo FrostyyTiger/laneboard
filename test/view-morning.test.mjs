@@ -243,7 +243,7 @@ test('view: builder mode fetches GET /api/morning and renders ungrouped', async 
   try {
     V.default.mount(byId.get('morning-body'), { route: { view: 'morning' } });
     await new Promise((r) => setImmediate(r));
-    assert.deepEqual(calls, ['/api/morning?window=tonight']);
+    assert.deepEqual(calls, ['/api/morning?window=tonight', '/api/engines/waiting']);
     const body = byId.get('morning-body');
     assert.equal(byClass(body, 'morning-builder').length, 0);
     assert.match(body.textContent, /Needs you1/);

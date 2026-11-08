@@ -30,9 +30,10 @@
 import { fkey as makeFkey, BUILDER_ID_RX } from './keys.js';
 import { markP, markWord } from './marks.js';
 
-export const GROUPS = Object.freeze(['approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
+export const GROUPS = Object.freeze(['waiting', 'approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
 
 export const GROUP_TITLES = Object.freeze({
+  waiting: 'Waiting',
   approvals: 'Approvals',
   needs: 'Needs you',
   runs: 'Run needs',
@@ -442,10 +443,25 @@ export function ackEvent(plan) {
  * buildReviewQueue) the caller computed; `ghost` is the last row the view saw
  * for the focused id, kept as a closed row when its id is gone.
  */
-export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], ghost = null, runs = null } = {}) {
+/** Rows from GET /api/engines/waiting: one per gate or question, oldest first. The item stays whole for the view. */
+function waitingRows(items) {
+  const rows = [];
+  for (const it of Array.isArray(items) ? items : []) {
+    if (!it || typeof it !== 'object' || typeof it.id !== 'string' || typeof it.engine !== 'string') continue;
+    rows.push({
+      id: `w:${it.engine}:${it.id}`, group: 'waiting', kind: 'waiting', builder: null, fkey: null, name: null, lane: null, p: '2',
+      word: it.kind === 'intent' ? 'requirement' : inboxClip(str(it.kind), 24), reason: inboxClip(str(it.title), LIMITS.reason) ?? '',
+      product: inboxClip(str(it.product), 64), since: isNum(it.openedAt) ? it.openedAt : 0, engine: it.engine, item: it,
+    });
+  }
+  return rows;
+}
+
+export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], ghost = null, runs = null, waiting = null } = {}) {
   const sessions = inboxSessionsOf(s, scope);
   const runRowsAll = Array.isArray(runs) ? runRows(runs, now) : [];
   const by = {
+    waiting: waitingRows(waiting),
     approvals: approvalRows(s, scope, now),
     needs: needsRows(s, scope, sessions),
     runs: runRowsAll.filter((r) => r.group === 'runs'),
@@ -461,7 +477,7 @@ export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], gh
     by[g.group].push(g);
     rows.set(g.id, g);
   }
-  const shown = GROUPS.filter((id) => (id !== 'runs' && id !== 'runprs') || Array.isArray(runs) || by[id].length).map((id) => ({
+  const shown = GROUPS.filter((id) => (id === 'waiting' ? Array.isArray(waiting) : (id !== 'runs' && id !== 'runprs') || Array.isArray(runs)) || by[id].length).map((id) => ({
     id,
     title: GROUP_TITLES[id],
     note: id === 'approvals' ? COOPERATIVE_NOTE : null,
@@ -526,6 +542,7 @@ export function keyAction(key, focusId, model) {
   const r = rowOf(model, focusId);
   if (!r) return { none: 'no-focus' };
   if (key === 'Enter') {
+    if (r.kind === 'waiting') return { expand: r.id, rowId: r.id };
     if (r.group === 'runs' || r.group === 'runprs') return { run: r.run, rowId: r.id };
     return r.fkey ? { open: r.fkey, rowId: r.id } : { none: 'no-target' };
   }
