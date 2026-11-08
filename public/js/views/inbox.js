@@ -38,6 +38,7 @@ import {
 import { lamp, panel, plate, setPanel } from '../ui/components.js';
 import { confirmAction } from '../ui/confirm.js';
 import { toast } from '../ui/toast.js';
+import { loadWaiting, waitingBody } from './inbox-waiting.js';
 
 // ---------------------------------------------------------------- view state
 
@@ -53,13 +54,15 @@ const state = {
   timer: null,
   review: null,     // {slot, handle} from mountReviewQueue
   runs: null,       // the GET /api/runs list, null when there is no runs route
+  waiting: null,    // the GET /api/engines/waiting items, null when there is no such route
   runsTimer: null,
 };
 
 /** GET /api/runs: kept on an error (a blip), dropped when there is no runs route. */
 async function refreshRuns() {
-  const r = await loadRuns();
+  const [r, w] = await Promise.all([loadRuns(), loadWaiting()]);
   if (!state.root) return;
+  state.waiting = w ? w.items : null;
   if (r.kind === 'ok') state.runs = r.runs;
   else if (r.kind === 'unavailable') state.runs = null;
   else return;
@@ -87,7 +90,7 @@ function compute(now = Date.now()) {
   let review = [];
   try { review = buildReviewQueue(store.lanes, now, storeLookups(store)); } catch { review = []; }
   const ghost = state.ghost && state.ghost.id === state.focusId ? state.ghost : null;
-  const model = buildInbox(store, { now, scope: inboxScopeOf(route), review, ghost, runs: state.runs });
+  const model = buildInbox(store, { now, scope: inboxScopeOf(route), review, ghost, runs: state.runs, waiting: state.waiting });
   state.focusId = reconcileFocus(model, state.focusId);
   const r = rowOf(model, state.focusId);
   state.ghost = r ?? null;
@@ -166,7 +169,12 @@ function inboxRowNode(r) {
     head.append(wd);
   }
   if (r.fkey || r.name) head.append(plate(r.fkey ?? r.name));
-  if (r.kind === 'approval') {
+  if (r.kind === 'waiting') {
+    if (r.product) head.append(plate(r.product, { kind: 'quiet' }));
+    const sum = span('inbox-sum', r.reason);
+    sum.title = r.reason;
+    head.append(sum, span('inbox-timer', formatWait(Date.now() - r.since)));
+  } else if (r.kind === 'approval') {
     head.append(plate(r.mcpServer ? `${r.mcpServer}:${r.tool}` : r.tool, { kind: 'quiet' }));
     head.append(span('inbox-sum', r.summary));
     if (r.closed) head.append(span('inbox-status', 'closed'));
@@ -234,11 +242,12 @@ function inboxRowNode(r) {
     }
     if (r.preview && r.preview.lines.length) li.append(previewNode(r.preview));
   }
+  if (r.kind === 'waiting' && state.expanded.has(r.id)) li.append(waitingBody(r.item, r.engine));
   if (state.noteFor === r.id && r.kind === 'approval' && !r.closed) li.append(noteField(r));
 
   li.addEventListener('click', () => {
     state.focusId = r.id;
-    if (r.kind === 'approval') {
+    if (r.kind === 'approval' || r.kind === 'waiting') {
       if (state.expanded.has(r.id)) state.expanded.delete(r.id);
       else state.expanded.add(r.id);
     }
@@ -438,6 +447,12 @@ function runKey(key) {
   if (plan.none) {
     if (plan.none === 'closed') inboxRender();
     return false;
+  }
+  if (plan.expand) {
+    if (state.expanded.has(plan.expand)) state.expanded.delete(plan.expand);
+    else state.expanded.add(plan.expand);
+    inboxRender();
+    return true;
   }
   if (plan.open) { nav({ sel: plan.open }); return true; }
   if (plan.run) { nav({ view: 'runs', run: plan.run }); return true; }

@@ -32,6 +32,7 @@ import { setView } from '../core/router.js';
 import { block, gauge, laneStripe, prChip } from '../ui/widgets.js';
 import { lamp, panel } from '../ui/components.js';
 import { toast } from '../ui/shell.js';
+import { loadWaiting, waitingKindWord } from './inbox-waiting.js';
 import { openSheet } from '../ui/sheet.js';
 import { RUN_ID_RX, STOP_P, STATE_META, burnOf, rnClean, runHref, safeHref, scoreText } from './runs.js';
 
@@ -341,9 +342,10 @@ export async function loadMorning(force = false) {
   if (!force && morning.data && morning.url === url && Date.now() - morning.at < 20000) return;
   morning.loading = true;
   try {
-    const r = await fetch(url);
+    const [r, w] = await Promise.all([fetch(url), hub ? null : loadWaiting()]);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     morning.data = await r.json();
+    morning.waiting = w?.items ?? [];
     morning.at = Date.now();
   } catch (err) {
     morning.data = { error: err.message };
@@ -367,7 +369,21 @@ export function renderMorning() {
   if (m.error) { box.append(el('p', 'empty', `Could not load: ${m.error}`)); return; }
   const sinceEl = $('morning-since');
   if (sinceEl && m.sinceText) sinceEl.textContent = m.sinceText;
+  if (morning.waiting?.length) box.append(waitingBlock(morning.waiting));
   renderModel(box, m);
+}
+
+/** What waits for a person from the run engines; the Inbox has it in full. */
+export function waitingBlock(items) {
+  const b = block('Waiting', items.length);
+  for (const it of items) {
+    const a = el('a', 'morning-waiting', `${waitingKindWord(it.kind)} · ${rnClean(it.title) ?? ''}`);
+    a.href = '#/inbox';
+    const row = el('div');
+    row.append(a);
+    b.append(row);
+  }
+  return b;
 }
 
 // ---------------------------------------------------------------- render

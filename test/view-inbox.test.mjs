@@ -35,14 +35,14 @@ test('T16: filled groups first in the new order, each empty one a single "<Title
     await settle();
     const secs = all(el, (n) => n.tagName === 'SECTION' && n.classList.contains('inbox-group'));
     const ids = secs.map((s) => s.dataset.group);
-    assert.deepEqual(ids, ['runs', 'runprs', 'approvals', 'needs', 'review', 'paused', 'stale']);
+    assert.deepEqual(ids, ['runs', 'runprs', 'waiting', 'approvals', 'needs', 'review', 'paused', 'stale']);
     for (const s of secs.slice(2)) {
       assert.ok(Object.hasOwn(s.dataset, 'empty'), `${s.dataset.group} is marked empty`);
       assert.equal(s.children.length, 1, `${s.dataset.group}: one line, no header, no rule`);
       assert.ok(s.children[0].classList.contains('inbox-empty'));
       assert.equal(s.textContent, emptyLine(GROUP_TITLES[s.dataset.group]));
     }
-    assert.equal(secs[4].textContent, 'Review · none');
+    assert.equal(secs[5].textContent, 'Review · none');
     assert.doesNotMatch(el.textContent, /Nothing here|No lanes are waiting/);
     // the filled groups keep their header and rows; the first row has focus
     assert.equal(secs[0].children[0].tagName, 'H3');
