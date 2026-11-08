@@ -321,6 +321,11 @@ function enginePageHead(key, run, page, now) {
   if (usdOf(run) !== null) add('rn-cost', money(usdOf(run)), 'API price equivalent');
   if (run.rooms?.length) add('rn-rooms', run.rooms.map((r) => `${rnClean(r.name, 48)} ${rnClean(r.state, 16) ?? ''}`.trim()).join(', '));
   if (typeof run.updatedAt === 'number') add('rn-left', `updated ${engineAge(now - run.updatedAt)}`);
+  if (run.product && run.goal) {
+    const flow = el('a', 'rn-back', 'Flow overview');
+    flow.href = `#/flow?product=${encodeURIComponent(run.product)}&goal=${encodeURIComponent(run.goal)}`;
+    facts.append(flow);
+  }
   head.append(back, top, facts);
   if (page.stale) head.append(el('p', 'rn-stale', `The engine is not answering. This is its last good answer, ${engineAge(page.age)}.`));
   return head;

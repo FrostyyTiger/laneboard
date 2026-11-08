@@ -30,8 +30,7 @@ it are marked done, the boxes ahead are dim. Each box has one or two lines; a ta
 | 9 | Checks | last task check, last suite result and age, feature checks | yes. Review findings: no |
 | 10 | PR + report | PR link and state, report, demos | yes when a merge gate is open. PR's own checks: no |
 
-A value the contract does not have is left out of its box, never guessed. Box 8 is the largest,
-and on a phone it comes first after the lit box's title.
+A value the contract does not have is left out of its box, never guessed. Box 8 is the largest.
 
 ## Which box is lit
 

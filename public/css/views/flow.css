@@ -1,0 +1,29 @@
+/* The Flow view: two rows of boxes with arrows. Lit: the box the goal is in. Done: quiet. Ahead: dim. */
+#view-flow { overflow: auto; padding-top: var(--sp-2); padding-inline: var(--sp-2); }
+.fl-page { display: grid; gap: var(--sp-3); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+.fl-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-3); }
+.fl-goal { color: var(--text-1); }
+.fl-section { display: grid; gap: var(--sp-1); }
+.fl-row-t { margin: 0; font-family: var(--font-label); font-size: var(--fs-11); font-weight: 600; letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-1); }
+.fl-row-s { margin-inline-start: var(--sp-2); font-family: var(--font-mono); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text-3); }
+.fl-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: var(--sp-4, 20px); align-items: start; }
+.fl-row[data-row="1"] { grid-template-columns: 1fr 1fr 1.6fr 1fr 1fr; }
+.fl-box { position: relative; display: grid; gap: var(--sp-1); min-width: 0; padding: var(--sp-2); border: var(--bw) solid var(--line-weak); }
+.fl-box:not(:last-child)::after { content: "→"; position: absolute; inset-inline-start: 100%; top: var(--sp-2); width: var(--sp-4, 20px); text-align: center; color: var(--text-3); }
+.fl-box[data-state="ahead"] { opacity: 0.55; }
+.fl-box[data-state="lit"] { border-color: var(--text-1); outline: var(--bw) solid var(--text-1); background: var(--bg-hover); }
+.fl-title { margin: 0; font-size: var(--fs-12); color: var(--text-1); }
+.fl-box[data-state="lit"] .fl-mark { color: var(--text-1); }
+.fl-box[data-state="done"] .fl-mark { color: var(--text-3); }
+.fl-box[data-state="waiting"] .fl-mark { color: var(--p2); }
+.fl-note { color: var(--p2); }
+.fl-line { display: block; overflow-wrap: anywhere; }
+.fl-line[data-strong] { color: var(--text-1); }
+.fl-line[data-p="1"] { color: var(--p1); }
+.fl-line[data-p="2"] { color: var(--p2); }
+.fl-more { justify-self: start; min-height: 28px; padding: 0; border: 0; background: none; color: var(--text-3); font: inherit; text-decoration: underline; cursor: pointer; }
+.fl-detail { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
+@media (max-width: 1024px) {
+  .fl-row, .fl-row[data-row="1"] { grid-template-columns: minmax(0, 1fr); }
+  .fl-box:not(:last-child)::after { content: "↓"; inset-inline-start: 0; top: 100%; width: 100%; }
+}

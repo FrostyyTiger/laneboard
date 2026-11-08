@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+**Flow.** `#/flow?product=<id>&goal=<id>`: one overview of where a goal stands,
+from its sources to its PR, the current box lit. Read-only. See docs/flow.md.
+
 **A real run engine (runs-first phase 9).** `kind: "foundry-cli"` reads an
 engine's CLI through `execFile`, with only `PATH` and `FOUNDRY_CONFIG` in its
 environment. The Box view shows each engine's state and version. See
