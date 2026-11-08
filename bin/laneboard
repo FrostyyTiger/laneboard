@@ -39,6 +39,8 @@
 //     part of $LANEBOARD_RUN (start says so on stderr). --run/--file/--post may
 //     also come before <sub>.
 //     A bad argument prints one line and exits 2. See docs/runs.md.
+//   laneboard engine check [--engine <id>]            each engine's version, the accepted range, one call per read verb
+//     (docs/engines.md); exits 1 when an engine is not up or a verb it has fails
 //   laneboard feed tailscale|proxmox|docker [--source s] [--every N] [--stdout | --out <file> | --push <url>]
 //                                                      offline: read one source once, write one feed
 //     proxmox  --url https://<host>:8006 --token-id user@realm!name [--secret-file f] [--ca pem] [--node n]
@@ -1388,6 +1390,96 @@ async function cmdFeed() {
   }
 }
 
+// ---------------------------------------------------------------- engine
+
+const ENGINE_USAGE = `usage: laneboard engine check [--engine <id>]
+  For each run engine (or the one named): its contract version, the range
+  laneboard accepts, and one call per read verb. Exit 1 when an engine is not
+  up or a verb it has fails. See docs/engines.md.
+`;
+
+/** GET a path; `{status, data}` whatever the status (api() dies on a refusal, this reports it). */
+async function apiAnswer(p) {
+  let res;
+  try {
+    res = await fetch(`${BASE}${p}`, { headers: { 'x-laneboard': '1' } });
+  } catch (err) {
+    const e = new Error(`cannot reach the laneboard at ${BASE} (${err.message})`);
+    e.unreachable = true;
+    throw e;
+  }
+  answered = res.redirected ? new URL(res.url).origin : BASE;
+  let data;
+  try { data = cleanDeep(await res.json()); } catch { data = {}; }
+  return { status: res.status, data };
+}
+
+/** One line of what a read verb's data holds. */
+function engineDetail(verb, d) {
+  if (!d) return '';
+  switch (verb) {
+    case 'hello': return d.contract ? `contract ${d.contract}, engine ${d.version}, oldest ${d.oldest}` : '';
+    case 'health': return `heartbeat ${ago(d.heartbeatAt)}, ${plural(d.hosts?.length ?? 0, 'host')}, queue ${d.queue}`;
+    case 'products': return plural(d.products?.length ?? 0, 'product');
+    case 'runs': return plural(d.runs?.length ?? 0, 'run');
+    case 'run': return `${d.run?.id} ${d.run?.state}${Array.isArray(d.run?.tree) ? `, ${plural(d.run.tree.length, 'node')}` : ''}`;
+    case 'events': return `${plural(d.events?.length ?? 0, 'event')}, next ${d.next}`;
+    case 'waiting': return plural(d.items?.length ?? 0, 'item');
+    case 'knowledge': return `${d.product}: ${plural(d.items?.length ?? 0, 'item')}`;
+    default: return '';
+  }
+}
+
+async function cmdEngine() {
+  const sub = argv.shift();
+  if (sub === '-h' || sub === '--help' || argv.includes('-h') || argv.includes('--help')) return process.stdout.write(ENGINE_USAGE);
+  if (sub !== 'check') die(`unknown engine command ${JSON.stringify(sub ?? '')}\n${ENGINE_USAGE.trimEnd()}`, 2);
+  const only = takeFlag('--engine');
+  if (argv.length) die(`unexpected argument ${JSON.stringify(argv[0])}\n${ENGINE_USAGE.trimEnd()}`, 2);
+  const list = await api('/api/engines', {
+    onError: (status) => (status === 404 ? 'this laneboard has no engine routes (a hub, or older than the engine interface)' : undefined),
+  });
+  boardLine();
+  const engines = (list.engines ?? []).filter((e) => !only || e.id === only);
+  if (only && !engines.length) die(`no engine ${JSON.stringify(only)}; there are: ${(list.engines ?? []).map((e) => e.id).join(', ') || 'none'}`);
+  let bad = false;
+  for (const e of engines) {
+    const colour = e.state === 'up' ? C.green : e.state === 'stale' || e.state === 'off' ? C.amber : C.red;
+    process.stdout.write(`${C.bold}${e.id}${C.off} (${e.kind})  ${colour}${e.state}${C.off}`
+      + `  contract ${e.contract ?? '-'}  engine ${e.version ?? '-'}  accepts ${e.accepts ?? list.accepts}`
+      + `${e.reason ? `  ${C.dim}${e.reason}${C.off}` : ''}\n`);
+    if (!['up', 'off'].includes(e.state)) bad = true;
+    const base = `/api/engine/${encodeURIComponent(e.id)}`;
+    const ids = {};
+    const order = ['hello', 'health', 'products', 'runs', 'run', 'events', 'waiting', 'knowledge'];
+    for (const verb of order) {
+      let p = `${base}/${verb}`;
+      if (verb === 'run' || verb === 'events') {
+        if (!ids.run) { process.stdout.write(`  ${verb.padEnd(10)} ${C.dim}- no run to ask about${C.off}\n`); continue; }
+        p = `${base}/${verb}/${encodeURIComponent(ids.run)}${verb === 'events' ? '?since=0' : ''}`;
+      }
+      if (verb === 'knowledge') {
+        if (!ids.product) { process.stdout.write(`  ${verb.padEnd(10)} ${C.dim}- no product to ask about${C.off}\n`); continue; }
+        p = `${base}/knowledge/${encodeURIComponent(ids.product)}`;
+      }
+      const { status, data } = await apiAnswer(p);
+      if (status === 200) {
+        if (verb === 'runs') ids.run = data.data?.runs?.[0]?.id;
+        if (verb === 'products') ids.product = data.data?.products?.[0]?.id;
+        const extra = [data.stale ? `${C.amber}stale${C.off}` : '', data.dropped ? `${C.amber}${data.dropped} dropped${C.off}` : ''].filter(Boolean).join(' ');
+        process.stdout.write(`  ${verb.padEnd(10)} ${C.green}ok${C.off}  ${engineDetail(verb, data.data)}${extra ? `  ${extra}` : ''}\n`);
+      } else if (data.code === 'unsupported') {
+        process.stdout.write(`  ${verb.padEnd(10)} ${C.dim}- unsupported${C.off}\n`);
+      } else {
+        bad = true;
+        process.stdout.write(`  ${verb.padEnd(10)} ${C.red}${data.code ?? `HTTP ${status}`}${C.off}  ${data.error ?? ''}\n`);
+      }
+    }
+  }
+  if (!engines.length) process.stdout.write('no engines\n');
+  if (bad) process.exitCode = 1;
+}
+
 function usage(out = process.stdout) {
   out.write(`laneboard — control the Claude sessions and lanes on this box
 
@@ -1410,6 +1502,8 @@ function usage(out = process.stdout) {
   laneboard spawn <name> <dir> ["prompt"] [--model m]
   laneboard restart <name>
   laneboard kill <name>
+  laneboard engine check [--engine <id>]
+                                      each run engine: version, accepted range, one call per read verb
 
 Offline (no server needed):
   laneboard fleet keygen [--out <file>] [--force]
@@ -1460,7 +1554,7 @@ const COMMANDS = {
   launch: cmdLaunch, job: cmdJob, retire: cmdRetire,
   fleet: cmdFleet, audit: cmdAudit,
   pause: cmdPause, resume: cmdResume, paused: cmdPaused,
-  run: cmdRun, feed: cmdFeed,
+  run: cmdRun, feed: cmdFeed, engine: cmdEngine,
 };
 
 if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {
