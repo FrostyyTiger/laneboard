@@ -1,0 +1,196 @@
+{
+  "contract": "1.0",
+  "engine": "0.1.0",
+  "at": "2026-11-01T10:45:00Z",
+  "data": {
+    "run": {
+      "id": "R-20261024-acme-shop-1",
+      "product": "acme-shop",
+      "goal": "G2",
+      "recipe": {
+        "id": "R-20261024-acme-shop-1/recipe",
+        "revision": 1,
+        "kind": "build",
+        "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1/recipe.md"
+      },
+      "state": "done",
+      "reason": "merged; the production deploy waits for a person",
+      "stop_reason": "done",
+      "node": null,
+      "rooms": [],
+      "usage": {
+        "tokens": {
+          "in": 222000,
+          "out": 51000,
+          "cache_read": 1460000,
+          "cache_write": 131000
+        },
+        "usd_notional": 2.84,
+        "by_role": {
+          "test-writer": {
+            "tokens": {
+              "in": 22000,
+              "out": 8000,
+              "cache_read": 70000,
+              "cache_write": 18000
+            },
+            "usd_notional": 0.46
+          },
+          "builder": {
+            "tokens": {
+              "in": 150000,
+              "out": 33000,
+              "cache_read": 1200000,
+              "cache_write": 90000
+            },
+            "usd_notional": 1.64
+          },
+          "fixer": {
+            "tokens": {
+              "in": 20000,
+              "out": 4000,
+              "cache_read": 80000,
+              "cache_write": 9000
+            },
+            "usd_notional": 0.3
+          },
+          "reviewer": {
+            "tokens": {
+              "in": 30000,
+              "out": 6000,
+              "cache_read": 110000,
+              "cache_write": 14000
+            },
+            "usd_notional": 0.44
+          }
+        },
+        "by_tier": {
+          "large": {
+            "tokens": {
+              "in": 72000,
+              "out": 18000,
+              "cache_read": 260000,
+              "cache_write": 41000
+            },
+            "usd_notional": 1.2
+          },
+          "mid": {
+            "tokens": {
+              "in": 150000,
+              "out": 33000,
+              "cache_read": 1200000,
+              "cache_write": 90000
+            },
+            "usd_notional": 1.64
+          }
+        }
+      },
+      "events_path": "/var/lib/foundry/state/runs/R-20261024-acme-shop-1/events.jsonl",
+      "last_seq": 142,
+      "pr": {
+        "id": "36",
+        "url": "https://git.example.com/acme/acme-shop/pull/36",
+        "state": "merged",
+        "title": "Wish list (run R-20261024-acme-shop-1)",
+        "updated": "2026-10-27T16:15:00Z"
+      },
+      "started": "2026-10-24T08:00:00Z",
+      "ended": "2026-10-27T16:20:00Z",
+      "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1",
+      "updated": "2026-10-27T16:20:00Z",
+      "tree": [
+        {
+          "id": "G2",
+          "level": "goal",
+          "parent": null,
+          "title": "Wish list",
+          "state": "passed",
+          "check": null,
+          "last_check": {
+            "name": "suite",
+            "pass": true,
+            "counts": {
+              "passed": 402,
+              "failed": 0,
+              "skipped": 0
+            },
+            "output": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1/checks/90.txt",
+            "path": "checks/90.txt",
+            "at": "2026-10-27T16:20:00Z",
+            "seq": 90
+          },
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1/tree/G2.md",
+          "updated": "2026-10-27T16:20:00Z"
+        },
+        {
+          "id": "G2.F1",
+          "level": "feature",
+          "parent": "G2",
+          "title": "A buyer can save an item",
+          "state": "frozen",
+          "check": null,
+          "last_check": {
+            "name": "journeys",
+            "pass": true,
+            "counts": {
+              "passed": 4,
+              "failed": 0,
+              "skipped": 0
+            },
+            "output": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1/checks/70.txt",
+            "path": "checks/70.txt",
+            "at": "2026-10-27T16:20:00Z",
+            "seq": 70
+          },
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1/tree/G2.F1.md",
+          "updated": "2026-10-27T16:20:00Z"
+        },
+        {
+          "id": "G2.F1.T1",
+          "level": "task",
+          "parent": "G2.F1",
+          "title": "Saved items",
+          "state": "frozen",
+          "check": null,
+          "last_check": {
+            "name": "task tests",
+            "pass": true,
+            "counts": {
+              "passed": 22,
+              "failed": 0,
+              "skipped": 0
+            },
+            "output": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1/checks/41.txt",
+            "path": "checks/41.txt",
+            "at": "2026-10-27T16:20:00Z",
+            "seq": 41
+          },
+          "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1/tree/G2.F1.T1.md",
+          "updated": "2026-10-27T16:20:00Z",
+          "attempts": {
+            "rounds": 2,
+            "tiers": [
+              "mid",
+              "mid"
+            ]
+          }
+        }
+      ],
+      "gates": [],
+      "prs": [
+        {
+          "id": "36",
+          "url": "https://git.example.com/acme/acme-shop/pull/36",
+          "state": "merged",
+          "title": "Wish list (run R-20261024-acme-shop-1)",
+          "updated": "2026-10-27T16:15:00Z"
+        }
+      ],
+      "report": {
+        "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261024-acme-shop-1/report.md",
+        "summary": "Buyers can save items to a wish list and find them again.",
+        "needs": []
+      }
+    }
+  }
+}

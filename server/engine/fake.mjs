@@ -5,7 +5,7 @@
 //
 // What it answers:
 //   hello, health, products, runs   the fixture file as it is
-//   run <id>                        run.json for its run; any other id is not-found
+//   run <id>                        run.json for its run, or a demo page (../demo); any other id is not-found
 //   events <id> --since <seq>       events.json for its own `since`, else the
 //                                   lines of events.jsonl after `seq`
 //   waiting [--for]                 waiting.json, filtered by `for`
@@ -26,6 +26,8 @@ import { createContractEngine } from './adapter.mjs';
 
 export const kind = 'fake';
 export const FIXTURES = path.resolve(import.meta.dirname, '..', '..', 'test', 'fixtures', 'engine', 'v1');
+/** Invented pages for the example list's other runs, so every demo row opens. Not upstream's. */
+export const DEMO_RUNS = path.resolve(FIXTURES, '..', 'demo');
 
 const notFound = (what) => Object.assign(new Error(`${what} not found`), { code: 'not-found' });
 
@@ -34,6 +36,12 @@ export function create({ id = 'fake', dir = FIXTURES, override = {}, timeoutMs, 
   const json = async (name) => JSON.parse(await read(name));
   const replays = new Map(); // requestId -> answer
   let results = null;
+
+  /** A demo page's answer, or null. Only beside the published examples, only ids of their form. */
+  async function demoRun(runId) {
+    if (dir !== FIXTURES || !/^R-[0-9]{8}-[a-z0-9-]+-[0-9]+$/.test(runId ?? '')) return null;
+    try { return JSON.parse(await fsp.readFile(path.join(DEMO_RUNS, `${runId}.json`), 'utf8')); } catch { return null; }
+  }
 
   async function resultTemplates() {
     if (results) return results;
@@ -69,12 +77,18 @@ export function create({ id = 'fake', dir = FIXTURES, override = {}, timeoutMs, 
         return read(`${verb}.json`);
       case 'run': {
         const a = await json('run.json');
-        if (a.data?.run?.id !== args.id) throw notFound(`run ${args.id}`);
-        return a;
+        if (a.data?.run?.id === args.id) return a;
+        const demo = await demoRun(args.id);
+        if (demo) return demo;
+        throw notFound(`run ${args.id}`);
       }
       case 'events': {
         const a = await json('events.json');
-        if (a.data?.run !== args.id) throw notFound(`run ${args.id}`);
+        if (a.data?.run !== args.id) {
+          // A demo page has a tree but no event log.
+          if (await demoRun(args.id)) return { ...a, data: { run: args.id, since: args.since, events: [], next: args.since, more: false } };
+          throw notFound(`run ${args.id}`);
+        }
         if (args.since === a.data.since) return a;
         const lines = (await read('events.jsonl')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
         const events = lines.filter((e) => e.run === args.id && e.seq > args.since);

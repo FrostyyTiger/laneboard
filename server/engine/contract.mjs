@@ -257,9 +257,11 @@ function event(e) {
     const v = e[k];
     if (typeof v === 'string' || typeof v === 'boolean' || num(v) !== null) out[k] = typeof v === 'string' ? v.slice(0, 4096) : v;
   }
-  for (const [k, to] of Object.entries(CAMEL)) if (num(e[k]) !== null) out[to] = e[k];
+  // A round's cost sits in `usage` ({tokens, usd_notional}); older lines had it on the event.
+  const u = isObj(e.usage) ? e.usage : e;
+  for (const [k, to] of Object.entries(CAMEL)) if (num(u[k]) !== null) out[to] = u[k];
   if (counts(e.counts)) out.counts = counts(e.counts);
-  if (tokens(e.tokens)) out.tokens = tokens(e.tokens);
+  if (tokens(u.tokens)) out.tokens = tokens(u.tokens);
   return out;
 }
 
