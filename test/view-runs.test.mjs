@@ -18,6 +18,7 @@ import runsView, {
   needsCell, tlColumns, ackedNeedsOf, runCostOf, outcomeText,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
+import { applyRun, newPage, renderEnginePage, toggleFold } from '../public/js/views/runs-engine.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'public/js/views/runs.js'), 'utf8');
@@ -183,7 +184,7 @@ test('mount fetches GET /api/runs, paints, and unmount clears; a 404 is a note',
   const ok = async (url, init) => { calls.push([url, init?.method ?? 'GET']); return { ok: true, status: 200, json: async () => ({ runs: [FIX, LIVE] }) }; };
   const host = document.createElement('div');
   await mountRuns(host, {}, { fetchFn: ok, poll: false });
-  assert.deepEqual(calls, [[LIST_URL, 'GET']]);
+  assert.deepEqual(calls, [[LIST_URL, 'GET'], ['/api/engines/runs', 'GET']]);
   assert.deepEqual(byClass(host, 'rn-row').map((r) => r.dataset.run), ['readiness', 'nightly']);
   unmountRuns();
   assert.equal(host.children.length, 0);
@@ -488,7 +489,8 @@ test('mount with route.run fetches GET /api/runs/<id>; a route change switches l
   assert.equal(frame.dataset.page, '', 'a run page marks its frame for the reading width (T31)');
 
   await updateRuns(null, { route: { ...emptyRoute('runs'), run: null } });
-  assert.deepEqual(calls.at(-1), [LIST_URL, 'GET']);
+  assert.deepEqual(calls.at(-2), [LIST_URL, 'GET']);
+  assert.deepEqual(calls.at(-1), ['/api/engines/runs', 'GET']);
   assert.equal(byClass(host, 'rn-row').length, 1);
   assert.equal(frame.dataset.page, undefined, 'the list takes the full width');
   assert.equal(byClass(host, 'rn-tl-row').length, 0);
@@ -1303,3 +1305,110 @@ test('T54: a stuck list row reads ▲ STUCK in p2 with the reason under it; no u
     for (const sub of byClass(r, 'rn-goal-sub')) assert.notEqual(sub.textContent, '', 'no empty goal line');
   }
 }));
+
+// --- engine runs (docs/runs-home.md) ------------------------------------------
+
+const ENGINE_ROW = {
+  id: 'R-20261101-acme-shop-1', key: 'main/R-20261101-acme-shop-1', engine: 'main', product: 'acme-shop', goal: 'G1', goalTitle: 'Guest checkout',
+  state: 'at-gate', stop: null, node: 'G1.F1.T3', rooms: [{ name: 'room-1' }], usage: { usd: 4.38 }, updatedAt: 1000, stale: false, age: null,
+};
+const TREE = [
+  { id: 'G1', level: 'goal', parent: null, title: 'Guest checkout', state: 'building', lastCheck: null },
+  { id: 'G1.F1', level: 'feature', parent: 'G1', title: 'Buy', state: 'building', lastCheck: null },
+  { id: 'G1.F1.T1', level: 'task', parent: 'G1.F1', title: 'Order', state: 'frozen', lastCheck: { name: 'task tests', pass: true, counts: { passed: 14, failed: 0, skipped: 0 } }, attempts: { rounds: 1 } },
+  { id: 'G1.F1.T2', level: 'task', parent: 'G1.F1', title: 'Cart', state: 'building', lastCheck: null, attempts: { rounds: 3 } },
+  { id: 'G1.F2', level: 'feature', parent: 'G1', title: 'Price', state: 'planned', lastCheck: null },
+  { id: 'G1.F2.T1', level: 'task', parent: 'G1.F2', title: 'Totals', state: 'reopened', lastCheck: null },
+];
+const ENGINE_RUN = { ...ENGINE_ROW, tree: TREE, gates: [{ id: 'g-1', kind: 'variant', state: 'open', node: 'G1.F1.T2' }], prs: [], report: null };
+
+function engineFetch({ run = ENGINE_RUN, list = [ENGINE_ROW], events = [] } = {}) {
+  return async (url) => {
+    const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b });
+    if (url === LIST_URL) return json({ runs: [FIX] });
+    if (url === '/api/engines/runs') return json({ runs: list, engines: [{ id: 'main', state: 'up' }], errors: [] });
+    if (url.startsWith('/api/engine/main/run/')) return json({ stale: false, age: null, data: { run } });
+    if (url.startsWith('/api/engine/main/events/')) return json({ data: { events, next: events.at(-1)?.seq ?? 0, more: false } });
+    return json({ error: 'nope' }, 404);
+  };
+}
+const enginePage = async (host, opts) => mountRuns(host, { route: { ...emptyRoute('runs'), run: ENGINE_ROW.key } }, { fetchFn: engineFetch(opts), poll: false });
+const shownNodes = (host) => byClass(host, 'rt-node').map((n) => n.dataset.node);
+
+test('the list holds engine runs and run-file runs; product, goal, engine and state show; a gate sorts first', async () => withDomAsync(async () => {
+  const host = document.createElement('div');
+  await mountRuns(host, {}, { fetchFn: engineFetch(), poll: false });
+  const rows = byClass(host, 'rn-row');
+  assert.deepEqual(rows.map((r) => r.dataset.run), [ENGINE_ROW.key, 'readiness']);
+  assert.match(rows[0].textContent, /G1 Guest checkout/);
+  assert.match(rows[0].textContent, /acme-shop · main/);
+  assert.match(rows[0].textContent, /at gate/);
+  assert.match(rows[1].textContent, /jsonl/);
+  assert.equal(byClass(rows[0], 'rn-open')[0].href, '#/runs?run=main%2FR-20261101-acme-shop-1');
+  unmountRuns();
+}));
+
+test('an engine that is down says so above the list', async () => withDomAsync(async () => {
+  const host = document.createElement('div');
+  const base = engineFetch({ list: [] });
+  const fetchFn = async (url) => (url === '/api/engines/runs'
+    ? { ok: true, status: 200, json: async () => ({ runs: [], engines: [{ id: 'main', state: 'down', reason: 'no answer' }] }) } : base(url));
+  await mountRuns(host, {}, { fetchFn, poll: false });
+  assert.match(byClass(host, 'rn-banner')[0].textContent, /Engine main is down: no answer/);
+  unmountRuns();
+}));
+
+test('the tree opens to the moving level and folds elsewhere; a click folds; it shows frozen and retries', async () => withDomAsync(async () => {
+  const host = document.createElement('div');
+  await enginePage(host);
+  assert.deepEqual(shownNodes(host), ['G1', 'G1.F1', 'G1.F1.T1', 'G1.F1.T2', 'G1.F2'], 'F2 is not moving: closed');
+  assert.equal(byClass(host, 'rt-frozen').length, 1);
+  assert.equal(byClass(host, 'rt-retries')[0].textContent, '↻2');
+  const f2 = byClass(host, 'rt-fold').find((b) => b.dataset.fold === 'G1.F2');
+  assert.equal(f2.getAttribute('aria-expanded'), 'false');
+  unmountRuns();
+  const page = newPage();
+  applyRun(page, { run: ENGINE_RUN, stale: false, age: null, events: [], next: 0, eventsFailed: false });
+  assert.equal(toggleFold(page, { closest: () => ({ dataset: { fold: 'G1.F2' } }) }), true);
+  const again = document.createElement('div');
+  renderEnginePage(again, ENGINE_ROW.key, page);
+  assert.ok(shownNodes(again).includes('G1.F2.T1'), 'opened by hand');
+}));
+
+test('a failing check opens its path and says so with a shape and a word', async () => withDomAsync(async () => {
+  const host = document.createElement('div');
+  const tree = TREE.map((n) => (n.id === 'G1.F2.T1' ? { ...n, lastCheck: { name: 'acceptance', pass: false, counts: { passed: 3, failed: 2, skipped: 0 }, output: 'javascript:alert(1)' } } : n));
+  await enginePage(host, { run: { ...ENGINE_RUN, tree } });
+  assert.ok(shownNodes(host).includes('G1.F2.T1'));
+  const chip = byClass(host, 'rt-check').find((c) => c.dataset.result === 'fail');
+  assert.match(chip.textContent, /✗ acceptance 2 failed/);
+  assert.equal(chip.tagName.toLowerCase(), 'span', 'a javascript: link is never a link');
+  unmountRuns();
+}));
+
+test('events sit under the node they name; cost adds up the path', async () => withDomAsync(async () => {
+  const host = document.createElement('div');
+  const events = [
+    { seq: 1, at: 1000, type: 'run.state', level: 'run', node: null, state: 'running' },
+    { seq: 2, at: 2000, type: 'round.end', level: 'task', node: 'G1.F1', result: 'ok', usd: 1.5 },
+  ];
+  await enginePage(host, { events });
+  const f1 = byClass(host, 'rt-node').find((n) => n.dataset.node === 'G1.F1');
+  assert.equal(byClass(f1, 'rt-ev')[0].dataset.type, 'round.end');
+  assert.match(byClass(f1, 'rt-cost')[0].textContent, /1\.5/);
+  assert.match(byClass(host, 'rt-runev')[0].textContent, /Run events \(1\)/);
+  unmountRuns();
+}));
+
+test('an engine run the engine does not know says so', async () => withDomAsync(async () => {
+  const host = document.createElement('div');
+  await mountRuns(host, { route: { ...emptyRoute('runs'), run: 'main/R-nope' } }, { fetchFn: async () => ({ ok: false, status: 404, json: async () => ({}) }), poll: false });
+  assert.match(host.textContent, /No run main\/R-nope here/);
+  unmountRuns();
+}));
+
+test('the route takes <engine>/<run>, by param and by path; junk is dropped', () => {
+  assert.equal(parseHash('#/runs?run=main%2FR-1').run, 'main/R-1');
+  assert.equal(parseHash('#/runs/main%2FR-1').run, 'main/R-1');
+  assert.equal(parseHash('#/runs?run=main%2F..%2Fx').run, null);
+});

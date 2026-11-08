@@ -6,9 +6,9 @@ reads an engine and shows what it reads. It knows an engine only through a
 small interface, never by name, so any engine that speaks the contract (or
 writes today's run files) shows up the same way.
 
-Nothing on the page reads engines yet: this is the layer the Runs, Products,
-Inbox and Knowledge views will read from (the runs-first plan, phases 1 to 5).
-Today it answers the read-only routes below and `laneboard engine check`.
+The Runs view reads this layer ([runs-home.md](runs-home.md)); Products, Inbox
+and Knowledge will too (the runs-first plan). It also answers the read-only
+routes below and `laneboard engine check`.
 
 | Kind | What it reads | Needs config |
 | --- | --- | --- |
@@ -104,6 +104,7 @@ Read-only, builder mode, behind the usual request guards.
 | Route | Answers |
 | --- | --- |
 | `GET /api/engines` | `{accepts, engines: [status + capabilities]}`, after one `hello` each |
+| `GET /api/engines/runs` | every engine's runs but `jsonl`'s, for the Runs view ([runs-home.md](runs-home.md)) |
 | `GET /api/engine/<id>/hello` `health` `products` `runs` `waiting?for=` | `{engine, at, stale, age, dropped, data}` |
 | `GET /api/engine/<id>/run/<run>` `events/<run>?since=` `knowledge/<product>?kind=&status=&id=&limit=&cursor=` | the same |
 

@@ -121,7 +121,7 @@ that builder. The boundary these rules hold is between machines; read
 
 ## The views
 
-The Map is the home view. The same views run on a builder (one builder) and on
+Runs is the home view. The same views run on a builder (one builder) and on
 the hub (the fleet); the builder rail on the left and `[` `]` scope them to one
 builder.
 

@@ -55,7 +55,7 @@ export function boot() {
   addEventListener('unhandledrejection', (e) => reportUiError(`unhandled: ${e.reason?.message || e.reason}`, e.reason));
 
   connect();
-  // `#/` (or no hash) is the Map, the home view; legacy `#board`, `#map`, ...
+  // `#/` (or no hash) is Runs, the home view; legacy `#board`, `#map`, ...
   // and push links `#session=<name>` keep working (core/router.js parseHash).
   if (location.hash.startsWith('#session=')) {
     // The session may not be in the store yet on a cold load.

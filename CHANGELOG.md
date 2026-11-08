@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+**Runs home and the run tree (runs-first phase 1).** Runs is the home view; the
+Map is `g m`. Engine runs and run-file runs share one list with product, goal,
+engine and state. An engine run's page shows its tree, folded to the level that
+is moving, and a failing check opens its path. Run-file runs keep their page.
+Read-only. See docs/runs-home.md.
+
 **Run engines (runs-first phase 0).** An interface laneboard reads runs
 through, without knowing which engine drives them: `server/engine/` with a
 `jsonl` engine (today's run files, always on), `none` and a `fake` that replays

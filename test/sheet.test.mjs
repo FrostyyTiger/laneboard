@@ -264,6 +264,7 @@ test('renderPhone fills #shell-strip and #shell-sheet on a phone, hides the shee
     await withPage(['shell-strip', 'shell-sheet'], { width: 400 }, (byId) => {
       const sheet = byId.get('shell-sheet');
       sheet.hidden = true;
+      location.hash = '#/map';
       renderPhone();
       assert.equal(sheet.hidden, false);
       assert.equal(byId.get('shell-strip').children.length, 4);
@@ -321,7 +322,7 @@ test('renderPhone lights the one segment of the current route (r10-designer acro
   try {
     await withPage(['shell-strip', 'shell-sheet'], { width: 390 }, (byId) => {
       const sheet = byId.get('shell-sheet');
-      const want = { '#/': ['MAP'], '#/board': [], '#/runs': [], '#/runs?run=acme-search': [], '#/inbox': ['INBOX'], '#/morning': [], '#/audit': [] };
+      const want = { '#/': [], '#/map': ['MAP'], '#/board': [], '#/runs': [], '#/runs?run=acme-search': [], '#/inbox': ['INBOX'], '#/morning': [], '#/audit': [] };
       const more = () => sheet.children[0].children[2];
       for (const [hash, tabs] of Object.entries(want)) {
         location.hash = hash;

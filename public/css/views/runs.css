@@ -48,6 +48,40 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- an engine run's row: the current node takes the round and scores columns */
+.rn-node { grid-column: span 2; overflow: hidden; text-overflow: ellipsis; }
+.rn-src { font-size: var(--fs-11); color: var(--text-3); white-space: nowrap; }
+.rn-row[data-stale] { opacity: 0.6; }
+.rn-banners { display: grid; gap: var(--sp-1); margin-block-end: var(--sp-2); }
+.rn-banner { margin: 0; padding: var(--sp-1) var(--sp-2); border-inline-start: var(--bw) solid var(--p2); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-1); }
+
+/* ---- the run tree: indented by depth, one row per node, folded by default */
+.rt-list, .rt-events, .rt-plain { list-style: none; margin: 0; padding: 0; }
+.rt-body > .rt-list { margin-inline-start: var(--sp-3); }
+.rt-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-height: var(--row-comfy); border-bottom: var(--bw) solid var(--line-weak); }
+.rt-row:hover { background: var(--bg-hover); }
+.rt-fold { min-width: 28px; min-height: 28px; border: 0; background: none; color: var(--text-2); font: inherit; cursor: pointer; }
+.rt-state { min-width: 12ch; }
+.rt-state .rn-state-t { font-family: var(--font-label); font-size: var(--fs-11); font-weight: 600; letter-spacing: var(--ls-label); text-transform: uppercase; }
+.rt-id { color: var(--text-3); white-space: nowrap; }
+.rt-title { color: var(--text-1); flex: 1 1 16ch; min-width: 0; }
+.rt-check { white-space: nowrap; color: var(--text-2); }
+.rt-check[data-result="fail"] { color: var(--p1); font-weight: 600; }
+.rt-frozen, .rt-retries, .rt-cost { color: var(--text-3); white-space: nowrap; }
+.rt-node[data-state="reopened"] > .rt-row .rt-title { color: var(--text-1); }
+.rt-body { padding-inline-start: 36px; padding-block: var(--sp-1); display: grid; gap: var(--sp-1); }
+.rt-d { display: flex; gap: var(--sp-2); }
+.rt-d-k { min-width: 10ch; color: var(--text-3); }
+.rt-d-v { min-width: 0; overflow-wrap: anywhere; }
+.rt-ev { display: grid; grid-template-columns: 5ch 12ch minmax(0, 1fr); gap: var(--sp-2); color: var(--text-3); }
+.rt-ev[data-p="1"] { color: var(--p1); }
+.rt-ev-x { overflow-wrap: anywhere; }
+.rt-more { color: var(--text-3); }
+.rt-plain li { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.rt-gate-k { color: var(--text-3); }
+.rt-gate-n { color: var(--text-3); }
+.rt-runev summary { cursor: pointer; color: var(--text-2); }
+
 /* ---- state: lamp + word */
 .rn-state-t {
   font-family: var(--font-label);
