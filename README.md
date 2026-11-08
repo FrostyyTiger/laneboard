@@ -212,6 +212,7 @@ human starts. The guard flags and pushes; it never acts.
 | [docs/map.md](docs/map.md) | the Map: the topology file, the feed format, pushing a feed from a hypervisor, builders on the Map |
 | [docs/wall.md](docs/wall.md) | the Wall: a tablet in kiosk mode, touch, the URL switches, the effects, the feed fields it paints |
 | [docs/runs.md](docs/runs.md) | the run protocol: how an unattended agent loop tells laneboard its goal, rounds, scores, cost and needs |
+| [docs/flow.md](docs/flow.md) | Flow: where one goal stands, from its first source to its PR |
 | [docs/knowledge.md](docs/knowledge.md) | the Knowledge view: claims, questions, requirements and how they link |
 | [docs/waiting.md](docs/waiting.md) | Waiting in the Inbox: what an engine asks of a person, shown in full |
 | [docs/products.md](docs/products.md) | the Products view: readiness per goal and its reasons |

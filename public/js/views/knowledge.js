@@ -81,7 +81,7 @@ export async function loadKnowledge(product, fetchFn = globalThis.fetch) {
       cursor = a.body?.data?.nextCursor ?? null;
       if (!cursor) break;
     }
-    return { kind: 'ok', engine: p.engine, items };
+    return { kind: 'ok', engine: p.engine, items, products };
   } catch (err) {
     return { kind: 'error', message: rnClean(String(err?.message ?? err), 120) ?? 'request failed' };
   }

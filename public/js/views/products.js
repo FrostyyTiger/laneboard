@@ -73,7 +73,9 @@ function goalRow(g, product) {
     a.href = `#/runs?run=${encodeURIComponent(`${product.engine}/${id}`)}`;
     runs.append(a);
   }
-  head.append(runs);
+  const flow = el('a', 'pd-run', 'flow');
+  flow.href = `#/flow?product=${encodeURIComponent(product.id)}&goal=${encodeURIComponent(g.id)}`;
+  head.append(runs, flow);
   li.append(head);
   if (!ready && g.reasons?.length) {
     const ul = el('ul', 'pd-reasons');

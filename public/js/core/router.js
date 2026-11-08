@@ -36,7 +36,7 @@ import { activateView } from '../views/index.js';
 // view the page has no section for still lands on the default view.
 export const VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs', 'products'];
 /** Drill-down views: routable, never in the nav. */
-export const HIDDEN_VIEWS = ['diff', 'knowledge'];
+export const HIDDEN_VIEWS = ['diff', 'knowledge', 'flow'];
 export const DEFAULT_VIEW = 'runs';
 /**
  * The `g <key>` view chord (plan §4 2.6, authoritative). `g m` is the map now
@@ -129,8 +129,9 @@ export function resolveHash(h, { localId } = {}) {
   if (typeof p.sel === 'string' && p.sel.length <= MAX_SEL && !CONTROL_RX.test(p.sel) && (isFkey(p.sel) || isRunSel(p.sel) || isNodeSel(p.sel))) r.sel = p.sel;
   if (OPEN_KINDS.includes(p.open)) r.open = p.open;
   if (isRunParam(p.run)) r.run = p.run;
-  // Only the Knowledge view has a product; on any other route the key stays absent.
+  // Only Knowledge and Flow have a product (Flow also a goal); on any other route the key stays absent.
   if (PRODUCT_RX.test(p.product ?? '')) r.product = p.product;
+  if (PRODUCT_RX.test(p.goal ?? '')) r.goal = p.goal;
   if (runPath) {
     // The path's id wins over a `run=` beside it.
     const id = safeDecode(runPath[1]);
@@ -151,7 +152,7 @@ const missReason = (name) => `no view “${clip(String(name))}”, showing Runs`
 export function formatHash(r = {}) {
   const view = ROUTABLE.has(r.view) ? r.view : DEFAULT_VIEW;
   const parts = [];
-  for (const k of ['b', 's', 'q', 'sel', 'open', 'run', 'product']) {
+  for (const k of ['b', 's', 'q', 'sel', 'open', 'run', 'product', 'goal']) {
     const v = r[k];
     if (v === null || v === undefined || v === '') continue;
     if (k === 'b' && v === 'all') continue;
