@@ -536,7 +536,7 @@ export function runRow(row, now = Date.now()) {
 /** How to start a run: what the empty state says. */
 export const EMPTY_HOW = Object.freeze([
   'No runs yet. A run shows up here when a loop reports itself:',
-  'laneboard run start --run nightly --goal "Make the tests green"',
+  'laneboard run start --run sweep --goal "Make the tests green"',
   'or appends JSON lines to .laneboard/run.jsonl in a lane (runs.files reads other places).',
   'The protocol is in docs/runs.md. A run engine shows up here too: docs/engines.md.',
 ]);

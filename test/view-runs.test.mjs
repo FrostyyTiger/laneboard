@@ -154,7 +154,7 @@ test('the empty state says how to start a run; loading, unavailable and error sa
   assert.equal(byClass(host, 'rn-row').length, 0);
   const t = texts(host);
   for (const line of EMPTY_HOW) assert.ok(t.includes(line), line);
-  assert.equal(byClass(host, 'rn-empty-cmd')[0].textContent, 'laneboard run start --run nightly --goal "Make the tests green"');
+  assert.equal(byClass(host, 'rn-empty-cmd')[0].textContent, 'laneboard run start --run sweep --goal "Make the tests green"');
   renderRuns(host, [], { status: 'loading' });
   assert.match(host.textContent, /Loading the runs/);
   renderRuns(host, [], { status: 'unavailable' });

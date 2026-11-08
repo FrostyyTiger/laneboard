@@ -231,7 +231,7 @@ export function accountRows(d) {
 export const CREDIT_COLUMNS = Object.freeze([
   { key: 'builder', label: 'builder', hub: true },
   { key: 'lane', label: 'lane' },
-  { key: 'tonight', label: 'tonight', num: true },
+  { key: 'tonight', label: 'since 18:00', num: true },
   { key: 'day', label: '24 h', num: true },
   { key: 'week', label: '7 d', num: true },
   { key: 'allTime', label: 'all time', num: true },
@@ -491,7 +491,7 @@ function builderBreakdown(d) {
   const table = el('table', 'dtable');
   const thead = el('thead');
   const hr = el('tr');
-  for (const [label, n] of [['builder', false], ['status', false], ['account', false], ['tonight', true], ['24 h', true], ['7 d', true], ['all time', true], ['samples', true]]) {
+  for (const [label, n] of [['builder', false], ['status', false], ['account', false], ['since 18:00', true], ['24 h', true], ['7 d', true], ['all time', true], ['samples', true]]) {
     hr.append(el('th', n ? 'num' : null, label));
   }
   thead.append(hr);
