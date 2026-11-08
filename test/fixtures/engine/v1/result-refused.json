@@ -10,6 +10,6 @@
     "via": "laneboard",
     "ok": false,
     "code": "refused",
-    "reason": "G4 is not ready: I-5 is not approved, Q-3 is open, C-9 is low, and the budget does not fit."
+    "reason": "G4 is not ready: REQ-5 is not approved, Q-3 is open, C-9 is low, and the budget does not fit."
   }
 }

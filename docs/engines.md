@@ -40,7 +40,7 @@ Every engine has every member; one it lacks answers `{ok: false, code: 'unsuppor
 | `run(id)` | one run: its row plus the tree, gates, PRs and report (`tree: null` for a run-file run) |
 | `events(runId, since)` | the events after `since`, plus `next` to pass next time |
 | `waiting(filter)` | what waits for a person: gates and questions with their content and revision |
-| `knowledge(product, filter)` | claims, questions, intent items, source headers (never raw sources); filter by `kind`, `status`, `id`, `limit`, `cursor` |
+| `knowledge(product, filter)` | claims, questions, requirements, source headers (never raw sources); filter by `kind`, `status`, `id`, `limit`, `cursor` |
 | `act(verb, args, meta)` | one decision, `meta = {requestId, user, via}`; nothing calls it yet (decisions go through the control plane, phase 4) |
 | `status()` | `up`, `stale`, `down`, `degraded`, `incompatible`, `unknown` or `off`, with the reason |
 

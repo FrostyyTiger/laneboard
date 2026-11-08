@@ -18,7 +18,7 @@ const STORE = { sessions: [], lanes: [], attention: [], approvals: [], flags: []
 test('every fixture kind opens in full, its buttons disabled with the reason', async () => withDom(async () => {
   const all = await items();
   assert.deepEqual([...new Set(all.map((i) => i.kind))].sort(),
-    ['change', 'deploy', 'intent', 'merge', 'proposal', 'question', 'recipe', 'repo', 'variant']);
+    ['change', 'deploy', 'merge', 'proposal', 'question', 'recipe', 'repo', 'requirement', 'variant']);
   for (const it of all) {
     const b = waitingBody(it, 'main');
     for (const k of Object.keys(it.content)) assert.ok(byClass(b, 'wt-field').some((f) => f.dataset.key === k), `${it.kind}: ${k}`);
@@ -59,6 +59,6 @@ test('loadWaiting: a hub or an error is null', async () => {
 
 test('Morning lists what waits and links to the Inbox', async () => withDom(async () => {
   const { waitingBlock } = await import('../public/js/views/morning.js');
-  const b = waitingBlock([{ id: 'x', kind: 'intent', title: 'Order history' }]);
+  const b = waitingBlock([{ id: 'x', kind: 'requirement', title: 'Order history' }]);
   assert.match(b.textContent, /requirement · Order history/);
 }));

@@ -31,11 +31,11 @@ test('a not-ready goal lists each reason; a reason with a ref links, budget does
   renderProducts(host, { status: 'ok', ...(await body()) });
   const g4 = byClass(host, 'pd-goal').find((g) => g.dataset.ready === 'no');
   const reasons = byClass(g4, 'pd-reason');
-  assert.deepEqual(reasons.map((r) => r.dataset.kind), ['intent-unapproved', 'question-open', 'low-claim', 'budget']);
+  assert.deepEqual(reasons.map((r) => r.dataset.kind), ['requirement-unapproved', 'question-open', 'low-claim', 'budget']);
   const ref = byClass(reasons[0], 'pd-ref')[0];
   assert.equal(ref.tagName.toLowerCase(), 'a');
-  assert.equal(ref.textContent, 'I-5');
-  assert.equal(ref.href, '#/knowledge?q=I-5&product=acme-shop');
+  assert.equal(ref.textContent, 'REQ-5');
+  assert.equal(ref.href, '#/knowledge?q=REQ-5&product=acme-shop');
   assert.equal(byClass(reasons[3], 'pd-ref')[0].tagName.toLowerCase(), 'span');
 }));
 

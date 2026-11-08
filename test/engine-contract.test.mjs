@@ -165,12 +165,12 @@ describe('fake: every published example row reaches laneboard', () => {
     const products = await e.products();
     assert.deepEqual(products.data.products.map((p) => p.id), ['acme-shop', 'acme-returns']);
     const notReady = products.data.products[0].goals.find((g) => g.readiness === 'not-ready');
-    assert.deepEqual(notReady.reasons.map((r) => r.kind), ['intent-unapproved', 'question-open', 'low-claim', 'budget']);
+    assert.deepEqual(notReady.reasons.map((r) => r.kind), ['requirement-unapproved', 'question-open', 'low-claim', 'budget']);
     const waiting = await e.waiting();
     assert.equal(waiting.data.items.length, fixture('waiting.json').data.items.length);
     assert.equal(waiting.dropped, 0, 'every revision is the hash of its content');
     const kinds = new Set(waiting.data.items.map((i) => i.kind));
-    for (const k of ['intent', 'recipe', 'variant', 'question', 'merge', 'deploy', 'proposal', 'repo', 'change']) assert.ok(kinds.has(k), k);
+    for (const k of ['requirement', 'recipe', 'variant', 'question', 'merge', 'deploy', 'proposal', 'repo', 'change']) assert.ok(kinds.has(k), k);
     const knowledge = await e.knowledge('acme-shop');
     assert.equal(knowledge.data.items.length, fixture('knowledge.json').data.items.length);
     assert.equal(knowledge.dropped, 0);
@@ -604,4 +604,12 @@ describe('the adapter waits a slow engine out, it never stacks calls (review of 
     assert.equal((await e.runs()).ok, true, 'once the engine answered, the next read succeeds');
     assert.equal(calls, 2);
   });
+});
+
+test('a feature node\'s single requirement id becomes a list', async () => {
+  const { create } = await import('../server/engine/fake.mjs');
+  const a = await create({ id: 'x' }).run('R-20261101-acme-shop-1');
+  const f = a.data.run.tree.find((n) => n.level === 'feature');
+  assert.deepEqual(f.requirements, ['REQ-1']);
+  assert.ok(f.acceptanceTests.length > 0);
 });

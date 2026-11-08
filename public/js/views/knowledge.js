@@ -12,7 +12,7 @@ import { fieldsNode } from './inbox-waiting.js';
 
 const PAGES = 10;
 const KINDS = Object.freeze(['requirement', 'question', 'claim', 'source']);
-export const typeOf = (it) => (it.type === 'intent' ? 'requirement' : it.type);
+export const typeOf = (it) => it.type;
 export const EMPTY_HUB = 'This server reads no engines: a hub does not carry engine data yet.';
 export const EMPTY_HOW = 'No products to show. A run engine reports them: see docs/engines.md.';
 

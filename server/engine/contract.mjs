@@ -58,15 +58,15 @@ export const VOCAB = Object.freeze({
   prState: set('draft', 'open', 'merged', 'closed'),
   gateState: set('open', 'decided', 'withdrawn'),
   decision: set('approved', 'rejected'),
-  waitingKind: set('intent', 'recipe', 'variant', 'question', 'merge', 'deploy', 'proposal', 'repo', 'change'),
+  waitingKind: set('requirement', 'recipe', 'variant', 'question', 'merge', 'deploy', 'proposal', 'repo', 'change'),
   readiness: set('ready', 'not-ready'),
-  readinessKind: set('question-open', 'intent-unapproved', 'low-claim', 'budget'),
-  knowledgeType: set('claim', 'question', 'intent', 'source'),
+  readinessKind: set('question-open', 'requirement-unapproved', 'low-claim', 'budget'),
+  knowledgeType: set('claim', 'question', 'requirement', 'source'),
 });
 
 /** Required content fields per waiting kind (contract v1 "Waiting items"). */
 const CONTENT_NEEDS = {
-  recipe: ['revision', 'text'], intent: ['items'], variant: ['question', 'options'], question: ['question', 'context'],
+  recipe: ['revision', 'text'], requirement: ['items'], variant: ['question', 'options'], question: ['question', 'context'],
   merge: ['report', 'pr'], deploy: ['target', 'what'], proposal: ['title', 'text'], repo: ['product', 'name', 'template'],
   change: ['chain', 'items'],
 };
@@ -213,8 +213,9 @@ function node(n) {
     lastCheck: check(n.last_check),
     attempts: isObj(n.attempts) && int(n.attempts.rounds) !== null
       ? { rounds: n.attempts.rounds, tiers: strs(n.attempts.tiers) } : null,
-    intent: strs(n.intent),
-    journeys: strs(n.journeys),
+    // A goal holds a list, a feature one id.
+    requirements: strs(typeof n.requirements === 'string' ? [n.requirements] : n.requirements),
+    acceptanceTests: strs(n.acceptance_tests),
     dependsOn: strs(n.depends_on),
     blockedBy: strs(n.blocked_by),
     url: url(n.url),
@@ -303,7 +304,7 @@ function goal(g) {
     title: str(g.title),
     readiness: oneOf(g.readiness, VOCAB.readiness, 'readiness'),
     reasons: rows(g.reasons, reason),
-    intent: strs(g.intent),
+    requirements: strs(g.requirements),
     runs: strs(g.runs),
     url: url(g.url),
     updatedAt: ms(g.updated),
@@ -333,8 +334,8 @@ const KNOWLEDGE = {
     question: need(k.question, 'question text'), ask: str(k.ask), status: str(k.status), blocks: strs(k.blocks),
     answer: str(k.answer), for: str(k.for), reason: str(k.reason),
   }),
-  intent: (k) => ({
-    title: need(k.title, 'intent title'), status: str(k.status), because: strs(k.because), approvedBy: str(k.approved_by),
+  requirement: (k) => ({
+    title: need(k.title, 'requirement title'), status: str(k.status), because: strs(k.because), approvedBy: str(k.approved_by),
     approvedOn: str(k.approved_on), sections: isObj(k.sections) ? plain(k.sections) : null, open: strs(k.open),
   }),
   // Headers and summaries only (contract v1 "Knowledge privacy"): a `ref` or a
@@ -470,7 +471,7 @@ export const SHAPES = Object.freeze({
   hello: { contract: 'str?', version: 'str?', oldest: 'str?', served: ['obj'], verbs: ['str'] },
   health: { heartbeatAt: 'ms', hosts: [{ id: 'str', role: 'str?', state: VOCAB.hostState, updatedAt: 'ms?' }], queue: 'int', active: 'int?', windows: 'obj?' },
   products: { products: [{ id: 'str', title: 'str?', url: 'str?', repo: 'str?', updatedAt: 'ms?',
-    goals: [{ id: 'str', title: 'str?', readiness: VOCAB.readiness, intent: ['str'], runs: ['str'], url: 'str?',
+    goals: [{ id: 'str', title: 'str?', readiness: VOCAB.readiness, requirements: ['str'], runs: ['str'], url: 'str?',
       reasons: [{ kind: VOCAB.readinessKind, ref: 'str?', text: 'str', url: 'str?' }] }] }] },
   runs: { runs: [S.runRow] },
   run: { run: { ...S.runRow, tree: ['nullable', [S.node]], gates: [S.gate], prs: [S.pr], report: 'obj?' } },

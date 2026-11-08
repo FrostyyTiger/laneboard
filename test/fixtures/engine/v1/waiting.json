@@ -13,7 +13,7 @@
         "content": {
           "revision": 2,
           "replaces": 1,
-          "text": "---\nid: R-20261101-acme-shop-1/recipe\nrevision: 2\nreplaces: 1\nproduct: acme-shop\ngoal: [I-1, I-2]\nkind: build\npatterns: [build-until-green@1, review-panel@1]\ntiers: {}\nparallel: 2\nrooms: {run: \"8 vCPU, 16 GB, browser\", suite: true}\nbudget: {window_7d_share: 18%, rounds: 18, ask_at: 80%}\ngates: [variant: \"payment step (G1.F1.T4)\", change, merge]\nstop: [done, budget, no-progress: \"2 task rounds without a pass\", errors: \"2 rounds without a session\"]\naccepted_risks: [Q-2]\nstatus: proposed\n---\n## Plan in words\nSame plan as revision 1. The reopened G1.F1.T2 and the re-drafted I-2 add about six rounds, so the round cap goes from 12 to 18\nand the 7-day share from 15% to 18%.\n\n## What is new\nOnly the larger budget.\n",
+          "text": "---\nid: R-20261101-acme-shop-1/recipe\nrevision: 2\nreplaces: 1\nproduct: acme-shop\ngoal: [REQ-1, REQ-2]\nkind: build\npatterns: [build-until-green@1, review-panel@1]\ntiers: {}\nparallel: 2\nrooms: {run: \"8 vCPU, 16 GB, browser\", suite: true}\nbudget: {window_7d_share: 18%, rounds: 18, ask_at: 80%}\ngates: [variant: \"payment step (G1.F1.T4)\", change, merge]\nstop: [done, budget, no-progress: \"2 task rounds without a pass\", errors: \"2 rounds without a session\"]\naccepted_risks: [Q-2]\nstatus: proposed\n---\n## Plan in words\nSame plan as revision 1. The reopened G1.F1.T2 and the re-drafted REQ-2 add about six rounds, so the round cap goes from 12 to 18\nand the 7-day share from 15% to 18%.\n\n## What is new\nOnly the larger budget.\n",
           "accepted_risks": [
             "Q-2"
           ]
@@ -35,7 +35,7 @@
         "opened": "2026-11-01T10:27:22Z",
         "url": "https://git.example.com/foundry/state/blob/main/runs/R-20261101-acme-shop-1/recipe-2.md",
         "updated": "2026-11-01T10:27:22Z",
-        "revision": "sha256:758b02b76a44f28c"
+        "revision": "sha256:8ed771e8d2fc03fd"
       },
       {
         "id": "R-20261101-acme-shop-1/variant-1",
@@ -69,9 +69,9 @@
             "ref": "R-20261101-acme-shop-1:G1.F1.T4"
           },
           {
-            "rel": "intent",
-            "ref": "acme-shop:I-1",
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-1.md"
+            "rel": "requirement",
+            "ref": "acme-shop:REQ-1",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-1.md"
           }
         ],
         "product": "acme-shop",
@@ -84,7 +84,7 @@
         "id": "R-20261101-acme-shop-1/change-1",
         "kind": "change",
         "for": "owner",
-        "title": "Shipping is known from the country: I-2 re-drafted",
+        "title": "Shipping is known from the country: REQ-2 re-drafted",
         "content": {
           "chain": [
             {
@@ -96,14 +96,14 @@
               "what": "superseded by C-11 (flat rate per country)"
             },
             {
-              "ref": "acme-shop:I-2",
+              "ref": "acme-shop:REQ-2",
               "what": "re-drafted: the total can show before the full address"
             }
           ],
           "items": [
             {
-              "type": "intent",
-              "id": "I-2",
+              "type": "requirement",
+              "id": "REQ-2",
               "title": "A buyer sees the full price, shipping included, before paying",
               "status": "draft",
               "because": [
@@ -130,23 +130,24 @@
                 ],
                 "acceptance": [
                   {
-                    "journey": "J-I2-1",
+                    "test": "A-2-1",
                     "text": "Given a cart and an address, when the buyer reaches payment, then the total includes shipping"
                   },
                   {
-                    "journey": "J-I2-2",
+                    "test": "A-2-2",
                     "text": "Given an order, when it is charged, then the charge equals the total shown"
                   }
                 ],
                 "left_to_build": [
                   "where the total sits",
                   "whether shipping is a separate line"
-                ]
+                ],
+                "fixed": []
               },
               "written_by": "agent:impact R-20261101-acme-shop-1",
               "date": "2026-11-01",
               "updated": "2026-11-01T10:03:45Z",
-              "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-2.md"
+              "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-2.md"
             }
           ],
           "touches": [
@@ -166,9 +167,9 @@
             "url": "https://git.example.com/acme/acme-shop/blob/main/discovery/claims/C-4.md"
           },
           {
-            "rel": "intent",
-            "ref": "acme-shop:I-2",
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-2.md"
+            "rel": "requirement",
+            "ref": "acme-shop:REQ-2",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-2.md"
           },
           {
             "rel": "node",
@@ -179,7 +180,7 @@
         "run": "R-20261101-acme-shop-1",
         "opened": "2026-11-01T10:03:45Z",
         "updated": "2026-11-01T10:03:45Z",
-        "revision": "sha256:7fd76a1bbc07a653"
+        "revision": "sha256:b3639c2f54cae60b"
       },
       {
         "id": "R-20261029-acme-shop-1/merge-1",
@@ -187,12 +188,12 @@
         "for": "owner",
         "title": "Product reviews: merge",
         "content": {
-          "report": "## Product reviews\n- I-4: built. J-I4-1 and J-I4-2 green, demos below.\n- Left: nothing. Accepted risks touched: none. Open questions: none.\n- Usage: see the run. Stop reason: done (goal check green).",
+          "report": "## Product reviews\n- REQ-4: built. A-4-1 and A-4-2 green, demos below.\n- Left: nothing. Accepted risks touched: none. Open questions: none.\n- Usage: see the run. Stop reason: done (goal check green).",
           "report_url": "https://git.example.com/foundry/state/blob/main/runs/R-20261029-acme-shop-1/report.md",
           "pr": "https://git.example.com/acme/acme-shop/pull/39",
           "demos": [
-            "https://git.example.com/foundry/state/blob/main/runs/R-20261029-acme-shop-1/demos/J-I4-1.gif",
-            "https://git.example.com/foundry/state/blob/main/runs/R-20261029-acme-shop-1/demos/J-I4-2.gif"
+            "https://git.example.com/foundry/state/blob/main/runs/R-20261029-acme-shop-1/demos/A-4-1.gif",
+            "https://git.example.com/foundry/state/blob/main/runs/R-20261029-acme-shop-1/demos/A-4-2.gif"
           ]
         },
         "links": [
@@ -206,16 +207,16 @@
             "url": "https://git.example.com/acme/acme-shop/pull/39"
           },
           {
-            "rel": "intent",
-            "ref": "acme-shop:I-4",
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-4.md"
+            "rel": "requirement",
+            "ref": "acme-shop:REQ-4",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-4.md"
           }
         ],
         "product": "acme-shop",
         "run": "R-20261029-acme-shop-1",
         "opened": "2026-10-31T16:41:00Z",
         "updated": "2026-10-31T16:41:00Z",
-        "revision": "sha256:ca4b495f15e37ec5"
+        "revision": "sha256:36dd06ae92712b21"
       },
       {
         "id": "R-20261024-acme-shop-1/deploy-1",
@@ -224,7 +225,7 @@
         "title": "Wish list: deploy to production",
         "content": {
           "target": "production",
-          "what": "The wish list (I-3), merged in PR 36 and live on dev since 2026-10-27.",
+          "what": "The wish list (REQ-3), merged in PR 36 and live on dev since 2026-10-27.",
           "pr": "https://git.example.com/acme/acme-shop/pull/36",
           "pipeline": "https://git.example.com/acme/acme-shop/actions/workflows/deploy-prod.yml",
           "preview_url": "https://dev.acme-shop.example.com/wishlist"
@@ -248,18 +249,18 @@
         "run": "R-20261024-acme-shop-1",
         "opened": "2026-10-27T16:20:00Z",
         "updated": "2026-10-27T16:20:00Z",
-        "revision": "sha256:0fd3ab957c3cae81"
+        "revision": "sha256:49ae83eedeeeba63"
       },
       {
-        "id": "acme-shop:I-5",
-        "kind": "intent",
+        "id": "acme-shop:REQ-5",
+        "kind": "requirement",
         "for": "owner",
-        "title": "Approve I-5: a returning buyer finds a past order",
+        "title": "Approve REQ-5: a returning buyer finds a past order",
         "content": {
           "items": [
             {
-              "type": "intent",
-              "id": "I-5",
+              "type": "requirement",
+              "id": "REQ-5",
               "title": "A returning buyer finds a past order",
               "status": "draft",
               "because": [
@@ -286,31 +287,32 @@
                 ],
                 "acceptance": [
                   {
-                    "journey": "J-I5-1",
+                    "test": "A-5-1",
                     "text": "Given three past orders, when the buyer opens past orders, then all three are listed newest first"
                   },
                   {
-                    "journey": "J-I5-2",
+                    "test": "A-5-2",
                     "text": "Given another buyer's order id, when the buyer asks for it, then it is refused"
                   }
                 ],
                 "left_to_build": [
                   "list layout",
                   "search or filter"
-                ]
+                ],
+                "fixed": []
               },
-              "written_by": "agent:intent-writer R-20261013-acme-shop-1",
+              "written_by": "agent:requirements-writer R-20261013-acme-shop-1",
               "date": "2026-10-28",
               "updated": "2026-10-28T12:00:00Z",
-              "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-5.md"
+              "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-5.md"
             }
           ]
         },
         "links": [
           {
-            "rel": "intent",
-            "ref": "acme-shop:I-5",
-            "url": "https://git.example.com/acme/acme-shop/blob/main/intent/I-5.md"
+            "rel": "requirement",
+            "ref": "acme-shop:REQ-5",
+            "url": "https://git.example.com/acme/acme-shop/blob/main/requirements/REQ-5.md"
           },
           {
             "rel": "question",
@@ -322,7 +324,7 @@
         "run": null,
         "opened": "2026-10-28T12:00:00Z",
         "updated": "2026-10-28T12:00:00Z",
-        "revision": "sha256:a8bdf106dbfc3aff"
+        "revision": "sha256:042c1b695a2d1889"
       },
       {
         "id": "acme-shop:Q-3",
@@ -331,9 +333,9 @@
         "title": "Q-3: reorder in one step, or only look up?",
         "content": {
           "question": "Do returning buyers want to reorder in one step, or only to look up an old order?",
-          "context": "If buyers reorder, I-5 needs a \"buy again\" outcome and its acceptance line; if they only look up, I-5 stays as drafted. C-9 rests on one buyer, so G4 is not ready until this is answered.",
+          "context": "If buyers reorder, REQ-5 needs a \"buy again\" outcome and its acceptance line; if they only look up, REQ-5 stays as drafted. C-9 rests on one buyer, so G4 is not ready until this is answered.",
           "blocks": [
-            "I-5",
+            "REQ-5",
             "C-9"
           ]
         },
@@ -353,7 +355,7 @@
         "run": null,
         "opened": "2026-10-28T12:00:00Z",
         "updated": "2026-10-28T12:00:00Z",
-        "revision": "sha256:b61f71f7378d4946"
+        "revision": "sha256:1fe5a35b1325a827"
       },
       {
         "id": "P-4",

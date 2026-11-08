@@ -20,12 +20,12 @@ test('claims, questions, requirements and sources all render; links go both ways
   const cards = byClass(host, 'kn-item');
   assert.equal(cards.length, all.length);
   assert.deepEqual([...new Set(cards.map((c) => c.dataset.type))].sort(), ['claim', 'question', 'requirement', 'source']);
-  const i1 = cards.find((c) => c.dataset.id === 'I-1');
+  const i1 = cards.find((c) => c.dataset.id === 'REQ-1');
   assert.ok(byClass(i1, 'kn-link').some((a) => a.href === '#/knowledge?q=C-1&product=acme-shop'));
   const c1 = cards.find((c) => c.dataset.id === 'C-1');
   assert.match(c1.textContent, /used by/);
-  assert.ok(byClass(c1, 'kn-link').some((a) => a.href === '#/knowledge?q=I-1&product=acme-shop'));
-  assert.ok(backLinks(all).get('C-1').includes('I-1'));
+  assert.ok(byClass(c1, 'kn-link').some((a) => a.href === '#/knowledge?q=REQ-1&product=acme-shop'));
+  assert.ok(backLinks(all).get('C-1').includes('REQ-1'));
 }));
 
 test('no raw source content: no evidence quote, no who, no ref or body even if sent', async () => withDom(async () => {
@@ -41,7 +41,7 @@ test('no raw source content: no evidence quote, no who, no ref or body even if s
 
 test('filters: kind, status, an exact id, text', async () => {
   const all = await items();
-  assert.ok(filterKnowledge(all, { kind: 'requirement' }).every((i) => i.type === 'intent'));
+  assert.ok(filterKnowledge(all, { kind: 'requirement' }).every((i) => i.type === 'requirement'));
   assert.ok(filterKnowledge(all, { status: 'approved' }).every((i) => i.status === 'approved'));
   assert.deepEqual(filterKnowledge(all, { q: 'C-1' }).map((i) => i.id), ['C-1'], 'not C-10 and C-11');
   assert.ok(filterKnowledge(all, { q: 'account' }).length > 1);
@@ -55,10 +55,10 @@ test('hostile text stays text, a hostile url is no link', async () => withDom(as
 
 test('it is a drill-down: routable, never in the nav; product survives the hash', () => {
   assert.ok(HIDDEN_VIEWS.includes('knowledge') && !VIEWS.includes('knowledge'));
-  const r = parseHash('#/knowledge?q=I-5&product=acme-shop');
+  const r = parseHash('#/knowledge?q=REQ-5&product=acme-shop');
   assert.equal(r.product, 'acme-shop');
-  assert.equal(r.q, 'I-5');
-  assert.equal(formatHash(r), '#/knowledge?q=I-5&product=acme-shop');
+  assert.equal(r.q, 'REQ-5');
+  assert.equal(formatHash(r), '#/knowledge?q=REQ-5&product=acme-shop');
   assert.equal(parseHash('#/knowledge?product=..%2Fx').product, undefined);
   assert.deepEqual(parseHash('#/runs'), emptyRoute('runs'), 'other routes have no product key');
 });
