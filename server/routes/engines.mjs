@@ -19,12 +19,16 @@
 // the normal request guards like every route.
 import * as engines from '../engine/index.mjs';
 import { ACCEPTED } from '../engine/contract.mjs';
+import { setEngineRuns } from '../map.mjs';
 
 export const LIST_PATH = '/api/engines';
 export const RUNS_PATH = '/api/engines/runs';
 export const PRODUCTS_PATH = '/api/engines/products';
 export const WAITING_PATH = '/api/engines/waiting';
 const BASE = '/api/engine/:id';
+/** How often the Map's engine runs are read. */
+const MAP_POLL_MS = 15_000;
+let mapPoll = null;
 
 const STATUS = { 'bad-request': 400, 'not-found': 404, unsupported: 404, incompatible: 502, degraded: 502, 'engine-down': 503 };
 
@@ -113,6 +117,17 @@ export const READS = [
 export default {
   name: 'engines',
   modes: ['builder'],
+  start() {
+    if (!engines.list().some((e) => e.kind !== 'jsonl')) return;
+    const read = () => runsBody().then((b) => setEngineRuns(b.runs)).catch(() => {});
+    read();
+    mapPoll = setInterval(read, MAP_POLL_MS);
+    mapPoll.unref?.();
+  },
+  stop() {
+    clearInterval(mapPoll);
+    mapPoll = null;
+  },
   register(ctx) {
     ctx.route('GET', LIST_PATH, async (req, res) => ctx.json(res, await listBody()));
     ctx.route('GET', RUNS_PATH, async (req, res) => ctx.json(res, await runsBody()));

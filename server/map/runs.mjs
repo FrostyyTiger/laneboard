@@ -115,3 +115,67 @@ export function runNodes(runs, { nodes = [], coreId = '__core', now = Date.now()
   }
   return out;
 }
+
+// ------------------------------------------------------------ engine runs
+//
+// Runs from a run engine (docs/engines.md) hang on the rooms they use: the
+// first live room whose name, or else whose host, is a node of the Map; else
+// the core, and the card says the room is not on the Map.
+
+const ENGINE_STATUS = { running: 'working', 'at-gate': 'warn', 'waiting-approval': 'warn', queued: 'idle', paused: 'idle', done: 'idle' };
+const BAD_STOPS = new Set(['errors', 'checks-red']);
+
+function engineStatus(run) {
+  if (run.state === 'stopped') return BAD_STOPS.has(run.stop) ? 'crit' : 'idle';
+  return ENGINE_STATUS[run.state] ?? 'idle';
+}
+
+function hostIndex(nodes) {
+  const hosts = new Map();
+  for (const n of nodes) {
+    if (!n || !HOST_KINDS.has(n.kind)) continue;
+    for (const k of [nameKey(n.label), nameKey(n.id)]) if (k && !hosts.has(k)) hosts.set(k, n.id);
+  }
+  return hosts;
+}
+
+/** Run nodes for `GET /api/engines/runs` rows. A finished run leaves `keepMin` minutes after its end. */
+export function engineRunNodes(runs, { nodes = [], coreId = '__core', now = Date.now(), keepMin = 60, taken = new Set() } = {}) {
+  if (!Array.isArray(runs) || !runs.length) return [];
+  const hosts = hostIndex(nodes);
+  const keepMs = (num(keepMin) ?? 60) * MIN;
+  const out = [];
+  for (const run of runs) {
+    if (typeof run?.id !== 'string' || !run.id) continue;
+    const id = `${PREFIX}${run.id}`;
+    if (taken.has(id)) continue;
+    if (run.state === 'done' || run.state === 'stopped') {
+      const at = num(run.endedAt) ?? num(run.updatedAt);
+      if (keepMs === 0 || at === null || now - at > keepMs) continue;
+    }
+    taken.add(id);
+    const rooms = (Array.isArray(run.rooms) ? run.rooms : []).filter((r) => r?.state !== 'ended');
+    const placed = rooms.map((r) => hosts.get(nameKey(r.name)) ?? hosts.get(nameKey(r.host))).find(Boolean);
+    const names = rooms.map((r) => clip(r.name)).filter(Boolean);
+    const title = clip(run.goalTitle) ?? clip(run.goal);
+    const detail = { Product: clip(run.product), Goal: title, State: run.state };
+    if (run.engine) detail.Engine = clip(run.engine);
+    if (names.length) detail.Rooms = placed ? names.join(', ') : `${names.join(', ')} (not on the Map)`;
+    const stopWhy = run.state === 'stopped' ? `stopped: ${run.stop ?? 'unknown'}` : undefined;
+    out.push({
+      id,
+      kind: 'run',
+      parent: placed ?? coreId,
+      label: run.id,
+      status: engineStatus(run),
+      why: run.state === 'at-gate' ? 'waiting for a decision' : stopWhy,
+      sub: title,
+      run: run.id,
+      goal: title,
+      state: run.state,
+      detail,
+      href: `#/runs?run=${encodeURIComponent(run.key ?? run.id)}`,
+    });
+  }
+  return out;
+}

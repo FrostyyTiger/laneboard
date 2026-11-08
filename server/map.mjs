@@ -25,7 +25,7 @@ import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { fkey, isFkey, BUILDER_ID_RX, deriveCode } from './fleet/keys.mjs';
 import { loadPolicy, reachLinks, parseAddr } from './map/reach.mjs';
-import { runNodes } from './map/runs.mjs';
+import { engineRunNodes, runNodes } from './map/runs.mjs';
 
 export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr', 'builder', 'session', 'repo', 'package', 'run'];
 export const LINK_KINDS = ['dep', 'flow', 'share', 'touch', 'conflict', 'pkg', 'ci'];
@@ -757,7 +757,7 @@ function builderNode(b, parent, lanes, now, { unclaimed }) {
     label: b.code,
     status,
     why,
-    sub: [b.id, plural(total, 'lane'), unclaimed ? 'not in topology' : null].filter(Boolean).join(' · '),
+    sub: [b.id, lanesShown() ? plural(total, 'lane') : null, unclaimed ? 'not in topology' : null].filter(Boolean).join(' · '),
     metrics,
     counts,
     detail: compact({
@@ -834,6 +834,9 @@ function lanePackages(facts, lane) {
   const list = Array.isArray(facts?.packages) ? facts.packages : arr(lane.packages);
   return [...new Set(list.filter((p) => typeof p === 'string' && p.includes('/') && NAME_RX.test(p)))];
 }
+
+/** The lanes flag (docs/lanes-flag.md); a config without it keeps lanes. */
+const lanesShown = () => config.lanes?.enabled !== false;
 
 /**
  * One node per lane of one builder, its status the worst of its sessions,
@@ -1121,7 +1124,7 @@ export function fleetLinks({ lanes = [], overlaps = [], topology = null, builder
 export function buildFleet({
   topology, feeds = new Map(), probes = new Map(), now = Date.now(), topologyError = null, hostname = config.hostname,
   builders = [], repos = [], laneFacts = null, overlaps = [], ciRuns = [], localId = null, feedsOff = false,
-  policy = null, policyError = null, runs = [], runsCfg = config.runs,
+  policy = null, policyError = null, runs = [], engineRuns = [], runsCfg = config.runs,
 } = {}) {
   const topo = withDiscovered(topology, feeds, { coreLabel: topology?.title ?? hostname });
   const fleet = cleanBuilders(builders);
@@ -1223,7 +1226,7 @@ export function buildFleet({
   for (const b of fleet) {
     const parent = anchors.get(b.id);
     const mine = fleetLaneNodes(b.snapshot, {
-      builder: b.id, parent: `builder:${b.id}`, show: topo.lanes?.show ?? 'active', now, laneFacts: facts, stale: b.link !== 'up', ageMs: b.ageMs,
+      builder: b.id, parent: `builder:${b.id}`, show: lanesShown() ? (topo.lanes?.show ?? 'active') : 'none', now, laneFacts: facts, stale: b.link !== 'up', ageMs: b.ageMs,
     });
     const laneList = mine.filter((n) => n.kind === 'lane');
     nodes.push(builderNode(b, parent, laneList, now, { unclaimed: parent === '__fleet' && topology != null }));
@@ -1232,6 +1235,7 @@ export function buildFleet({
   }
   nodes.push(...repoNodes(repos, { parent: coreId }));
   nodes.push(...runNodes(runs, { nodes, coreId, now, keepMin: runsCfg?.mapKeepMin, stuck: runsCfg?.stuck }));
+  nodes.push(...engineRunNodes(engineRuns, { nodes, coreId, now, keepMin: runsCfg?.mapKeepMin, taken: new Set(nodes.map((n) => n.id)) }));
 
   const links = fleetLinks({ lanes, overlaps, topology: topo, builders: fleet, ciRuns, nodeIds: new Set(nodes.map((n) => n.id)) });
   for (const n of lanes) { delete n.branch; delete n.packages; }
@@ -1425,6 +1429,14 @@ export function setRunsSource(fn) {
   runsSource = typeof fn === 'function' ? fn : null;
 }
 
+// The last engine runs (server/routes/engines.mjs polls them; building the Map stays synchronous).
+let engineRunsNow = [];
+
+/** Rows of GET /api/engines/runs to draw on the next tick. */
+export function setEngineRuns(rows) {
+  engineRunsNow = Array.isArray(rows) ? rows : [];
+}
+
 /** Builder mode: rebuild from the latest snapshot. Returns a message worth sending, or null. */
 export function tick(snapshot, now = Date.now()) {
   const t = loadTopology();
@@ -1433,7 +1445,7 @@ export function tick(snapshot, now = Date.now()) {
   const p = loadPolicy(config.map.policyFile);
   let runs = [];
   try { runs = runsSource?.() ?? []; } catch { runs = []; }
-  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on, policy: p.value, policyError: p.error, runs });
+  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on, policy: p.value, policyError: p.error, runs, engineRuns: engineRunsNow });
   return emit(next, feeds, withDiscovered(t.value, feeds, { coreLabel: next.title }), now, 5000);
 }
 

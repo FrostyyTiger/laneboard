@@ -493,6 +493,13 @@ predicted one. The full model is in [fleet/map.md](fleet/map.md).
 
 ## Runs
 
+Runs from a [run engine](engines.md) hang on the rooms they use: the first room
+that has not ended, matched by its name and then its host against the Map's
+nodes. No match puts the run under the core, and its card says the room is not on
+the Map. With [lanes off](lanes-flag.md) the Map has no lane nodes.
+
+The rest of this section is about run files.
+
 Every run the board reads (the runs protocol, [runs.md](runs.md)) is a node,
 `kind: "run"`, id `run:<id>`, linking to its page `#/runs?run=<id>`:
 
