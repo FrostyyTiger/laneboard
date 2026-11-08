@@ -12,7 +12,10 @@
 // session) only in trouble or when the camera is close enough that its dot
 // is big on screen (`dotNamed`). A folded cluster is one name: its site's,
 // in the hue and with the shape of the worst it holds (caption.js GLYPH);
-// once it opens, each thing in trouble names itself.
+// once it opens, each thing in trouble names itself. A planet's name goes
+// just before its own moons' and may stand just outside their ring (night 5
+// T6b: HV1's builders were left unnamed by their lanes in trouble); a moon in
+// trouble that loses its place to it is said by the planet, in its shape and hue.
 //
 // Type (r8-film-ui 1): sites and the sun in the label face, caps, at the
 // Wall's site step (type.js `stepsFor`); planets and dots in mono lowercase
@@ -149,18 +152,22 @@ export const dotNamed = (tone, px) => tone !== 'calm' || px >= DOT_NAMED_PX;
  * planet or dot in trouble) gets two more steps down (a stack under the
  * thing) so a crowd of trouble in an open system still names every one; a
  * site's name never stacks (night 3 T17, r4-film-ui galaxy 7: `■ HV2` two
- * lines under its star read as a second object). Boxes are `{ x, y, w, h }`,
- * top left.
+ * lines under its star read as a second object). `ring` (css px, a planet's
+ * shown moons' reach from its centre, T6b) adds the same four sides again
+ * just outside its moons, for when they take the near ones. Boxes are
+ * `{ x, y, w, h }`, top left.
  */
-export function candidates(x, y, r, w, h, stack = false) {
-  const d = Math.max(0, r) + GAP;
-  const out = [
+export function candidates(x, y, r, w, h, stack = false, ring = 0) {
+  const sides = (d) => [
     { x: x + d, y: y - h / 2, w, h },
     { x: x - d - w, y: y - h / 2, w, h },
     { x: x - w / 2, y: y - d - h, w, h },
     { x: x - w / 2, y: y + d, w, h },
   ];
+  const d = Math.max(0, r) + GAP;
+  const out = sides(d);
   if (stack) for (let i = 1; i <= 2; i++) out.push({ x: x - w / 2, y: y + d + i * (h + GAP / 2), w, h });
+  if (ring > r) out.push(...sides(ring + GAP));
   return out;
 }
 
@@ -207,11 +214,21 @@ export function placeLabels(items, { W = Infinity, H = Infinity, edge = 0, cover
     || ((was?.has(b.id) ? 1 : 0) - (was?.has(a.id) ? 1 : 0))
     || ((b.near ?? 0) - (a.near ?? 0))
     || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  // A planet's name goes just before the first of its own moons' (T6b): a
+  // builder is not left unnamed by its lanes in trouble, which sit a few px
+  // off it and would otherwise take every side. Their red shapes stay theirs.
+  const byId = new Map(items.map((it) => [it.id, it]));
+  const ordered = new Set();
+  for (const it of order) {
+    const host = it.host != null ? byId.get(it.host) : null;
+    if (host) ordered.add(host);
+    ordered.add(it);
+  }
   const taken = covers.map(boxOf).filter(Boolean);
   const shown = new Map();
   const free = (b, id, solid) => inside(b, W, H, edge) && !taken.some((t) => overlaps(b, t))
     && !(solid && bodies.some((o) => o.owner !== id && overlaps(b, o)));
-  for (const it of order) {
+  for (const it of ordered) {
     const cs = it.cands ?? [];
     const tries = Number.isInteger(it.prefer) && cs[it.prefer] ? [it.prefer, ...cs.keys()] : [...cs.keys()];
     // Trouble that finds no side clear of the spheres takes one over a sphere:
@@ -310,6 +327,26 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     return { x, y, unit };
   };
 
+  // A planet id → `{ reach, tone, ids }` of its moons that are drawn and named
+  // (in trouble, or tappable while open): the css px they reach from its
+  // centre (their own radius included), the worst tone of the ones in trouble
+  // and those ones' ids.
+  const ringsOf = (s, W, H) => {
+    const out = new Map();
+    for (const m of s.members) {
+      const h = m.moon?.host;
+      const tone = m.tone ?? toneOf(m.node);
+      if (!h?.mesh || !(troubled(tone) || m.tappable)) continue;
+      const a = project(h.mesh.position, W, H), b = project(m.mesh.position, W, H);
+      if (!a || !b) continue;
+      const ring = out.get(h.id) ?? { reach: 0, tone: 'calm', ids: [] };
+      ring.reach = Math.max(ring.reach, Math.hypot(b.x - a.x, b.y - a.y) + (m.radius ?? 4) * b.unit);
+      if (troubled(tone)) { ring.tone = worseTone(ring.tone, tone); ring.ids.push(m.id); }
+      out.set(h.id, ring);
+    }
+    return out;
+  };
+
   const draw = () => {
     const w = galaxy.world;
     const { W, H } = sizeOf(galaxy);
@@ -324,8 +361,9 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     const to = flightNow()?.to;
     const dimOf = (site) => typeof to === 'string' && site !== to;
     const bodies = [];
+    let rings = new Map();
     const body = (id, sp, r) => { if (r >= 2) bodies.push({ x: sp.x - r, y: sp.y - r, w: 2 * r, h: 2 * r, owner: id }); };
-    const add = (id, node, pos, radius, alpha, kind = node?.kind, toneIn = null, site = null) => {
+    const add = (id, node, pos, radius, alpha, kind = node?.kind, toneIn = null, site = null, host = null, rankIn = null) => {
       const tone = toneIn ?? toneOf(node);
       const sp = project(pos, W, H);
       if (!sp) return;
@@ -334,16 +372,21 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       const isHeld = id === lock?.id;
       const face = labelFace(kind, tone, isHeld);
       const text = labelText(node, tone, face);
+      // A planet whose own moon in trouble may go unnamed for it (T6b) then
+      // carries that moon's shape and hue, so its box is kept that wide.
+      const ring = rings.get(id);
+      const alt = ring && troubled(ring.tone) && !troubled(tone)
+        ? { text: labelText(node, ring.tone, face), tone: ring.tone, ids: ring.ids } : null;
       // A site or the sun names a place; a countdown belongs to the thing it runs on.
       const count = kind === 'site' || kind === 'core' ? null : labelCount(node, t);
-      const { w: bw, h: bh } = labelBox(text, face, steps, count);
-      const rank = labelRank(kind, tone);
+      const { w: bw, h: bh } = labelBox(alt?.text ?? text, face, steps, count);
+      const rank = rankIn ?? labelRank(kind, tone);
       const r = isHeld ? Math.max(radius * sp.unit, lock.r) : radius * sp.unit;
       body(id, sp, r);
       // The plate's hero says its name already (T20): its brackets and the leader point at it.
       if (id === said) return;
-      items.push({ id, rank, near: r, prefer: last.get(id)?.at, cands: candidates(sp.x, sp.y, r, bw, bh, stacks(kind, rank)) });
-      meta.set(id, { text, tone, face, alpha, dim: dimOf(site), count });
+      items.push({ id, rank, near: r, host, prefer: last.get(id)?.at, cands: candidates(sp.x, sp.y, r, bw, bh, stacks(kind, rank), ring?.reach ?? 0) });
+      meta.set(id, { text, tone, face, alpha, dim: dimOf(site), count, alt });
     };
 
     if (w.core) add(w.core.id, w.core, { x: 0, y: 0, z: 0 }, w.sunRadius ?? 60, 1, 'core');
@@ -358,6 +401,8 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       const folded = fade <= 0;
       add(s.id, s.node, s.home, s.starRadius ?? 24, 1, 'site', folded ? worseTone(toneOf(s.node), toneOf(s.status)) : toneOf(s.node), s.id);
       if (folded) continue;
+      // How far each planet's shown moons reach on screen (T6b: its name may stand past them).
+      rings = ringsOf(s, W, H);
       for (const m of s.members) {
         const t = m.tone ?? toneOf(m.node);
         const trouble = troubled(t);
@@ -365,10 +410,19 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
           add(m.id, m.node, m.mesh.position, m.radius ?? 15, trouble ? 1 : fade, m.node?.kind, null, s.id);
           continue;
         }
+        // A folded calm moon (scene.js MOON, T7) is unnamed: its planet's name stands for it.
+        if (m.moon && !trouble && !m.tappable) continue;
+        // A ring a finger opened (scene.js openMoons, T8) is what it asked to read: its calm moons are
+        // named at any size, next after trouble, before the system's other planets the ring now overlaps,
+        // and stand their names off the size they are drawn at there (MOON.calm, not the folded one).
+        const picked = m.moon && m.tappable && !trouble ? RANK.site : null;
+        const radius = picked != null && m.mesh.geometry?.parameters ? m.mesh.scale.x * m.mesh.geometry.parameters.radius : m.radius ?? 4;
         const sp = project(m.mesh.position, W, H);
         if (!sp) continue;
-        if (!dotNamed(t, 2 * (m.radius ?? 4) * sp.unit)) { body(m.id, sp, (m.radius ?? 4) * sp.unit); continue; }
-        add(m.id, m.node, m.mesh.position, m.radius ?? 4, trouble ? 1 : fade, m.node?.kind, null, s.id);
+        if (picked == null && !dotNamed(t, 2 * radius * sp.unit)) { body(m.id, sp, radius * sp.unit); continue; }
+        // A moon's planet (scene.js keeps the member, a bare layout its id): named first (T6b).
+        const host = m.moon ? (m.moon.host?.id ?? m.moon.host ?? null) : null;
+        add(m.id, m.node, m.mesh.position, radius, trouble ? 1 : fade, m.node?.kind, null, s.id, host, picked);
       }
     }
 
@@ -376,7 +430,10 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     const shown = placeLabels(items, { W, H, edge: edgeOf(W, H), covers: covers(), was, bodies });
     for (const [id, { box, at }] of shown) {
       const m = meta.get(id);
-      const p = spanFor(id, m.text, m.tone, m.face, m.dim, m.count, at);
+      // A moon in trouble that lost its place to its planet's name (T6b): the
+      // planet says it with the moon's shape (the plate's hero is said there).
+      const lost = m.alt?.ids.some((x) => meta.has(x) && !shown.has(x));
+      const p = spanFor(id, lost ? m.alt.text : m.text, lost ? m.alt.tone : m.tone, m.face, m.dim, m.count, at);
       const key = `${box.x.toFixed(1)},${box.y.toFixed(1)}`;
       if (key !== p.key) { p.el.style.transform = `translate3d(${key.replace(',', 'px, ')}px, 0)`; p.key = key; }
       const a = Math.round(m.alpha * 20) / 20;

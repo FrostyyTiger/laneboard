@@ -319,6 +319,11 @@ function setLine(line, w) {
  * night 3 T4/T30): `data-plate` on `root`, and wall.css sets the far line on
  * one line at the hero's second-line step (night 4 T19) under a crit plate
  * only, so a trouble frame has one headline and the worst thing stays the loudest.
+ * `hold(tone)` says the camera holds a site, in the tone of its worst (false
+ * when it holds none; galaxy hud.js, night 5 T23): `data-hold` on `root`, and
+ * wall.css steps the far line down by the hold, plate up or not: one line
+ * over a crit, one step (`STEPS.heroMin`) over a calm one, its 3 m size over
+ * a warn (the worst thing stays the loudest, night 3 T30).
  * `update(model, { echo: true })` says the line names the plate's own
  * subject (night 3 T20): `data-echo` on the line, and wall.css drops it
  * while the plate is up (`hushed()`, when it covers nothing). `echo: 'why'`
@@ -495,5 +500,14 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     farDirty = true;
   };
 
-  return { update, live, fresh, note, tagCover, clockCover, stop, cover, plate, hushed, el: { vignette, tag, tagNote, clock, fleet, more, subMore } };
+  // The camera's hold (galaxy T23): the far line changes size with it too (wall.css), so its box is read again.
+  const hold = (tone) => {
+    const t = tone ? (typeof tone === 'string' ? tone : 'grey') : null;
+    if ((root.dataset.hold ?? null) === t) return;
+    if (t) root.dataset.hold = t;
+    else delete root.dataset.hold;
+    farDirty = true;
+  };
+
+  return { update, live, fresh, note, tagCover, clockCover, stop, cover, plate, hold, hushed, el: { vignette, tag, tagNote, clock, fleet, more, subMore } };
 }

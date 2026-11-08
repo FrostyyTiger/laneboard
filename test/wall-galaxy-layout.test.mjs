@@ -6,9 +6,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  armPoint, dustPoints, farStars, galaxyLayout, foldAt, ease, hash, rng,
-  CLOSED, MIN_SITE_GAP, SITE_LIFT, TILT,
+  armPoint, armSpine, dustPoints, farStars, galaxyLayout, foldAt, ease, hash, rng, siteSpot,
+  ARM, ARM_BAND, ARM_RIBBON, CLOSED, MIN_SITE_GAP, ROOM, SITE_LIFT, SPREAD, TIGHT, TILT,
 } from '../public/js/wall/galaxy/layout.js';
+import { OVERVIEW_MARGIN, SIZE } from '../public/js/wall/galaxy/scene.js';
+import { NEBULA } from '../public/js/wall/galaxy/palette.js';
+import { tourSites } from '../public/js/wall/tour.js';
 
 const FLEET = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
 
@@ -49,12 +52,89 @@ test('arms: a site added at the end leaves the others where they were', () => {
   for (let i = 0; i < 6; i++) assert.deepEqual(armPoint(i, 6), armPoint(i, 7));
 });
 
-test('arms: alternate sites sit on opposite arms, each farther out than the last on its arm', () => {
+test('arms: alternate sites sit on opposite arms, each farther out than the last', () => {
   const r = (p) => Math.hypot(p.x, p.z);
-  for (let i = 0; i + 2 < 12; i++) assert.ok(r(armPoint(i + 2, 12)) > r(armPoint(i, 12)));
-  const a = armPoint(0, 2), b = armPoint(1, 2);
-  assert.ok(Math.abs(a.x + b.x) < 1e-9 && Math.abs(a.z + b.z) < 1e-9, 'the first two face each other');
+  for (let i = 0; i + 1 < 12; i++) assert.ok(r(armPoint(i + 1, 12)) > r(armPoint(i, 12)), `site ${i + 1} beyond ${i}`);
+  for (let i = 0; i < 12; i++) {
+    assert.equal(siteSpot(i).arm, i % 2);
+    assert.deepEqual(armPoint(i, 12), armSpine(siteSpot(i).arm, siteSpot(i).t));
+  }
   assert.equal(armPoint(4, 6).y, 0);
+});
+
+test('arms: the rosette (night 5 A2), a site every 72° round the sun', () => {
+  const deg = (p) => (((Math.atan2(p.z, p.x) * 180) / Math.PI) % 360 + 360) % 360;
+  const angles = [0, 1, 2, 3, 4].map((i) => deg(armPoint(i, 5)));
+  // In site order each next one is a fifth of a turn on.
+  for (let i = 0; i + 1 < 5; i++) {
+    const step = (((angles[i + 1] - angles[i]) % 360) + 360) % 360;
+    assert.ok(Math.abs(step - 216) < 1e-6 || Math.abs(step - 72) < 1e-6, `site ${i} to ${i + 1}: ${step}°`);
+  }
+  const sorted = [...angles].sort((a, b) => a - b);
+  for (let i = 0; i < 5; i++) {
+    const gap = ((sorted[(i + 1) % 5] - sorted[i]) % 360 + 360) % 360;
+    assert.ok(Math.abs(gap - 72) < 1e-6, `five sites stand 72° apart, saw ${gap}°`);
+  }
+});
+
+test('arms: all sites level, on the plane', () => {
+  for (const nodes of [FLEET, fleet(3), fleet(12)]) {
+    for (const s of galaxyLayout(nodes).sites) assert.equal(s.home.y, 0, `${s.id} is level`);
+  }
+});
+
+test('arms: only shown sites take the slots, in model order; a hidden one leaves no gap', () => {
+  const nodes = fleet(6);
+  const all = galaxyLayout(nodes).sites;
+  const shown = ['site-0', 'site-2', 'site-3', 'site-5'];
+  const g = galaxyLayout(nodes, 16 / 9, shown);
+  const at = (id) => g.sites.find((s) => s.id === id).home;
+  shown.forEach((id, slot) => assert.deepEqual(at(id), { ...armPoint(slot, 6), y: 0 }, `${id} takes slot ${slot}`));
+  // The hidden ones follow, farther out, in model order.
+  assert.deepEqual(at('site-1'), { ...armPoint(4, 6), y: 0 });
+  assert.deepEqual(at('site-4'), { ...armPoint(5, 6), y: 0 });
+  // Sites keep model order in the list, and without `shown` every site keeps its own slot.
+  assert.deepEqual(g.sites.map((s) => s.id), all.map((s) => s.id));
+  all.forEach((s, i) => assert.deepEqual(s.home, { ...armPoint(i, 6), y: 0 }));
+  // The large demo's hidden repo index (calm) goes last, so the five shown sites take slots 0-4.
+  const ids = tourSites(FLEET).map((s) => s.id);
+  assert.equal(ids.length, 5);
+  const big = galaxyLayout(FLEET, 16 / 9, ids);
+  ids.forEach((id, slot) => assert.deepEqual(big.sites.find((s) => s.id === id).home, { ...armPoint(slot, 6), y: 0 }));
+});
+
+test('arms: an open system never reaches the sun\'s halo, on the large demo and 1 to 12 sites', () => {
+  const halo = SIZE.sunHalo / 2;
+  for (const nodes of [FLEET, ...Array.from({ length: 12 }, (_, i) => fleet(i + 1))]) {
+    const ids = tourSites(nodes).map((s) => s.id);
+    for (const s of galaxyLayout(nodes, 16 / 9, ids).sites) {
+      const d = Math.hypot(s.home.x, s.home.y, s.home.z);
+      assert.ok(d > s.reach + halo, `${s.id}: star ${d.toFixed(0)} out, open reach ${s.reach.toFixed(0)} + halo ${halo}`);
+    }
+  }
+});
+
+test('spacing half (night 5 A1): arms, gaps, ribbon and dust at 0.5x, nebulae and sun halo 0.64x, spread 0.75x', () => {
+  assert.deepEqual({ ...TIGHT }, { arm: 0.5, neb: 0.64, spread: 0.75 });
+  assert.equal(ARM.r0, 1250 * TIGHT.arm * ROOM.arms, 'and out again with the room (B1)');
+  assert.ok(ARM.step >= MIN_SITE_GAP / 2.5, 'a lapped rosette keeps the gap');
+  assert.ok(Math.abs(ARM.turn - (2 * Math.PI) / 5) < 1e-12);
+  assert.equal(SITE_LIFT, 130 * TIGHT.arm);
+  assert.equal(MIN_SITE_GAP, 700 * TIGHT.neb);
+  assert.equal(SPREAD, 2.2 * TIGHT.spread * ROOM.spread);
+  assert.equal(ARM_RIBBON.half, 90 * TIGHT.arm);
+  assert.equal(ARM_RIBBON.grow, 16 * TIGHT.arm);
+  assert.equal(ARM_RIBBON.maxHalf, 170 * TIGHT.arm);
+  assert.equal(ARM_BAND.half, 55 * TIGHT.arm);
+  assert.equal(SIZE.sunHalo, 640 * TIGHT.neb);
+  assert.equal(OVERVIEW_MARGIN, 400 * TIGHT.arm * ROOM.arms);
+  assert.deepEqual([NEBULA.calm.size, NEBULA.low.size, NEBULA.warn.size, NEBULA.crit.size], [520, 560, 640, 680].map((x) => x * TIGHT.neb));
+  // The nebulae never meet: the gap holds the largest one.
+  assert.ok(Math.max(...Object.values(NEBULA).map((n) => n.size)) <= MIN_SITE_GAP);
+  const d = dustPoints(2000);
+  let far = 0;
+  for (let i = 0; i < 2000; i++) far = Math.max(far, Math.hypot(d.positions[i * 3], d.positions[i * 3 + 2]));
+  assert.ok(far < 1000 * ROOM.arms, `the dust band is half as wide, out with the arms (B1): ${far.toFixed(0)}`);
 });
 
 test('arms: no two sites closer than the minimum, for 1 to 12 sites and the large demo', () => {

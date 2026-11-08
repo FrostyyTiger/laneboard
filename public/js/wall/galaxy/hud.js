@@ -319,6 +319,8 @@ export function plateFollows(was, now) {
  * words take over the canvas (for the labels, T6; the tag top right since T18,
  * so neither a name nor a held planet sits on it; the warn-step fleet line
  * too), `fleetCover()` the fleet line's at either step, `tagCover()` the tag's alone.
+ * `hold(id)` is the site the camera holds (null when none), each frame: the
+ * frame's `hold(tone)` follows it (T23).
  * `size()` is the stage's css size (stage.js, the scene's `size`); the line's
  * and the tag's boxes are read again only when it or their words change
  * (T29: both are asked for twice a frame, after the lock's style writes).
@@ -357,6 +359,16 @@ export function createHud({ caption, frame, tour = null, touring = null, lock = 
   let plateOn = false, heroId = null;
   // The feed's state (fresh.js), the last one given.
   let feedState = null;
+  // The site the camera holds and the model its tone was read from (`holdAt`, T23).
+  let holdSite = null, holdFor = null;
+  const holdAt = (id) => {
+    const site = id ?? null;
+    if (site === holdSite && latest === holdFor) return;
+    holdSite = site;
+    holdFor = latest;
+    const node = legNode({ kind: 'site', id: site }, latest);
+    frame.hold?.(node ? (captionLines(node, latest).lines.find((l) => l.kind === 'trouble')?.tone ?? 'grey') : false);
+  };
   // `tone` is the plate's ('crit', 'warn', 'grey'; false for none): only a
   // crit plate steps the crit banner down (T30), a milder one leaves it loudest.
   // The tone the waiting plate takes when its timer fires (a newer model may change it, T24).
@@ -527,6 +539,7 @@ export function createHud({ caption, frame, tour = null, touring = null, lock = 
       }
       feed();
       follow();
+      holdAt(holdSite);
     },
     live: (on) => frame.live(Boolean(on)),
     fresh: (f) => {
@@ -538,6 +551,10 @@ export function createHud({ caption, frame, tour = null, touring = null, lock = 
     park: (leg) => say({ arriveMs: 0, ...leg, kind: 'site' }),
     // A finger took the camera (night 3 T7, touch.js): the words of an overview leg, no plate, no lock.
     release: () => say({ kind: 'overview' }),
+    // The site the camera holds now (landed on it, null at the overview, in a flight or a free pose;
+    // night 5 T23, r10-film-ui 3): the banner's step follows the camera, not the plate (frame.hold,
+    // wall.css), in the tone of the site's worst; a newer model reads the tone again.
+    hold: holdAt,
     // A finger tapped a site (night 3 T10) or a planet in an open system (T11): its sheet (every line,
     // sheetCaption) as the camera gets there, its brackets at once.
     open: (leg) => say({ arriveMs: 0, ...leg, kind: 'site', lockMs: 0, cut: true, sheet: true }),

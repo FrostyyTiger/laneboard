@@ -77,9 +77,15 @@ html.wall body {
    colour with its shape. The plate's fades and the typing run in script
    (the plan's motion, README §3); nothing here transitions.
    On a site in trouble (T20) the trouble word leads at the 3 m step (14vmin,
-   fitted to the plate by caption.js `heroSize`, 9 at the least), its why
-   under it at 4.3, the name at 6.9 under that; facts drop to the key step
-   below a gap. The numbers are caption.js `STEPS`.
+   fitted to the plate by caption.js `heroSize`, 9 at the least); its why and
+   the name under it share the subject step (5.6), the count and the next
+   problems the fact step (3.6), white with only their shape and label in
+   hue (night 5 T24: three levels, not four sizes). Facts drop to the key step
+   below a gap. A long line wraps, it is never cut: every text's line height
+   is its row's, so a wrapped row is a whole number of rows tall; caption.js
+   counts them once a leg into `--lines` (each box stays an exact height, as
+   `plateHeight` adds up), and rows that would run past the frame's clock give way
+   to `+N MORE` (`fitPlate`). The numbers are caption.js `STEPS`.
    --------------------------------------------------------------------------- */
 
 .wall-caption-layer {
@@ -127,8 +133,9 @@ html.wall body {
 .wall-caption[data-status="attention"]::before,
 .wall-caption[data-status="attention"]::after { border-color: var(--warn); }
 
-/* A trouble plate may run wider: the word is the point (caption.js HERO_PLATE). */
-.wall-caption[data-hero] { max-width: 56vw; }
+/* A trouble plate may run wider: the word is the point (caption.js HERO_PLATE).
+   Its name steps down to the subject's size beside the why (T24). */
+.wall-caption[data-hero] { max-width: 56vw; --cap-name: 5.6vmin; }
 
 .wall-caption-hero {
   --cap-hero: 14vmin;
@@ -145,7 +152,7 @@ html.wall body {
   gap: 0.25em;
   font-family: var(--font-label);
   font-weight: 600;
-  height: calc(var(--cap-hero) * 0.86);
+  height: calc(var(--cap-hero) * 0.86 * var(--lines, 1));
   font-size: var(--cap-hero);
   line-height: 0.86;
   letter-spacing: 0.04em;
@@ -155,22 +162,21 @@ html.wall body {
 .wall-caption-hero-word .wall-caption-glyph { font-size: 0.62em; }
 .wall-caption-hero-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .wall-caption-hero-sub {
-  height: 4.3vmin;
+  height: calc(5.6vmin * var(--lines, 1));
   margin-top: 0.9vmin;
   font-family: var(--font-label);
   font-weight: 600;
-  font-size: 4.3vmin;
+  font-size: 5.6vmin;
   line-height: 1;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 .wall-caption-hero-sub[hidden] { display: none; }
 
@@ -195,7 +201,7 @@ html.wall body {
 .wall-caption-kicker .wall-caption-glyph[hidden] { display: none; }
 
 .wall-caption-name {
-  height: calc(var(--cap-name) * 0.92);
+  height: calc(var(--cap-name) * 0.92 * var(--lines, 1));
   margin: 0.9vmin 0 1.6vmin;
   font-family: var(--font-label);
   font-weight: 600;
@@ -203,7 +209,7 @@ html.wall body {
   line-height: 0.92;
   letter-spacing: 0.04em;
   color: var(--text-1);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* The letters still to type hold their place, so the plate never widens
@@ -238,7 +244,7 @@ html.wall body {
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   align-items: baseline;
-  height: 3.2vmin;
+  height: calc(3.2vmin * var(--lines, 1));
 }
 .wall-caption-lines > .wall-caption-line[hidden] { display: none; }
 
@@ -258,21 +264,25 @@ html.wall body {
   font-family: var(--font-label);
   font-weight: 500;
   font-size: var(--cap-line);
-  line-height: 1.15;
+  line-height: 3.2vmin;
   letter-spacing: 0.02em;
   color: var(--text-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 /* Facts on a trouble plate: the key step for key and value, a gap above. */
 .wall-caption-line[data-step="line"] + .wall-caption-line[data-step="small"] { margin-top: 1.6vmin; }
-.wall-caption-line[data-step="small"] { height: 2.3vmin; }
+.wall-caption-line[data-step="small"] { height: calc(2.3vmin * var(--lines, 1)); }
 .wall-caption-line[data-step="small"] .wall-caption-val {
   font-size: var(--cap-key);
-  line-height: 1.3;
+  line-height: 2.3vmin;
   color: var(--text-3);
+}
+/* Rows that gave way to the frame (T24): the banner's `+N MORE` voice. */
+.wall-caption-line[data-kind="more"] .wall-caption-val {
+  font-family: var(--font-mono);
+  letter-spacing: 0.12em;
 }
 
 .wall-caption-line[data-kind="trouble"] > *,
@@ -282,15 +292,18 @@ html.wall body {
 .wall-caption-line[data-kind="trouble"][data-tone="low"] > *,
 .wall-caption-line[data-kind="problem"][data-tone="low"] > * { color: var(--info); }
 .wall-caption-line[data-kind="trouble"] .wall-caption-val { font-weight: 600; }
+/* A named problem's words are white; its shape and status word carry the hue (T24). */
+.wall-caption-line[data-kind="problem"] .wall-caption-val { color: var(--text-1); }
 .wall-caption-glyph { font-size: var(--cap-line); line-height: 1; }
 
 /* The count and the named problems on a trouble plate (T23, r17-operator 9):
-   the values at the why's step and face, so the why carries from 3 m; the
-   keys stay at the key step. The count's parts each in their own hue. */
-.wall-caption-line[data-step="trouble"] { height: 4.3vmin; }
+   the values at the fact step (T24, under the why's subject step) and the
+   why's face; the keys stay at the key step. The count's parts each in
+   their own hue. */
+.wall-caption-line[data-step="trouble"] { height: calc(3.6vmin * var(--lines, 1)); }
 .wall-caption-line[data-step="trouble"] .wall-caption-val {
   font-weight: 600;
-  font-size: 4.3vmin;
+  font-size: 3.6vmin;
   line-height: 1;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -607,6 +620,42 @@ html.wall body {
    that drops out; `2 CRIT · HV2 · HV1` stays the line, the other crit in sight. */
 .wall-frame-layer[data-plate] .wall-fleet[data-echo=""] { visibility: hidden; }
 .wall-frame-layer[data-plate] .wall-fleet[data-echo="why"] .wall-fleet-sub-why { visibility: hidden; }
+/* One hero per held frame (night 5 T23, r10-film-ui 3): the step follows the
+   camera, not the plate. From the moment the camera lands on a site (galaxy
+   hud.js sets data-hold to the tone of its worst; a tour hold, a tapped site
+   with its card, a parked still) until it leaves it, plate up or not:
+   - over a crit hold the far line is the one-line size it takes under a crit
+     plate (T19 above), so the frames before the plate types match the ones after;
+   - over a calm hold it drops one step, to the hero's least (caption.js
+     STEPS.heroMin), still a clear step above the calm name (night 3 T22);
+   - over a warn hold it keeps its 3 m size: the crit elsewhere is the worst
+     thing, so it stays the loudest (night 3 T30, README §2.1).
+   Flights, the overview and a free pose have no data-hold: the 3 m size. */
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  max-width: calc(64vw + 2.4vmin + var(--frame-x));
+}
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-line {
+  flex: none;
+  font-size: var(--cap-why);
+  line-height: 1;
+}
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub {
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  gap: 0;
+}
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub .wall-fleet-more { margin-left: 2.4vmin; }
+.wall-frame-layer[data-hold="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub-why::before {
+  content: "·";
+  margin: 0 0.25em;
+}
+.wall-frame-layer[data-hold="grey"] .wall-fleet[data-step="far"] .wall-fleet-line {
+  font-size: min(var(--fleet-far), 9vmin);
+}
 .wall-fleet-sub {
   display: flex;
   justify-content: flex-end;
@@ -813,7 +862,11 @@ html.wall body {
 /* ▶ is drawn smaller than ‹ at the same size: it takes the word's cap height. */
 .galaxy-back[data-kind="tour"] .galaxy-back-glyph { font-size: 0.8em; margin-top: 0; }
 
-/* The fan (night 4 T3, js/wall/galaxy/fan.js): the planets under one finger
+/* Unused since night 5 T11 (no picker: touch.js hitNearest; fan.js is gone,
+   galaxy.html's #galaxy-fan stays hidden until the cockpit drops it). Kept
+   unchanged, as night 5 asks of wall.css's existing rules; --fan-px, which
+   fan.js set, is given its old floor by an added rule below the block.
+   The fan (night 4 T3, js/wall/galaxy/fan.js): the planets under one finger
    as rows round it, for the next tap. Each row is a target of FAN.rowPx (48
    css px, night 2's floor) in the names' mono at --fan-px (fan.js measures
    the widths from it); the left arc set flush to the finger, as the right.
@@ -877,6 +930,8 @@ html.wall body {
 .galaxy-fan-leader[data-tone="crit"] { background: var(--crit); }
 .galaxy-fan-leader[data-tone="warn"] { background: var(--warn); }
 .galaxy-fan-leader[data-tone="low"] { background: var(--p3); }
+/* Night 5 T11: fan.js no longer sets the rows' size; the unused block keeps its old 18 px floor. */
+.galaxy-fan { --fan-px: 18px; }
 
 /* Show commands (cockpit c4-show-canvas.md §3, D72, D73; js/wall/galaxy/show.js): what the
    agent points at. A highlight is four 2 px accent corner brackets per node (12 px arms, 8 px
@@ -1060,3 +1115,326 @@ html.wall body {
   .wall-tag { top: calc(8vh - 4.6vmin); }
   .galaxy-manual { top: calc(8vh - 1.9vmin); }
 }
+
+/* ---------------------------------------------------------------------------
+   The node card (night 5 T17, js/wall/galaxy/card.js): a tapped planet or
+   moon's card, beside it or docked right (card.js cardPlace writes its
+   transform), joined to it by a 1 px leader and a ring on the node. Grey
+   glass from tokens: nothing on it is loud unless the node is (its dot).
+   The header on the plate's scale: the name in the condensed caps face, the
+   kind in the tag's mono and tracking. The × is a 48 px target (D224).
+   T18-T20 fill it and give it its manners.
+   --------------------------------------------------------------------------- */
+.galaxy-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 360px;
+  box-sizing: border-box;
+  padding: 4px 4px 12px 16px;
+  color: var(--text-1);
+  background: color-mix(in oklch, var(--bg-canvas) 88%, transparent);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--line-strong);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
+}
+.galaxy-card[hidden] { display: none; }
+.galaxy-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+}
+.galaxy-card-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.galaxy-card[data-tone="crit"] .galaxy-card-dot { background: var(--crit); }
+.galaxy-card[data-tone="warn"] .galaxy-card-dot { background: var(--warn); }
+.galaxy-card[data-tone="low"] .galaxy-card-dot { background: var(--p3); }
+.galaxy-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.galaxy-card-kind {
+  flex: none;
+  padding: 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+}
+.galaxy-card-x {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  margin-left: auto;
+  padding: 0;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--text-2);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.galaxy-card-x:active { color: var(--text-1); background: color-mix(in oklch, var(--text-1) 14%, transparent); }
+.galaxy-card-x:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
+.galaxy-card-leader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--text-3);
+  transform-origin: 0 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+.galaxy-card-spot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  box-sizing: border-box;
+  border: 1px solid var(--text-2);
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+.galaxy-card-leader[hidden],
+.galaxy-card-spot[hidden] { display: none; }
+/* The card's words (night 5 T18, card.js describe): one scale under the 24 px name, 20 / 15 / 11 px;
+   grey but for the status word, a problem's mark and word, an off value and a chip in trouble. */
+.galaxy-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 12px 0 0;
+}
+.galaxy-card-path {
+  margin-top: -6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.galaxy-card-status,
+.galaxy-card-problem {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 20px;
+}
+.galaxy-card-word {
+  flex: none;
+  font-family: var(--font-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+}
+.galaxy-card-why {
+  min-width: 0;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.galaxy-card-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.galaxy-card-glyph {
+  flex: none;
+  width: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.galaxy-card-more,
+.galaxy-card-chip-more {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+}
+.galaxy-card-more { padding-left: 20px; }
+.galaxy-card-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.galaxy-card-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.galaxy-card-stat[data-wide] { grid-column: span 2; }
+.galaxy-card-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.galaxy-card-value {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 24px;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.galaxy-card-below {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.galaxy-card-below > .galaxy-card-label { flex: 0 0 100%; }
+.galaxy-card-chip {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 12px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-1);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.galaxy-card-chip:active { background: color-mix(in oklch, var(--text-1) 14%, transparent); }
+.galaxy-card-chip:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
+.galaxy-card-chip-more { padding: 0 6px; }
+.galaxy-card-status > .galaxy-card-word[data-tone="crit"],
+.galaxy-card-problem[data-tone="crit"] > .galaxy-card-glyph,
+.galaxy-card-problem[data-tone="crit"] > .galaxy-card-word,
+.galaxy-card-value[data-tone="crit"] { color: var(--crit); }
+.galaxy-card-status > .galaxy-card-word[data-tone="warn"],
+.galaxy-card-problem[data-tone="warn"] > .galaxy-card-glyph,
+.galaxy-card-problem[data-tone="warn"] > .galaxy-card-word,
+.galaxy-card-value[data-tone="warn"] { color: var(--warn); }
+.galaxy-card-status > .galaxy-card-word[data-tone="low"],
+.galaxy-card-problem[data-tone="low"] > .galaxy-card-glyph,
+.galaxy-card-problem[data-tone="low"] > .galaxy-card-word,
+.galaxy-card-value[data-tone="low"] { color: var(--p3); }
+.galaxy-card-chip[data-tone="crit"] { border-color: var(--crit); }
+.galaxy-card-chip[data-tone="warn"] { border-color: var(--warn); }
+.galaxy-card-chip[data-tone="low"] { border-color: var(--p3); }
+/* The card's actions (night 5 T19, card.js cardActions): at most four in a row and `…`, each a 48 px
+   outline target on the chips' face and size; a link to an app view looks the same. A `later` one is a
+   dashed outline in the quiet grey with a small `later` under its word; a tap says so in the note. */
+.galaxy-card-acts {
+  display: flex;
+  gap: 6px;
+}
+.galaxy-card-acts:not([data-more]) {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.galaxy-card-acts[hidden] { display: none; }
+.galaxy-card-act {
+  flex: 1 1 0;
+  min-width: 48px;
+  min-height: 48px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--text-1);
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.galaxy-card-act[data-act="more"] { flex: 0 0 48px; font-size: 20px; }
+.galaxy-card-act[data-later] {
+  color: var(--text-3);
+  border: 1px dashed var(--line);
+  cursor: default;
+}
+.galaxy-card-act:active { background: color-mix(in oklch, var(--text-1) 14%, transparent); }
+.galaxy-card-act:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
+.galaxy-card-later {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 12px;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+}
+.galaxy-card-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+  text-transform: uppercase;
+}
+.galaxy-card-note[hidden] { display: none; }
+/* The card's manners (night 5 T20, README §7 Night 5 D5-D6). Its site's tint
+   only as the 2 px top edge (the colour from palette.js's table, set on the
+   card by card.js: no literal here); the galaxy a step darker behind it, the
+   dim under the frame's words so the trouble stays as loud; the fade (150 ms)
+   is card.js's, on the frame clock. A closing card takes no press. Focus
+   lands on the heading without a ring (it is no tab stop); the buttons keep
+   theirs. */
+.galaxy-card[data-tinted] { border-top-color: var(--galaxy-card-tint); }
+.galaxy-card[data-leaving],
+.galaxy-card-leader[data-leaving],
+.galaxy-card-spot[data-leaving] { pointer-events: none; }
+.galaxy-card-name:focus { outline: none; }
+.galaxy-card-dim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in oklch, var(--bg-canvas) 30%, transparent);
+}
+.galaxy-card-dim[hidden] { display: none; }

@@ -32,6 +32,8 @@
 import { LEADER_MIN_ARMS, LOCK_SIZE, LOCK_TIMING, leaderAlpha, lockProgress, lockTone } from '../lock.js';
 
 const clamp01 = (v) => (v > 0 ? (v < 1 ? v : 1) : 0);
+/** Whether a screen point lies outside a `W`×`H` frame (an unmeasured frame never is). Pure. */
+export const offFrame = (sp, W, H) => W > 0 && H > 0 && (sp.x < 0 || sp.x > W || sp.y < 0 || sp.y > H);
 /** Ease out cubic, as lock.js: fast in, settling on the node. */
 const easeOut = (t) => 1 - (1 - t) ** 3;
 
@@ -262,6 +264,8 @@ export function createGalaxyLock(root, cam, {
     if (!hit) { hideBox(); return; }
     const { sp } = hit;
     const { W, H } = measure();
+    // A target turned out of the frame (night 5 T12, r30-touch 1): no brackets or leader pointing at nothing.
+    if (offFrame(sp, W, H)) { hideBox(); return; }
     const g = lockGeometry3d({ r: sp.r, side: Math.min(W, H), t });
     const arm = Math.round(g.arm);
     if (arm !== armPx) {

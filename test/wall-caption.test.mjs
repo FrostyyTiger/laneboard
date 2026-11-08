@@ -127,13 +127,16 @@ test('caption: a node without detail or metrics still gives a status line, nothi
   assert.deepEqual(captionLines(null, null).lines.map((l) => l.kind), ['status']);
 });
 
-test('caption: long values are clipped so the plate keeps its width', () => {
+test('caption: a runaway value is clipped (the plate wraps a long one, T24)', () => {
   const m = model();
   node(m, 'storage').why = 'pool '.repeat(30);
   const t = captionLines(node(m, 'hv2'), m).lines[0].text;
   assert.ok(t.length <= MAX_TEXT, t);
   assert.ok(t.endsWith('…'));
-  assert.equal(captionLines({ id: 'y', label: 'a'.repeat(80) }, m).name.length, MAX_TEXT);
+  assert.equal(captionLines({ id: 'y', label: 'a'.repeat(200) }, m).name.length, MAX_TEXT);
+  // A long why the plate can wrap is kept whole (r10-film-ui 4: `WAITING ON A PERMIS…`).
+  node(m, 'storage').why = 'task T2 failed in rounds 3 and 4 after a merge conflict';
+  assert.equal(captionLines(node(m, 'hv2'), m).lines[0].text, 'task T2 failed in rounds 3 and 4 after a merge conflict');
 });
 
 test('caption: every beat fits the tour leg, and the plate is then still for the reading', () => {
@@ -277,7 +280,9 @@ test('caption: a trouble plate opens with its word and why, the facts below a ga
   const rows = c.lines.filter((l) => l.step !== 'hero');
   const calmHead = plateHeight({ lines: [] }, 0);
   // the word (at its fitted size) and its why are there from the first frame
-  const word = PLATE.heroAbove + 12 * PLATE.heroLead + PLATE.subGap + PLATE.sub + Math.max(PLATE.heroBelow, PLATE.nameAbove) - PLATE.nameAbove;
+  // (the name under a word steps down to the subject's size, T24)
+  const word = PLATE.heroAbove + 12 * PLATE.heroLead + PLATE.subGap + PLATE.sub + Math.max(PLATE.heroBelow, PLATE.nameAbove) - PLATE.nameAbove
+    + (STEPS.subject - STEPS.name) * PLATE.nameLead;
   assert.ok(lead.sub, 'hv2 has a why under its word');
   assert.ok(Math.abs(plateHeight(c, 0, 12) - calmHead - word) < 0.01);
   assert.ok(plateHeight(c, 0, 14) > plateHeight(c, 0, 9), 'a bigger word, a taller plate');
@@ -298,13 +303,15 @@ test('caption: wall.css sets the heights plateHeight adds up', () => {
     assert.ok(at >= 0, sel);
     return css.slice(at, css.indexOf('}', at));
   };
-  assert.match(rule('.wall-caption-line'), new RegExp(`height: ${PLATE.rows.line}vmin`));
+  // A box is its step's height times the lines it wrapped onto (night 5 T24, `--lines` from caption.js).
+  const lines = (h) => `height: calc\\(${h} \\* var\\(--lines, 1\\)\\)`;
+  assert.match(rule('.wall-caption-line'), new RegExp(lines(`${PLATE.rows.line}vmin`)));
   assert.match(rule('.wall-caption-line[data-kind="metrics"]'), new RegExp(`height: ${PLATE.rows.line}vmin`));
-  assert.match(rule('.wall-caption-line[data-step="small"]'), new RegExp(`height: ${PLATE.rows.small}vmin`));
-  assert.match(rule('.wall-caption-line[data-step="trouble"]'), new RegExp(`height: ${PLATE.rows.trouble}vmin`));
-  assert.match(rule('.wall-caption-name'), new RegExp(`height: calc\\(var\\(--cap-name\\) \\* ${PLATE.nameLead}\\)`));
-  assert.match(rule('.wall-caption-hero-word'), new RegExp(`height: calc\\(var\\(--cap-hero\\) \\* ${PLATE.heroLead}\\)`));
-  assert.match(rule('.wall-caption-hero-sub'), new RegExp(`height: ${PLATE.sub}vmin`));
+  assert.match(rule('.wall-caption-line[data-step="small"]'), new RegExp(lines(`${PLATE.rows.small}vmin`)));
+  assert.match(rule('.wall-caption-line[data-step="trouble"]'), new RegExp(lines(`${PLATE.rows.trouble}vmin`)));
+  assert.match(rule('.wall-caption-name'), new RegExp(lines(`var\\(--cap-name\\) \\* ${PLATE.nameLead}`)));
+  assert.match(rule('.wall-caption-hero-word'), new RegExp(lines(`var\\(--cap-hero\\) \\* ${PLATE.heroLead}`)));
+  assert.match(rule('.wall-caption-hero-sub'), new RegExp(lines(`${PLATE.sub}vmin`)));
   assert.match(rule('.wall-caption-kicker'), /height: var\(--cap-key\)/);
   assert.match(rule('.wall-caption'), /overflow: hidden/);
   assert.match(css, /\.wall-caption-lines > \.wall-caption-line\[hidden\] \{ display: none; \}/);
@@ -366,7 +373,7 @@ test('wall.css: the trouble kicker takes the status colours and keeps the kicker
 // 3 m, so they are set at the why's step; the crit plate's count is set as
 // trouble (shape and hue per status), not a white `1 crit`; facts stay small.
 test('caption: a trouble plate sets its count and named problems at the why step, each status in its hue (T23)', () => {
-  assert.equal(PLATE.rows.trouble, STEPS.why, 'the rows at the hero sub\'s step');
+  assert.equal(PLATE.rows.trouble, STEPS.fact, 'the rows at the fact step, under the why (T24)');
   const one = model();
   node(one, 'media').status = 'ok';
   const c1 = captionLines(node(one, 'hv2'), one);
@@ -401,7 +408,7 @@ test('caption: a trouble plate sets its count and named problems at the why step
     assert.ok(at >= 0, sel);
     return css.slice(at, css.indexOf('}', at));
   };
-  assert.match(rule('.wall-caption-line[data-step="trouble"] .wall-caption-val'), new RegExp(`font-size: ${STEPS.why}vmin`));
+  assert.match(rule('.wall-caption-line[data-step="trouble"] .wall-caption-val'), new RegExp(`font-size: ${STEPS.fact}vmin`));
   assert.match(rule('.wall-caption-part'), /color: var\(--crit\)/);
   assert.match(css, /\.wall-caption-part\[data-tone="warn"\] \{ color: var\(--warn\); \}/);
 });

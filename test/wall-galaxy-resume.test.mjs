@@ -164,7 +164,9 @@ function page({ still = false, role = 'tour' } = {}) {
     clock,
     pick: (x, y) => hitTest(memberPoints(galaxy.world.sites, cam.screenOf), x, y)
       ?? hitTest(tapPoints(galaxy.world.sites, cam.screenOf), x, y),
-    tap: (hit) => { if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
+    // As main.js (night 5 T12, T13): empty sky once is nothing; a double tap or a right-click is Back.
+    tap: (hit) => { if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); },
+    back: () => goBack(),
   });
   const tick = (ms = 16) => {
     now += ms;
@@ -461,10 +463,12 @@ test('back returns to the pose you left (night 4 T4): drag, tap a site, a planet
   assert.equal(p.cam.flight(), null);
   assert.ok(sameOrbit(orbitOf(p.cam.pose()), dragged), 'the orbit the person left');
   assert.ok(!sameOrbit(orbitOf(p.cam.pose()), fit, 1e-3), 'not the default fit');
-  // A tap on empty sky from a site is the same step back.
+  // A double tap on empty sky from a site is the same step back (night 5 T13).
   p.tapAt(5, p.cam.screenOf('cloud'));
   p.run(FLIGHT.ms + 1500);
   p.tapAt(6, { x: 5, y: 5 });
+  p.tick(100);
+  p.tapAt(7, { x: 5, y: 5 });
   p.run(TOUCH.fitMs + 200);
   assert.equal(p.place(), AT_OVERVIEW);
   assert.ok(sameOrbit(orbitOf(p.cam.pose()), dragged), 'empty sky too');
@@ -536,12 +540,12 @@ test('galaxy/main.js wires the return (night 4 T4): leave on open, fly back on t
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /left\.leave\(place, cam\)/);
   const go = js.slice(js.indexOf('const goBack = '), js.indexOf('};', js.indexOf('const goBack = ')));
-  assert.match(go, /toOverview\(left\.pose\(\)\)/);
+  assert.match(go, /toOverview\(left\.pose\(\), ZOOM_OUT\)/);
   for (const key of ['wake: () => {', 'resume: () => {']) {
     const body = js.slice(js.indexOf(key), js.indexOf('},', js.indexOf(key)));
     assert.match(body, /left\.clear\(\)/, key);
   }
-  assert.match(js, /if \(pose && !reduced\) finger\.fly\(pose, \{ ms: TOUCH\.fitMs \}\)/, 'reduced motion: a cut to the fit, never a fly that does nothing');
+  assert.match(js, /if \(pose && !reduced\) finger\.fly\(pose, out\)/, 'reduced motion: a cut to the fit, never a fly that does nothing');
 });
 
 test('galaxy/main.js wires the hand-back (T14): resume releases the sheet and resumes the tour; cuts and the fade in reduced motion', () => {

@@ -42,3 +42,24 @@ docs/plans/wall/loop/prompts/personas/*
 docs/plans/runs/loop/*
 test/map-*.test.mjs
 test/map.test.mjs
+# Night 5: the cockpit (nights C1b and later) works on these at the same time (agreed 2026-10-27).
+# The Wall night owns galaxy/touch.js, director.js timings and the node card; main.js and wall.css are
+# shared, not fenced (README §7 Night 5). A needed change here goes to docs/plans/wall/patches/.
+public/js/wall/galaxy/tour.js
+public/js/wall/galaxy/show.js
+public/js/wall/galaxy/transport.js
+public/galaxy.html
+public/index.html
+public/js/app.js
+test/wall-galaxy-handle.test.mjs
+public/js/cockpit/*
+public/js/core/cockpit-*
+public/css/cockpit.css
+server/*
+e2e/*
+test/cockpit*
+test/helpers/boot.mjs
+docs/cockpit/*
+docs/plans/cockpit/*
+package.json
+package-lock.json

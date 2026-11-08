@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../public/vendor/three/three.module.js';
 import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
-import { NEBULA, paletteFrom } from '../public/js/wall/galaxy/palette.js';
+import { NEBULA, lifted, paletteFrom } from '../public/js/wall/galaxy/palette.js';
 import { createGalaxyScene, overviewShot, siteShot, FOV, SIZE, SUN_HALO } from '../public/js/wall/galaxy/scene.js';
 import { zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
 import { FRESH, SUN, sunLook } from '../public/js/wall/galaxy/fresh.js';
@@ -67,10 +67,11 @@ function sunShare(shot, aspect, r) {
   return hit / (N * N);
 }
 
-test('the sun core is the text-2 grey, a step under the white light it gives', () => {
-  const p = paletteFrom();
-  assert.deepEqual(p.sunCore, p.bright);
+test('the sun core is a warm stone a step under the text-2 grey and the white light (night 5 A4)', () => {
+  const p = paletteFrom(lifted());
+  assert.ok(lum(p.sunCore) < lum(p.bright), 'under the lifted text-2 the page uses');
   assert.ok(lum(p.sunCore) < lum(p.sun));
+  assert.ok(p.sunCore[0] > p.sunCore[2], 'warm: more red than blue');
 });
 
 test('the sun is 70 % of the sketch radius, its halo narrower than and at most half as strong as a crit nebula', () => {

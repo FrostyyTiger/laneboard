@@ -41,8 +41,8 @@ export function breathWave(now, periodMs, still = false) {
   return Math.sin((now / periodMs) * Math.PI * 2);
 }
 
-/** The dust's turn at `now` (radians): once in about 26 minutes, none when `still`. */
-export const dustTurn = (now, still = false) => (still ? 0 : now * 0.000004);
+/** The dust's turn at `now` (radians): once in about 44 minutes (night 5 A6: 0.6x), none when `still`. */
+export const dustTurn = (now, still = false) => (still ? 0 : now * 0.0000024);
 
 /**
  * A finger's step in reduced motion (night 3 T14, README §7 Night 3 C5): no
