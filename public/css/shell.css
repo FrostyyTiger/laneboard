@@ -411,3 +411,6 @@
 @media (prefers-reduced-motion: reduce) {
   .shell-insp { transition: none; }
 }
+
+/* Lanes flag (docs/lanes-flag.md): a lane tab shows only once the server says lanes are on. */
+html:not([data-lanes="on"]) .nav-tab[data-lane] { display: none; }

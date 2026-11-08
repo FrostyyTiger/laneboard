@@ -92,6 +92,8 @@ export function createStore({ keyMode = 'fkey', pinned = new Set() } = {}) {
     dockLayout: null,      // null = auto (stacked for 1-2 pins, 2x2 for 3-4)
     openSession: null,     // index key shown in the sheet
     view: 'board',
+    lanes: null,
+    routeHold: false,
     /** Set when the box payload changed, so lane heads and the Box re-render. */
     boxDirty: true,
     keyMode,

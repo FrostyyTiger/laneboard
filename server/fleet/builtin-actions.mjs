@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { capturePane as tmuxCapturePane } from '../collector/tmux.mjs';
+import { lanesOn } from '../config/lanes.mjs';
 import { registerAction, has, ActionRefused, cleanTypedText } from './dispatch.mjs';
 
 export const DEFAULT_PERMISSION_MODES = Object.freeze(['default', 'acceptEdits', 'plan', 'auto']);
@@ -345,7 +346,10 @@ export function registerBuiltins(deps = {}) {
     },
   });
 
-  registerAction('launch', {
+  // Lanes off (docs/lanes-flag.md): launch and retire are not registered, so dispatch refuses them.
+  const registerLaneAction = lanesOn(deps.config) ? registerAction : () => {};
+
+  registerLaneAction('launch', {
     tier: 'ask',
     target: 'lane',
     args: {
@@ -370,7 +374,7 @@ export function registerBuiltins(deps = {}) {
     },
   });
 
-  registerAction('retire', {
+  registerLaneAction('retire', {
     tier: 'confirm',
     target: 'lane',
     args: { confirm: { type: 'string', required: true, max: 128 }, force: { type: 'boolean', default: false } },

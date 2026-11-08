@@ -112,7 +112,7 @@ function childEnv(base, extra) {
     if (k === 'TMUX' || k === 'TMUX_PANE' || k.startsWith('LANEBOARD_')) continue;
     env[k] = v;
   }
-  return { ...env, ...extra };
+  return { LANEBOARD_LANES: '1', ...env, ...extra };
 }
 
 async function waitHealthy(url, child, timeoutMs, logs) {

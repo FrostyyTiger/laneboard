@@ -90,7 +90,7 @@ function compute(now = Date.now()) {
   let review = [];
   try { review = buildReviewQueue(store.lanes, now, storeLookups(store)); } catch { review = []; }
   const ghost = state.ghost && state.ghost.id === state.focusId ? state.ghost : null;
-  const model = buildInbox(store, { now, scope: inboxScopeOf(route), review, ghost, runs: state.runs, waiting: state.waiting });
+  const model = buildInbox(store, { now, scope: inboxScopeOf(route), review, ghost, runs: state.runs, waiting: state.waiting, lanes: store.lanes !== false });
   state.focusId = reconcileFocus(model, state.focusId);
   const r = rowOf(model, state.focusId);
   state.ghost = r ?? null;

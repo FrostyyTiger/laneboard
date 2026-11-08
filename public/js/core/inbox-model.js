@@ -30,6 +30,8 @@
 import { fkey as makeFkey, BUILDER_ID_RX } from './keys.js';
 import { markP, markWord } from './marks.js';
 
+/** Groups that exist only with lanes on (docs/lanes-flag.md). */
+export const LANE_GROUPS = Object.freeze(['review', 'paused', 'stale']);
 export const GROUPS = Object.freeze(['waiting', 'approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
 
 export const GROUP_TITLES = Object.freeze({
@@ -457,7 +459,7 @@ function waitingRows(items) {
   return rows;
 }
 
-export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], ghost = null, runs = null, waiting = null } = {}) {
+export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], ghost = null, runs = null, waiting = null, lanes = true } = {}) {
   const sessions = inboxSessionsOf(s, scope);
   const runRowsAll = Array.isArray(runs) ? runRows(runs, now) : [];
   const by = {
@@ -477,7 +479,7 @@ export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], gh
     by[g.group].push(g);
     rows.set(g.id, g);
   }
-  const shown = GROUPS.filter((id) => (id === 'waiting' ? Array.isArray(waiting) : (id !== 'runs' && id !== 'runprs') || Array.isArray(runs)) || by[id].length).map((id) => ({
+  const shown = GROUPS.filter((id) => lanes || !LANE_GROUPS.includes(id)).filter((id) => (id === 'waiting' ? Array.isArray(waiting) : (id !== 'runs' && id !== 'runprs') || Array.isArray(runs)) || by[id].length).map((id) => ({
     id,
     title: GROUP_TITLES[id],
     note: id === 'approvals' ? COOPERATIVE_NOTE : null,

@@ -3,7 +3,7 @@
 // boot() runs the old top-level wiring in its original source order.
 import { ago } from './core/format.js';
 import { store } from './core/store.js';
-import { connect, init as initNet } from './core/net.js';
+import { connect, init as initNet, loadFeatures } from './core/net.js';
 import { applyHash, setView, init as initRouter } from './core/router.js';
 import { reportUiError } from './ui/render.js';
 import { init as initShell } from './ui/shell.js';
@@ -57,13 +57,16 @@ export function boot() {
   connect();
   // `#/` (or no hash) is Runs, the home view; legacy `#board`, `#map`, ...
   // and push links `#session=<name>` keep working (core/router.js parseHash).
-  if (location.hash.startsWith('#session=')) {
-    // The session may not be in the store yet on a cold load.
-    addEventListener('load', applyHash);
-    setView('board', { pushHash: false });
-  } else {
-    applyHash();
-  }
+  // The first route waits for the lanes flag, so a Board link cannot flash.
+  loadFeatures().finally(() => {
+    if (location.hash.startsWith('#session=')) {
+      // The session may not be in the store yet on a cold load.
+      addEventListener('load', applyHash);
+      setView('board', { pushHash: false });
+    } else {
+      applyHash();
+    }
+  });
 
   initPush(); // app.js:1953-2025 (push / PWA)
   initNotifyPrefs(); // fleet D14: hub-only notification prefs sheet, entry in #push-box

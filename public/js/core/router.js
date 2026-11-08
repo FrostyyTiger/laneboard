@@ -38,6 +38,11 @@ export const VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 
 /** Drill-down views: routable, never in the nav. */
 export const HIDDEN_VIEWS = ['diff', 'knowledge', 'flow'];
 export const DEFAULT_VIEW = 'runs';
+/** The views that exist only with lanes on (GET /api/features, docs/lanes-flag.md). */
+export const LANE_VIEWS = ['board', 'packages', 'diff'];
+/** True only once the server has said lanes are off. */
+export const lanesOff = () => store.lanes === false;
+const laneViewOff = (name) => lanesOff() && LANE_VIEWS.includes(name);
 /**
  * The `g <key>` view chord (plan §4 2.6, authoritative). `g m` is the map now
  * and morning moved to `g o`; `g p` is products, packages moved to `g k`; `g r` is runs. ui/hotkeys.js
@@ -226,7 +231,7 @@ export function navigate(patch = {}, { replace = false } = {}) {
 
 /** The view this page can actually show for `name`. */
 function shownView(name) {
-  return ROUTABLE.has(name) && $(`view-${name}`) ? name : DEFAULT_VIEW;
+  return ROUTABLE.has(name) && !laneViewOff(name) && $(`view-${name}`) ? name : DEFAULT_VIEW;
 }
 
 export function setView(name, { pushHash = true } = {}) {
@@ -263,11 +268,13 @@ export function setView(name, { pushHash = true } = {}) {
  * select: no action is ever sent from here.
  */
 export function applyHash() {
-  const { route: r, reason } = resolveHash(location.hash, { localId: localBuilderId(store) });
+  if (store.routeHold) return; // loadFeatures() routes when the flag is known
+  const { route: r, reason: miss } = resolveHash(location.hash, { localId: localBuilderId(store) });
+  const reason = miss ?? (laneViewOff(r.view) ? 'Lanes are off, showing Runs' : null);
   if (reason && toldMiss !== location.hash) toast(reason, { kind: 'info' });
   toldMiss = reason ? location.hash : null;
   const key = r.sel ? toIndexKey(store, r.sel) : null;
-  if (key && (r.open === 'term' || r.view === 'board')) {
+  if (key && !lanesOff() && (r.open === 'term' || r.view === 'board')) {
     setView('board', { pushHash: false });
     openSheet(key);
   } else {

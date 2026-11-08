@@ -3,6 +3,7 @@
 // the boot split (fleet X1); the shared listeners, /healthz and shutdown live
 // in ./common.mjs. New features are modules (server/routes, server/flags).
 import { config } from '../config.mjs';
+import { lanesOn } from '../config/lanes.mjs';
 import { log } from '../log.mjs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -110,7 +111,9 @@ route('DELETE', '/api/markers/:id', action(async (req) => {
   return { ok: true, id: Number(req.params.id) };
 }));
 
-route('GET', '/api/lanes', (req, res) => {
+const laneRoute = lanesOn(config) ? route : () => {};
+
+laneRoute('GET', '/api/lanes', (req, res) => {
   const snap = state.snapshot();
   json(res, {
     lanes: snap.lanes,
@@ -211,7 +214,7 @@ const isLocal = (req) => req.auth?.kind === 'local';
 // (SR17 M1): permissionMode resolved against fleet.allowedPermissionModes,
 // repo must be configured, local callers may not set priority 'high' or a
 // budget above the per-lane default.
-route('POST', '/api/lanes', legacy(async (req, res) => {
+laneRoute('POST', '/api/lanes', legacy(async (req, res) => {
   const body = await legacyBody(req);
   const lane = typeof body.lane === 'string' ? body.lane : '';
   const args = pick(body, LEGACY_LAUNCH_FIELDS);
@@ -227,7 +230,7 @@ route('POST', '/api/lanes', legacy(async (req, res) => {
 }));
 
 // Only when a human asks. Body: { force?, confirm? } — force needs confirm = the lane id.
-route('DELETE', '/api/lanes/:id', legacy(async (req, res) => {
+laneRoute('DELETE', '/api/lanes/:id', legacy(async (req, res) => {
   const body = await legacyBody(req).catch(() => ({}));
   const id = req.params.id;
   const force = body.force === true;

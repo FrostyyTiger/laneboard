@@ -380,6 +380,12 @@ own `.laneboard/run.jsonl`, and a machine without any shows no runs.
 | `runs.stuck.shorterRounds` | `3` | The last this many rounds were each shorter than the one before: a hint at a usage limit (0..100). |
 | `runs.stuck.deadlineMin` | `30` | Kept for one version, no longer a threshold: `0` turns the deadline rule off, any other value (0..10080) is accepted and ignored. The rule fires once the deadline has passed and the run has no `run.stop`. |
 
+### `lanes` — the lanes flag
+
+| Key | Default | Env | What |
+| --- | --- | --- | --- |
+| `lanes.enabled` | `false` | `LANEBOARD_LANES` (`1` or `0`) | Board, Packages, Diff, the archive, launch and retire. Off: no tab, and their routes answer 404. See [lanes-flag.md](lanes-flag.md). |
+
 ### `engines` — run engines
 
 The run engines laneboard reads ([engines.md](engines.md)). The `jsonl` engine
@@ -440,7 +446,7 @@ the board; if the Map shows something unexpected, it is the machine's hostname.
 The server (`laneboard`'s process): `LANEBOARD_CONFIG`, `LANEBOARD_DB`,
 `LANEBOARD_PORT`, `LANEBOARD_BIND`, `LANEBOARD_PUBLIC_URL`, `LANEBOARD_HOSTNAME`,
 `LANEBOARD_HUMAN`, `LANEBOARD_TIMEZONE`, `LANEBOARD_NODE_BIN`,
-`LANEBOARD_CLAUDE_BIN`, `LANEBOARD_CODE_DIR`, `LANEBOARD_LANES_DIR`,
+`LANEBOARD_CLAUDE_BIN`, `LANEBOARD_CODE_DIR`, `LANEBOARD_LANES_DIR`, `LANEBOARD_LANES`,
 `LANEBOARD_KICKOFF`, `LANEBOARD_REPOS`, `LANEBOARD_DIR_ROOTS`,
 `LANEBOARD_SLOTS_PROVIDER`, `LANEBOARD_AGENT_STACK`, `LANEBOARD_LANE_SLOTS`,
 `LANEBOARD_RESERVED_SLOTS`, `LANEBOARD_GUARD_PROVIDER`, `LANEBOARD_GUARD_PORTS`,
