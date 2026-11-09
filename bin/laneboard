@@ -402,7 +402,7 @@ async function cmdMorning() {
     process.stdout.write(`${fitLast(rows, ['WHAT', 'SESSION', 'LANE', 'AGE', 'DETAIL'])}\n`);
   }
 
-  // A run that stopped in the window is news of the night, said with its
+  // A run that stopped in the window is news of the window, said with its
   // reason under Finished; the runs still going stay under Runs. A lane that
   // moved but still has a session at work is not finished: it gets its own
   // Still running block (T25).
@@ -961,7 +961,7 @@ const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
   start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--max-rounds N] [--window-pct P]
-           --goal is a sentence about what the run is for (--goal "Night 5: PR state in the Inbox"), not the run id
+           --goal is a sentence about what the run is for (--goal "Run 5: PR state in the Inbox"), not the run id
            --max-rounds N is the round cap; --rounds N on start is its old name (a note on stderr)
            there is no --budget flag: a run's budget is --max-rounds and --window-pct, kept in run.start's budget
            the budget burn column is the 5 h / 7 d usage % of the run's last usage event, which no subcommand writes:
@@ -1167,7 +1167,7 @@ async function cmdRun() {
   const ev = runEvent(sub, fields);
   // The board shows the goal as the run's title: the id again tells nobody what the run is for.
   if (sub === 'start' && ev.goal?.trim() === run) {
-    process.stderr.write(`hint: --goal is the run id; a goal says what the run is for (--goal "Night 5: PR state in the Inbox")\n`);
+    process.stderr.write(`hint: --goal is the run id; a goal says what the run is for (--goal "Run 5: PR state in the Inbox")\n`);
   }
   const event = { v: 1, t: ev.t, run, ts: Date.now(), ...ev };
   const line = JSON.stringify(event);

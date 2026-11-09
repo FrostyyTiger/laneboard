@@ -791,7 +791,7 @@ test('the help says a goal is a sentence, and a goal equal to the run id gets a 
   for (const args of [['run', '--help'], ['run', 'start', '--help']]) {
     const help = await run(args, envFor(dir), dir);
     assert.equal(help.code, 0, help.stderr);
-    assert.match(help.stdout, /--goal is a sentence about what the run is for \(--goal "Night 5: PR state in the Inbox"\), not the run id/, args.join(' '));
+    assert.match(help.stdout, /--goal is a sentence about what the run is for \(--goal "Run 5: PR state in the Inbox"\), not the run id/, args.join(' '));
   }
   const file = path.join(dir, 'run.jsonl');
   const same = await run(['run', 'start', '--run', 'runs-n5', '--goal', 'runs-n5', '--file', file], envFor(dir), dir);
@@ -799,7 +799,7 @@ test('the help says a goal is a sentence, and a goal equal to the run id gets a 
   assert.match(same.stderr, /^hint: --goal is the run id; a goal says what the run is for/m);
   assert.equal(same.stderr.split('\n').filter((l) => l.startsWith('hint:')).length, 1);
   assert.equal(lines(file).length, 1, 'the line is still written');
-  const good = await run(['run', 'start', '--run', 'runs-n5', '--goal', 'Night 5: PR state in the Inbox', '--file', file], envFor(dir), dir);
+  const good = await run(['run', 'start', '--run', 'runs-n5', '--goal', 'Run 5: PR state in the Inbox', '--file', file], envFor(dir), dir);
   assert.equal(good.code, 0, good.stderr);
   assert.doesNotMatch(good.stderr, /hint:/);
 });
