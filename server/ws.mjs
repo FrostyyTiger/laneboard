@@ -117,6 +117,15 @@ export function helloMessage(cfg = config) {
 }
 
 /**
+ * The hello as sent: stamped like any frame, but `builder` stays the {id, code}
+ * object the page reads; the frame-level string would hide both.
+ */
+export function helloFrame(cfg = config) {
+  const hello = helloMessage(cfg);
+  return { ...stamp(hello), builder: hello.builder };
+}
+
+/**
  * Apply a browser's `visible` message to a set of local names: `keys` (fkeys,
  * those of other builders dropped) or the legacy `names` (one release).
  * Returns null for a message that carries neither.
@@ -195,7 +204,7 @@ export function attach(req, socket, head) {
     ws.isAlive = true;
     ws.visible = new Set();
     // hello first (README §3.4), then the snapshot, then the greeting.
-    ws.send(JSON.stringify(stamp(helloMessage())));
+    ws.send(JSON.stringify(helloFrame()));
     const snap = state.snapshot();
     ws.send(JSON.stringify(stamp({ type: 'snapshot', ...snap, sessions: snap.sessions.map(forWire) })));
     for (const extra of greeting()) ws.send(JSON.stringify(stamp(extra)));
