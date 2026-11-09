@@ -27,8 +27,29 @@ import { createStore } from '../cockpit/store.mjs';
 import { createLink } from '../cockpit/link.mjs';
 import { createFailWarner } from '../cockpit/audit-lines.mjs';
 import { roomSecrets } from '../cockpit/redact.mjs';
+import { createMcp } from '../cockpit/mcp.mjs';
 import { openAudit } from '../fleet/audit.mjs';
 import * as roomClock from '../cockpit/clock.mjs';
+
+/**
+ * The agent's read tools, before the agent starts (c3-see.md §1): the token and
+ * `mcp.json` are written after the listen, so the file names the real port. A
+ * port in use costs the tools, not the room: the agent then reports tools-down.
+ */
+async function startMcp({ log: say, focusOf }) {
+  const mcp = createMcp({ boardUrl: config.cockpit.board.url, focusOf, log: say });
+  const file = path.join(fillPath(DEFAULT_CWD, { stateDir: config.stateDir }), 'mcp.json');
+  let servers = {};
+  try {
+    const { port } = await mcp.listen(config.cockpit.mcp.port);
+    fs.writeFileSync(path.join(config.stateDir, 'cockpit', 'mcp.token'), `${mcp.token}\n`, { mode: 0o600 });
+    servers = { laneboard: { type: 'http', url: `http://127.0.0.1:${port}/mcp`, headers: { Authorization: 'Bearer ${LANEBOARD_MCP_TOKEN}' }, timeout: 15000 } };
+  } catch (err) {
+    say(`cockpit: the agent's board tools did not start: ${err?.message ?? err}`);
+  }
+  fs.writeFileSync(file, `${JSON.stringify({ mcpServers: servers })}\n`, { mode: 0o644 });
+  return mcp;
+}
 
 /** The room's path on the page's origin, on both sides (D93). Not a config key. */
 export const COCKPIT_PREFIX = '/api/cockpit';
@@ -73,6 +94,7 @@ export async function startRoom(ctx = null, opts = {}) {
   // begins the first conversation, and seeds the turn counter and the
   // once-only memory from what it loaded.
   let link = null;
+  const mcp = await startMcp({ log: say, focusOf: () => link?.screensFocus() ?? null });
   const session = createSession({
     stateDir: config.stateDir,
     emit: (msg) => link.emit(msg),
@@ -83,8 +105,8 @@ export async function startRoom(ctx = null, opts = {}) {
       link.conversationStarted({ conversation: rec.conversation, reason, from }); // its `cockpit.new` line (screens.md §6.4)
     },
     bridge: {
-      agent, stateDir: config.stateDir, env, mcpToken: null, turnCounter: loaded.lastTurn,
-      secrets: roomSecrets({ sttTokenFile: config.cockpit.stt?.tokenFile ?? null }),
+      agent, stateDir: config.stateDir, env, mcpToken: mcp.token, turnCounter: loaded.lastTurn,
+      secrets: roomSecrets({ mcpToken: mcp.token, sttTokenFile: config.cockpit.stt?.tokenFile ?? null }),
     },
   });
   // screens.md §6.4 (D166): an audit append that fails is one stderr line at most every 10 s.
@@ -95,6 +117,7 @@ export async function startRoom(ctx = null, opts = {}) {
   return {
     cwd, store, loaded, session, link,
     stop: async () => {
+      await mcp.stop();
       link.close();
       store.close();
       await session.close();
