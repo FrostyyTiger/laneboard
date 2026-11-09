@@ -392,7 +392,8 @@ async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey, entry, st
     },
     /** The room's MCP server for a test that calls a tool itself: `{url, token}` (stand-ins.md §1.1). */
     mcp() {
-      const { url: mcpUrl } = JSON.parse(fs.readFileSync(path.join(stateDir, 'cockpit-agent', 'mcp.json'), 'utf8'));
+      const file = JSON.parse(fs.readFileSync(path.join(stateDir, 'cockpit-agent', 'mcp.json'), 'utf8'));
+      const mcpUrl = file.mcpServers?.laneboard?.url ?? file.url;
       const token = fs.readFileSync(path.join(stateDir, 'cockpit', 'mcp.token'), 'utf8').trim();
       return { url: mcpUrl, token };
     },

@@ -140,6 +140,7 @@ function closeTooBigFirst(ws) {
 export function createLink({ session, store, audit = null, config, log = () => {}, clientIds = [], pingMs = PING_MS, auditWarn = null }) {
   const auditFailed = auditWarn ?? createFailWarner({ write: log });
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_TEXT_BYTES, autoPong: false });
+  const focuses = new Map(); // screen → {live, atPrompt}, each {focus, at}
   const links = new Set(); // accepted links: {ws, auth, welcomed, rec, alive, helloTimer, rate}
   const epoch = `r-${randomBytes(3).toString('hex')}`;
   const allowInsecure = config.cockpit?.allowInsecure === true;
@@ -368,7 +369,11 @@ export function createLink({ session, store, audit = null, config, log = () => {
       case 'hello':
         sendTo(link, { type: 'error', re: msg.seq, code: 'not-now', message: 'hello: the link already has its welcome' });
         return;
+      case 'focus':
+        noteFocus(msg, false);
+        return;
       case 'prompt':
+        if (msg.focus) noteFocus({ ...msg.focus }, true);
         prompt(link, msg).catch((err) => log(`cockpit: prompt failed: ${err?.message ?? err}`));
         return;
       case 'stop': {
@@ -395,6 +400,13 @@ export function createLink({ session, store, audit = null, config, log = () => {
       default:
         // Valid messages of later slices (focus, history, show.result, audio …) change nothing yet (B98).
     }
+  }
+
+  /** c3-see.md §8.1: the screen's latest focus, and the one at its last prompt. Memory only. */
+  function noteFocus(focus, atPrompt) {
+    const entry = { focus, at: clock.now() };
+    const old = focuses.get(SCREEN_NAME);
+    focuses.set(SCREEN_NAME, { live: entry, atPrompt: atPrompt ? entry : old?.atPrompt ?? null });
   }
 
   function hello(link, msg) {
@@ -525,6 +537,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
   }
 
   return {
+    screensFocus: () => focuses,
     handleUpgrade, emit, close, conversationStarted,
     get count() { return links.size; },
     get epoch() { return epoch; },

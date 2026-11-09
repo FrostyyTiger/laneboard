@@ -416,13 +416,13 @@ test('boot(): the room under test boots with its control port, seeded state file
     assert.ok(room.auditFile.startsWith(room.tmp + path.sep));
   });
 
-  await t.test('mcp() reads the url and the token the room wrote', () => {
-    assert.throws(() => room.mcp(), /ENOENT/); // the MCP server comes with T35
-    fs.mkdirSync(path.join(room.stateDir, 'cockpit-agent'), { recursive: true });
-    fs.writeFileSync(path.join(room.stateDir, 'cockpit-agent', 'mcp.json'), JSON.stringify({ url: 'http://127.0.0.1:7791/mcp' }));
-    // 0600 as the room writes it (D209): the restarts below run its start check (D210).
-    fs.writeFileSync(path.join(room.stateDir, 'cockpit', 'mcp.token'), 'tok\n', { mode: 0o600 });
-    assert.deepEqual(room.mcp(), { url: 'http://127.0.0.1:7791/mcp', token: 'tok' });
+  await t.test('mcp() reads the url and the token the room wrote', async () => {
+    const file = path.join(room.stateDir, 'cockpit', 'mcp.token');
+    for (let i = 0; i < 200 && !fs.existsSync(file); i += 1) await new Promise((ok) => setTimeout(ok, 25));
+    const { url, token } = room.mcp();
+    assert.match(url, /^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    assert.match(token, /^[0-9a-f]{64}$/);
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600, 'as the start check needs it (D209, D210)');
   });
 
   await t.test('restart (SIGTERM, then SIGKILL as a crash): same port and dirs, a new control port, a fresh clock', async () => {
