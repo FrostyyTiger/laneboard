@@ -17,12 +17,15 @@ is sent, with the engine's answer as its result.
 The target is `<engine>/<item, run or product>`.
 
 **From the machine itself** means the local address, what a script or an agent on
-the box uses. Refusing there stops an agent approving its own work. Use your
-normal sign-in.
+the box uses. Refusing there stops an agent approving its own work through that
+address. Use your normal sign-in. A process on the box can still pose as a remote
+user on the ingress port unless `fleet.ingressPeerUid` is set, so set it on any
+builder with engines.
 
 **Who decided** is the signed-in person from the dispatcher's record, never a page
-field. Hub-relayed actions follow the same rules (`control` scope and
-`fleet.hubControl`); the hub page has no buttons yet, because it has no engine data.
+field. The hub does not relay these actions yet: its page has no engine data and
+its relay allowlist has no `engine-*` names. A signed envelope sent straight to a
+builder needs `fleet.hubControl` and the `control` scope.
 
 **When it goes wrong:**
 
