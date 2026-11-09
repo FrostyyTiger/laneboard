@@ -580,12 +580,12 @@ export function toggleMenu(card, s) {
   item(store.pinned.has(k) ? 'Unpin' : 'Pin to dock', null, () => togglePin(k));
   item('Restart (resume)', null, async () => {
     if (!globalThis.confirm(`Restart ${s.name}? It resumes the same conversation.`)) return;
-    const r = await act(k, 'restart');
+    const r = await act(k, 'restart', { confirm: s.name });
     if (actOk(r)) toast(`Restarting ${s.name}…`);
   });
   item('Kill session', 'danger', async () => {
     if (!globalThis.confirm(`Kill ${s.name}? This cannot be undone.`)) return;
-    const r = await act(k, 'kill');
+    const r = await act(k, 'kill', { confirm: s.name });
     if (actOk(r)) toast(`Killed ${s.name}`);
   });
 
