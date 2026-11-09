@@ -1,6 +1,6 @@
 # Product direction
 
-**Status: standing guidance.** Every plan, every loop night and every PR reads this first. It
+**Status: standing guidance.** Every plan, every loop run and every PR reads this first. It
 does not replace the plans in `docs/plans/`; it says how to choose between them and how to build
 whatever gets chosen.
 
@@ -47,8 +47,8 @@ Roughly **70 % the owner, 30 % everyone else.**
 
 ### Sequence (agreed 2026-10-26)
 
-1. The Wall loop finishes its nights; the owner tries it on a tablet; the Wall PRs merge.
-2. Demo mode revived across today's views (Map, Runs, Morning, Wall), as a loop night.
+1. The Wall loop finishes its runs; the owner tries it on a tablet; the Wall PRs merge.
+2. Demo mode revived across today's views (Map, Runs, Morning, Wall), as a loop run.
 3. Public-repo hygiene pass.
 4. Hosted demo, then the tour video, then the README.
 
@@ -94,8 +94,8 @@ One post once the "Now" table is done: the video on r/selfhosted or r/homelab, o
 watch what comes back before investing in the deferred list. No second post until something new
 is worth showing.
 
-## 6. For loop nights
+## 6. For loop runs
 
-A loop night that picks its own tasks prefers, in order: an unfinished "Now" item, then whatever
+A loop run that picks its own tasks prefers, in order: an unfinished "Now" item, then whatever
 the current part plan says, then a "folded in" item. It never starts a "deferred" or "not now"
 item; those go on the "for the owner" list.

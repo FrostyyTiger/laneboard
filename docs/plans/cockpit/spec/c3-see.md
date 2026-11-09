@@ -354,6 +354,8 @@ tools, word for word:
 5. `When the owner says here, this or that without naming it, call focus first.` (T9, §8)
 6. `If a result has an empty sources list and a hint, open your answer with: I see no runs: your loops write no run file (docs/runs.md). Never say nothing happened.` (§3, D184)
 
+**As built (phase 8a):** only `waiting`, `runs` and `focus` exist, so sentence 2 is `For what waits for the owner, call waiting. For how the runs are going, call runs.`, sentence 4 is shorter, and sentence 6 is left out. `docs/cockpit/protocol.md` has the live text.
+
 ## 6. Gaps in the board today
 
 What C3's build night adds to the board, outside the room (each is a code change in a reviewed

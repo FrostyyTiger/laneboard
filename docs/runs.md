@@ -237,7 +237,7 @@ laneboard run stop   --run readiness --reason done
 | `stop` | `--reason` (left out, the line carries no reason and the run records `stop: "unknown"`), `--rounds N` (the count of rounds done, not the cap), `--usd x`, `--detail` (one line on why, shown under the reason) |
 | `cost` | **`--usd x`**, `--n N` (a `cost` event; the run's cost is the sum of these; a `round --end --usd` is the round's only, summed for the run when it sends no `cost`) |
 
-A goal is a sentence about what the run is for (`--goal "Night 5: PR state in the Inbox"`),
+A goal is a sentence about what the run is for (`--goal "Run 5: PR state in the Inbox"`),
 not the run id: the board shows it as the run's title. `start` with a `--goal` equal to
 the run id still writes the line (exit 0) and prints a one-line hint on stderr.
 
