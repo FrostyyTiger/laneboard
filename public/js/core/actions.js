@@ -37,6 +37,14 @@ export const ACTION_TIERS = Object.freeze({
   'run-script': 'ask',
   broadcast: 'confirm',
   'dismiss-marker': 'click',
+  'engine-approve': 'confirm',
+  'engine-pick': 'confirm',
+  'engine-reject': 'confirm',
+  'engine-answer': 'click',
+  'engine-start': 'ask',
+  'engine-pause': 'click',
+  'engine-resume': 'click',
+  'engine-stop': 'confirm',
 });
 
 const TIERS = new Set(['read', 'click', 'ask', 'confirm']);
@@ -195,7 +203,31 @@ export function createActions(opts = {}) {
     return request(req.method, req.url, req.body, true);
   }
 
-  return { act, hubAct };
+  /** GET /api/v1/hello, kept once it answered: which builder an envelope must name. */
+  let helloNow = null;
+  async function serverHello() {
+    if (helloNow) return helloNow;
+    try {
+      const r = await fetchImpl('/api/v1/hello', {});
+      if (r?.ok) helloNow = await r.json();
+    } catch { /* the caller reports it */ }
+    return helloNow;
+  }
+
+  /**
+   * A decision on a run engine (server/engine/actions.mjs). The target names the
+   * engine, not a session, so no key to resolve. Builder page only. `id` is
+   * passed again for a retry, so the engine applies it once.
+   */
+  async function actEngine(action, target, args = {}, { id = null } = {}) {
+    if (typeof action !== 'string' || !ACTION_RX.test(action)) return { ok: false, error: 'bad action', code: 'bad-action' };
+    if (s.source.kind === 'hub') return { ok: false, error: 'decisions are made on the builder page', code: 'unsupported' };
+    const hello = await serverHello();
+    if (!hello?.capabilities?.includes?.('actions') || typeof hello.id !== 'string') return { ok: false, error: 'this server takes no decisions', code: 'unsupported' };
+    return request('POST', '/api/v1/actions', buildEnvelope({ builder: hello.id, action, target, args, id: id ?? newId(), ts: now() }), false);
+  }
+
+  return { act, hubAct, actEngine };
 }
 
 let page = null;
@@ -207,6 +239,11 @@ function pageActions() {
 /** act() on the page's store with the global fetch. */
 export function act(k, action, args) {
   return pageActions().act(k, action, args);
+}
+
+/** actEngine() on the page's store with the global fetch. */
+export function actEngine(action, target, args, opts) {
+  return pageActions().actEngine(action, target, args, opts);
 }
 
 /** hubAct() on the page's store with the global fetch. */

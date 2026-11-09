@@ -9,8 +9,7 @@ the recipe, the requirements, the variants with their previews, the question
 with its context, the merge report, and so on. Every kind is drawn from what the
 engine sent. Text stays text; only http(s) links are links.
 
-The decision buttons are there but disabled: they need phase 4, when decisions
-go through the audited control plane. Nothing on this page decides anything.
+The buttons decide, through the control plane. See [decisions.md](decisions.md).
 
 `{ "engines": [{ "id": "main", "kind": "fake" }] }` fills the group with one
 invented item of every kind. With no route (a hub) the group is not shown.

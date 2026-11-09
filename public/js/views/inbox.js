@@ -242,7 +242,7 @@ function inboxRowNode(r) {
     }
     if (r.preview && r.preview.lines.length) li.append(previewNode(r.preview));
   }
-  if (r.kind === 'waiting' && state.expanded.has(r.id)) li.append(waitingBody(r.item, r.engine));
+  if (r.kind === 'waiting' && state.expanded.has(r.id)) li.append(waitingBody(r.item, r.engine, refreshRuns));
   if (state.noteFor === r.id && r.kind === 'approval' && !r.closed) li.append(noteField(r));
 
   li.addEventListener('click', () => {

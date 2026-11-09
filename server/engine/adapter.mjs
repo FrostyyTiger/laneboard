@@ -32,6 +32,9 @@ export const MEMBERS = Object.freeze(['hello', 'health', 'products', 'runs', 'ru
 
 /** An argument that may reach an engine's argument list: no flag, no path tricks, bounded. */
 const ARG = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
+/** Who decided: a signed-in login is an email address. Starts with a letter or digit, so never a flag. */
+const USER_ARG = /^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$/;
+export const safeUser = (v) => typeof v === 'string' && USER_ARG.test(v) && !v.includes('..');
 export const safeArg = (v) => typeof v === 'string' && ARG.test(v) && !v.includes('..');
 
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/;
@@ -189,7 +192,7 @@ export function createContractEngine(opts) {
     try {
       if (!WRITE_VERBS.includes(verb)) return refuse('bad-request', `unknown write verb ${String(verb).slice(0, 32)}`);
       if (typeof meta?.requestId !== 'string' || !REQUEST_ID.test(meta.requestId)) return refuse('bad-request', 'requestId missing or malformed');
-      if (!safeArg(meta.user) || !safeArg(meta.via)) return refuse('bad-request', 'user and via are required');
+      if (!safeUser(meta.user) || !safeArg(meta.via)) return refuse('bad-request', 'user and via are required');
       if (typeof args?.target !== 'string' || !safeArg(args.target)) return refuse('bad-request', 'target missing or malformed');
       if (!st.hello) {
         const h = await handshake();
@@ -198,7 +201,8 @@ export function createContractEngine(opts) {
       if (st.incompatible) return refuse('incompatible', st.incompatible);
       // Never queued: an engine that does not answer refuses the decision now.
       const r = await send(`act:${meta.requestId}`, verb, args, meta);
-      if (r.err) { fail(r.err); return refuse('engine-down', st.lastError); }
+      // A timeout may have decided anyway: only a retry with the same request id can tell.
+      if (r.err) { fail(r.err); return refuse(r.err.code === 'timeout' ? 'timeout' : 'engine-down', st.lastError); }
       // The engine's result (laneboard shape `result`), refusals included.
       const a = accept('act', r.raw);
       return a.ok ? a.data : a;

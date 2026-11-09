@@ -41,7 +41,7 @@ Every engine has every member; one it lacks answers `{ok: false, code: 'unsuppor
 | `events(runId, since)` | the events after `since`, plus `next` to pass next time |
 | `waiting(filter)` | what waits for a person: gates and questions with their content and revision |
 | `knowledge(product, filter)` | claims, questions, requirements, source headers (never raw sources); filter by `kind`, `status`, `id`, `limit`, `cursor` |
-| `act(verb, args, meta)` | one decision, `meta = {requestId, user, via}`; nothing calls it yet (decisions go through the control plane, phase 4) |
+| `act(verb, args, meta)` | one decision, `meta = {requestId, user, via}`; called only by the actions in [decisions.md](decisions.md) (decisions go through the control plane, phase 4) |
 | `status()` | `up`, `stale`, `down`, `degraded`, `incompatible`, `unknown` or `off`, with the reason |
 
 A read answers `{ok: true, data, at, stale, age, dropped}` or `{ok: false,

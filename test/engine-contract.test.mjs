@@ -387,12 +387,18 @@ describe('act', () => {
     assert.equal(calls, 0);
   });
 
-  test('an engine that does not answer refuses the decision: engine-down, never queued', async () => {
+  test('an engine that does not answer refuses the decision: its outcome is unknown, never queued', async () => {
     let calls = 0;
     const e = fake.create({ timeoutMs: 50, override: { approve: () => { calls += 1; return new Promise(() => {}); } } });
     const r = await e.act('approve', { target: 'R-20261101-acme-shop-1/variant-1' }, META(5));
-    assert.equal(r.code, 'engine-down');
+    assert.equal(r.code, 'timeout');
     assert.equal(calls, 1);
+  });
+
+  test('an engine that cannot be run refuses the decision: engine-down', async () => {
+    const e = fake.create({ override: { approve: () => { throw Object.assign(new Error('no such binary'), { code: 'ENOENT' }); } } });
+    const r = await e.act('approve', { target: 'R-20261101-acme-shop-1/variant-1' }, META(6));
+    assert.equal(r.code, 'engine-down');
   });
 });
 

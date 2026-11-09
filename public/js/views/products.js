@@ -1,7 +1,8 @@
 // The Products view `#/products` (`g p`): is each product ready for its next
-// goal, and if not, why? Read-only, from GET /api/engines/products
+// goal, and if not, why? From GET /api/engines/products
 // (docs/products.md). Everything shown was written by an engine: it goes in
 // through textContent only, and a link only when it is http(s).
+import { decisionButton } from './engine-actions.js';
 import { el } from '../core/dom.js';
 import { rnClean, safeHref } from '../core/run-text.js';
 import { lamp, panel, setPanel } from '../ui/components.js';
@@ -77,6 +78,12 @@ function goalRow(g, product) {
   flow.href = `#/flow?product=${encodeURIComponent(product.id)}&goal=${encodeURIComponent(g.id)}`;
   head.append(runs, flow);
   li.append(head);
+  if (ready && product.engine) {
+    head.append(decisionButton({
+      label: 'Start', word: 'start', action: 'engine-start', target: `${product.engine}/${product.id}`, tier: 'ask', args: { goal: g.id },
+      lines: [rnClean(g.title) ?? g.id, 'This only asks for a recipe. Nothing runs until you approve it.'],
+    }));
+  }
   if (!ready && g.reasons?.length) {
     const ul = el('ul', 'pd-reasons');
     for (const r of g.reasons) ul.append(reasonRow(r, product));

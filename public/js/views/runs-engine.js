@@ -4,6 +4,7 @@
 //
 // Everything here was written by an engine: it goes in through textContent and
 // setAttribute only, and a link only when it is http(s) (safeHref).
+import { decisionButton } from './engine-actions.js';
 import { el } from '../core/dom.js';
 import { money } from '../core/format.js';
 import { rnClean, safeHref } from '../core/run-text.js';
@@ -304,6 +305,16 @@ function engineSection(cls, name, count = null) {
   return s;
 }
 
+/** What a person can do to an engine run in this state. Pure. */
+export function runControls(key, run) {
+  const out = [];
+  const on = (label, word, action, tier) => out.push({ label, word, action, target: key, tier, args: {}, lines: [rnClean(key, 100) ?? '', 'Gentle: the current step finishes first.'] });
+  if (['running', 'at-gate', 'queued'].includes(run?.state)) on('Pause', 'pause', 'engine-pause', 'click');
+  if (run?.state === 'paused') on('Resume', 'resume', 'engine-resume', 'click');
+  if (run && !['done', 'stopped'].includes(run.state)) on('Stop', 'stop', 'engine-stop', 'confirm');
+  return out;
+}
+
 function enginePageHead(key, run, page, now) {
   const head = el('header', 'rn-head');
   const back = el('a', 'rn-back', '← Runs');
@@ -327,6 +338,12 @@ function enginePageHead(key, run, page, now) {
     facts.append(flow);
   }
   head.append(back, top, facts);
+  const controls = runControls(key, run);
+  if (controls.length) {
+    const box = el('div', 'rn-facts');
+    for (const c of controls) box.append(decisionButton(c));
+    head.append(box);
+  }
   if (page.stale) head.append(el('p', 'rn-stale', `The engine is not answering. This is its last good answer, ${engineAge(page.age)}.`));
   return head;
 }
