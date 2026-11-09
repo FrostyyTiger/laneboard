@@ -93,6 +93,7 @@ export function createStore({ keyMode = 'fkey', pinned = new Set() } = {}) {
     openSession: null,     // index key shown in the sheet
     view: 'board',
     lanes: null,
+    peerCheck: null,
     routeHold: false,
     /** Set when the box payload changed, so lane heads and the Box re-render. */
     boxDirty: true,

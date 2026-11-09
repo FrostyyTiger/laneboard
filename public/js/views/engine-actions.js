@@ -5,6 +5,10 @@ import { el } from '../core/dom.js';
 import { actEngine, uuid } from '../core/actions.js';
 import { confirmAction } from '../ui/confirm.js';
 import { toast } from '../ui/toast.js';
+import { store } from '../core/store.js';
+
+/** On a server that cannot tell itself from a program on it (docs/decisions.md). */
+export const POSE_WARNING = 'Warning: a program on this machine could pose as you.';
 
 /** Ids of sends whose outcome is unknown: pressing again re-sends the same id, so the engine applies it once. */
 const unknownSends = new Map();
@@ -16,6 +20,7 @@ export function decisionOutcome(word, r) {
   if (r?.ok === 'unknown' || r?.code === 'timeout') return { kind: 'err', retry: true, text: `No answer in time, so ${word} may have gone through. Press it again: it is safe, it applies once.` };
   switch (r?.code) {
     case 'remote-only': return { kind: 'err', text: `${word} cannot be sent from this machine itself. Open laneboard through your normal sign-in.` };
+    case 'peer-check-off': return { kind: 'err', text: 'Decisions are off until fleet.ingressPeerUid is set on this server. See docs/decisions.md.' };
     case 'stale-revision': return { kind: 'err', text: 'It changed since you read it. Nothing was decided. Look at it again.' };
     case 'already-decided': return { kind: 'err', text: 'This was already decided.' };
     case 'engine-down': return { kind: 'err', text: `The engine is not answering. ${word} was not sent.` };
@@ -72,6 +77,7 @@ export async function runDecision(plan, io = {}) {
   // A confirm-tier action shows a card with one button, no typing (the plan's Q8).
   const needsCard = plan.tier === 'confirm' || plan.tier === 'ask' || plan.showBack;
   if (needsCard) {
+    if ((io.peerCheck ?? store.peerCheck) === 'unavailable') lines.push(POSE_WARNING);
     const a = await ask({ action: plan.word, targets: [plan.target], tier: 'ask', consequence: lines });
     if (!a?.ok) return null;
   }

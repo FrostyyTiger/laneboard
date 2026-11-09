@@ -25,7 +25,8 @@ test('GET /api/features says what the config says', () => {
     let body;
     features.register({ config: { lanes: { enabled } }, route: (m, p, h) => { handler = h; }, json: (res, b) => { body = b; } });
     handler({}, {});
-    assert.deepEqual(body, { lanes: enabled });
+    assert.equal(body.lanes, enabled);
+    assert.ok(['on', 'missing', 'unavailable'].includes(body.peerCheck));
   }
 });
 

@@ -1,7 +1,7 @@
 // The page side of a decision: what is asked, what is sent, what is said.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decisionOutcome, runDecision } from '../public/js/views/engine-actions.js';
+import { POSE_WARNING, decisionOutcome, runDecision } from '../public/js/views/engine-actions.js';
 import { decisionPlans } from '../public/js/views/inbox-waiting.js';
 import { runControls } from '../public/js/views/runs-engine.js';
 
@@ -100,4 +100,15 @@ test('a decision names the builder the server says it is, on /api/v1/actions', a
   assert.equal(posts[0].body.id, 'abc');
   const hub = createActions({ store: { source: { kind: 'hub' }, builders: new Map(), sessions: new Map() }, fetchImpl });
   assert.equal((await hub.actEngine('engine-pause', 'main/R-1')).code, 'unsupported');
+});
+
+test('the card warns only where the server cannot check, and each failure says so', async () => {
+  const plan = decisionPlans(item({ id: 'R-3/z' }), 'main')[0];
+  const a = io({ ok: true });
+  await runDecision(plan, { ...a.opts, peerCheck: 'unavailable' });
+  assert.ok(a.log.cards[0].consequence.includes(POSE_WARNING));
+  const b = io({ ok: true });
+  await runDecision(plan, { ...b.opts, peerCheck: 'on' });
+  assert.ok(!b.log.cards[0].consequence.includes(POSE_WARNING));
+  assert.match(decisionOutcome('approve', { ok: false, code: 'peer-check-off' }).text, /ingressPeerUid/);
 });
