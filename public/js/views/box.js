@@ -9,6 +9,7 @@
 // textContent, setAttribute or title, never as markup. The direct link is the
 // hub's configured `directUrl` (fleet.builders[].directUrl, never a builder's
 // own claim), and only an http(s) URL with no credentials becomes a link.
+import { POSE_WARNING } from './engine-actions.js';
 import { $, el } from '../core/dom.js';
 import { icon } from '../core/icons.js';
 import { deriveCode } from '../core/keys.js';
@@ -599,7 +600,8 @@ function refreshEngines(fetchImpl = globalThis.fetch) {
 const ENGINE_LAMP = Object.freeze({ up: 'ok', stale: '3', down: '1', degraded: '2', incompatible: '1' });
 
 /** One line per run engine: state, contract, version, why it is not up. Null with no engine. */
-export function enginesBlock(rows) {
+export function enginesBlock(rows, peerState) {
+  const peer = peerState === undefined ? store.peerCheck : peerState;
   if (!Array.isArray(rows) || !rows.length) return null;
   const sec = el('section', 'mblock');
   sec.dataset.block = 'engines';
@@ -611,6 +613,8 @@ export function enginesBlock(rows) {
       el('span', null, [e.id, e.contract && `contract ${e.contract}`, e.version && `engine ${e.version}`, e.reason].filter(Boolean).map((x) => String(x).slice(0, 160)).join(' · ')));
     sec.append(line);
   }
+  if (peer === 'unavailable') sec.append(el('p', 'empty', POSE_WARNING));
+  if (peer === 'missing') sec.append(el('p', 'empty', 'Decisions are off until fleet.ingressPeerUid is set. See docs/decisions.md.'));
   return sec;
 }
 

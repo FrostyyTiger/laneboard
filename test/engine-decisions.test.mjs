@@ -11,6 +11,7 @@ import { createLimiter } from '../server/fleet/ratelimit.mjs';
 import { ENGINE_ACTIONS, registerEngineActions } from '../server/engine/actions.mjs';
 import { createContractEngine, safeUser } from '../server/engine/adapter.mjs';
 import { argsFor } from '../server/engine/foundry-cli.mjs';
+import { peerCheck } from '../server/engine/peer-check.mjs';
 
 const BID = 'builder-a';
 const REV = 'sha256:8ed771e8d2fc03fd';
@@ -20,13 +21,13 @@ let n = 0;
 const DIRECT = { kind: 'direct', user: 'alice@example.invalid' };
 const LOCAL = { kind: 'local', user: 'local' };
 
-function world({ answer = (v, a, m) => ({ ok: true, verb: v, target: a.target, request: m.requestId, by: m.user, via: m.via, replayed: false }), kind = 'fake', hubControl = true } = {}) {
+function world({ platform = 'darwin', fleet = {}, answer = (v, a, m) => ({ ok: true, verb: v, target: a.target, request: m.requestId, by: m.user, via: m.via, replayed: false }), kind = 'fake', hubControl = true } = {}) {
   _reset();
   const calls = [];
   const engine = { id: 'main', kind, act: async (v, a, m) => { calls.push({ v, a, m }); return answer(v, a, m); } };
-  registerEngineActions({ engineOf: (id) => (id === 'main' ? engine : undefined) });
+  registerEngineActions({ platform, engineOf: (id) => (id === 'main' ? engine : undefined) });
   const audit = openAudit({ file: path.join(tmp, `a-${++n}.jsonl`), builder: BID });
-  const config = { fleet: { id: BID, hubControl } };
+  const config = { fleet: { id: BID, hubControl, ...fleet } };
   const go = (action, target, args, auth = DIRECT, id = crypto.randomUUID()) => dispatch(
     { v: 1, id, ts: Date.now(), builder: BID, action, target, args, user: 'evil@example.invalid', via: 'direct' },
     { auth, deps: { config }, audit, limiter: createLimiter({}), config },
@@ -131,6 +132,36 @@ test('the CLI gets start and flags in the contract form, and a flag-like target 
   assert.deepEqual(argsFor('start', { target: 'acme', goal: 'G1' }, meta).slice(0, 3), ['start', 'acme', 'G1']);
   assert.deepEqual(argsFor('approve', { target: 'R/1', expect: REV, choice: 'b' }, meta).slice(0, 6), ['approve', 'R/1', '--expect', REV, '--choice', 'b']);
   assert.throws(() => argsFor('pause', { target: '-x' }, meta));
+});
+
+test('Linux without the peer check refuses remote-only decisions, before the engine', async () => {
+  for (const [name, def] of Object.entries(ENGINE_ACTIONS)) {
+    if (!def.remoteOnly) continue;
+    const args = { expect: REV, confirm: T, why: 'x', text: 'x', goal: 'G1', choice: 'a' };
+    for (const k of Object.keys(args)) if (!(k in def.args)) delete args[k];
+    const w = world({ platform: 'linux' });
+    const r = await w.go(name, T, args);
+    assert.equal(r.code, 'peer-check-off', name);
+    assert.equal(r.status, 403);
+    assert.equal(w.calls.length, 0);
+  }
+});
+
+test('Linux: pause still works without it; everything works once it is set, uid 0 included', async () => {
+  assert.equal((await world({ platform: 'linux' }).go('engine-pause', 'main/R-1', {})).ok, true);
+  assert.equal((await world({ platform: 'linux', fleet: { ingressPeerUid: 0 } }).go(...approve())).ok, true);
+});
+
+test('a signed hub request does not need it; not Linux does not refuse', async () => {
+  const hub = { kind: 'hub', scopes: new Set(['control']), keyLabel: 'k', verified: true };
+  assert.equal((await world({ platform: 'linux' }).go(...approve(), hub)).ok, true);
+  assert.equal((await world({ platform: 'darwin' }).go(...approve())).ok, true);
+});
+
+test('peerCheck names the three states', () => {
+  assert.equal(peerCheck({ fleet: { ingressPeerUid: 0 } }, 'linux'), 'on');
+  assert.equal(peerCheck({ fleet: { ingressPeerUid: null } }, 'linux'), 'missing');
+  assert.equal(peerCheck({ fleet: {} }, 'darwin'), 'unavailable');
 });
 
 test('a signed-in email is a valid decider; anything flag-like is not', () => {

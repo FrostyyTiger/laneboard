@@ -18,9 +18,24 @@ The target is `<engine>/<item, run or product>`.
 
 **From the machine itself** means the local address, what a script or an agent on
 the box uses. Refusing there stops an agent approving its own work through that
-address. Use your normal sign-in. A process on the box can still pose as a remote
-user on the ingress port unless `fleet.ingressPeerUid` is set, so set it on any
-builder with engines.
+address. Use your normal sign-in.
+
+A program on the box could still pose as a remote user on the ingress port.
+`fleet.ingressPeerUid` stops that, and works on Linux only:
+
+| Server | Setting | Decisions (except Pause, Resume) |
+| --- | --- | --- |
+| Linux | set | work |
+| Linux | not set | refused (`peer-check-off`) |
+| Not Linux | cannot be set | work, with a warning on the card and in Box |
+
+On Linux, set it to the user id tailscaled runs as, usually `0`:
+
+```json
+{ "fleet": { "ingressPeerUid": 0 } }
+```
+
+Find the number with `ps -o uid= -C tailscaled`. Signed hub requests do not need it.
 
 **Who decided** is the signed-in person from the dispatcher's record, never a page
 field. The hub does not relay these actions yet: its page has no engine data and

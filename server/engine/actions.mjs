@@ -7,9 +7,11 @@
 // the page sent, and the envelope's id is its --request-id: a retry applies once.
 //
 // Target: `<engine>/<item, run or product>`. Remote-only actions are refused from
-// the machine itself, so an agent on it cannot approve its own work.
+// the machine itself, so an agent on it cannot approve its own work. On Linux they
+// also need fleet.ingressPeerUid, without which that refusal can be got around.
 import { ActionRefused, has, registerAction } from '../fleet/dispatch.mjs';
 import * as engines from './index.mjs';
+import { peerCheck } from './peer-check.mjs';
 
 export const VIA = 'laneboard';
 const REVISION_RE = /^sha256:[0-9a-f]{16}$/;
@@ -56,7 +58,7 @@ function refusal(a) {
 }
 
 /** Register the actions once. `engineOf` is injectable for tests. */
-export function registerEngineActions({ engineOf = engines.get } = {}) {
+export function registerEngineActions({ engineOf = engines.get, platform = process.platform } = {}) {
   for (const [name, def] of Object.entries(ENGINE_ACTIONS)) {
     if (has(name)) continue;
     registerAction(name, {
@@ -64,7 +66,11 @@ export function registerEngineActions({ engineOf = engines.get } = {}) {
       target: 'engine',
       remoteOnly: def.remoteOnly,
       args: def.args,
-      async run({ target, args, user, requestId }) {
+      async run({ target, args, user, requestId, kind, config }) {
+        // A signed-in user on the ingress port may be a program on this machine with forged headers.
+        if (def.remoteOnly && kind === 'direct' && peerCheck(config, platform) === 'missing') {
+          throw new ActionRefused(403, 'peer-check-off', 'decisions are off until fleet.ingressPeerUid is set on this server');
+        }
         const slash = target.indexOf('/');
         const id = target.slice(0, slash);
         const engine = engineOf(id);

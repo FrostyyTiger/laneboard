@@ -210,12 +210,18 @@ function deepLinkOnce() {
  */
 export async function loadFeatures() {
   let lanes = true;
+  let peer = null;
   store.routeHold = true;
   try {
     const r = await fetch('/api/features');
-    if (r?.ok) lanes = (await r.json())?.lanes !== false;
+    if (r?.ok) {
+      const b = await r.json();
+      lanes = b?.lanes !== false;
+      peer = typeof b?.peerCheck === 'string' ? b.peerCheck : null;
+    }
   } catch { /* keep the default */ }
   store.lanes = lanes;
+  store.peerCheck = peer;
   store.routeHold = false;
   document.documentElement?.setAttribute?.('data-lanes', lanes ? 'on' : 'off');
 }
