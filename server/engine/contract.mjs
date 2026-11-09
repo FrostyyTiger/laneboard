@@ -44,7 +44,7 @@ export const WRITE_VERBS = Object.freeze(['approve', 'reject', 'answer', 'accept
 /** The engine's refusal codes (contract v1 "Result"). */
 export const RESULT_CODES = Object.freeze(['not-found', 'already-decided', 'stale-revision', 'refused', 'busy', 'engine-error']);
 /** laneboard's own codes, for answers the engine never gave. */
-export const LOCAL_CODES = Object.freeze(['engine-down', 'incompatible', 'degraded', 'unsupported', 'bad-request']);
+export const LOCAL_CODES = Object.freeze(['timeout', 'engine-down', 'incompatible', 'degraded', 'unsupported', 'bad-request']);
 
 const set = (...a) => new Set(a);
 export const VOCAB = Object.freeze({
@@ -233,7 +233,7 @@ function gate(g) {
     for: str(g.for),
     openedAt: ms(g.opened),
     decided: isObj(d) && VOCAB.decision.has(d.decision)
-      ? { decision: d.decision, by: str(d.by), via: str(d.via), at: ms(d.at), request: str(d.request) } : null,
+      ? { decision: d.decision, choice: str(d.choice), by: str(d.by), via: str(d.via), at: ms(d.at), request: str(d.request) } : null,
     updatedAt: ms(g.updated),
   };
 }

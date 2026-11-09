@@ -11,7 +11,7 @@ run: the current node, rooms, age or stop reason and cost for an engine run;
 round, scores and burn for a run file. Runs that wait for a person sort first.
 An engine that is stale, down or incompatible says so above the list.
 
-Read-only: nothing on this page decides anything for an engine.
+Pause, Resume and Stop are on the page of a run from an engine ([decisions.md](decisions.md)).
 
 ## The run page
 

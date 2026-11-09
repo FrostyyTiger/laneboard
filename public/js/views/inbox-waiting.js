@@ -1,13 +1,13 @@
 // What waits for a person from the run engines, shown in full in the Inbox
-// (docs/waiting.md). Read-only until decisions go through the control plane.
+// (docs/waiting.md). Its buttons are actions (views/engine-actions.js).
 //
 // `content` keeps keys laneboard does not know, so it is drawn by a generic
 // walk: every value goes in through textContent, a link only when http(s).
 import { el } from '../core/dom.js';
 import { rnClean, safeHref } from '../core/run-text.js';
+import { decisionButton } from './engine-actions.js';
 
 export const WAITING_URL = '/api/engines/waiting';
-export const NEEDS_PHASE_4 = 'needs phase 4';
 const MAX_DEPTH = 5;
 const TEXT_MAX = 20000;
 
@@ -70,28 +70,32 @@ export function fieldsNode(obj, depth = 0) {
   return box;
 }
 
-function disabledBtn(text) {
-  const b = el('button', 'btn btn--s wt-btn', text);
-  b.type = 'button';
-  b.disabled = true;
-  b.title = NEEDS_PHASE_4;
-  return b;
+/** The decisions an item takes (docs/decisions.md). Pure. */
+export function decisionPlans(item, engine) {
+  const target = `${engine}/${item.id}`;
+  const title = rnClean(item.title, 200) ?? rnClean(item.id, 120) ?? '';
+  const lines = [title, `revision ${item.revision}`];
+  const reject = { label: 'Reject', word: 'reject', action: 'engine-reject', target, tier: 'confirm', args: { expect: item.revision }, lines, askText: { title: 'Why not?', key: 'why' } };
+  if (item.kind === 'question') return [{ label: 'Answer', word: 'answer', action: 'engine-answer', target, tier: 'click', args: {}, lines: [title], askText: { title: rnClean(item.content?.question, 300) ?? title, key: 'text' }, showBack: true }];
+  if (item.kind === 'variant') {
+    const picks = (Array.isArray(item.content?.options) ? item.content.options : []).filter((o) => typeof o?.id === 'string').map((o) => {
+      const name = rnClean(o.title ?? o.id, 60) ?? o.id;
+      return { label: `Pick ${name}`, word: 'pick', action: 'engine-pick', target, tier: 'confirm', args: { expect: item.revision, choice: o.id }, lines: [...lines, `choice: ${name}`] };
+    });
+    return [...picks, reject];
+  }
+  return [{ label: 'Approve', word: 'approve', action: 'engine-approve', target, tier: 'confirm', args: { expect: item.revision }, lines }, reject];
 }
 
-/** The decisions an item will take, drawn disabled. */
-export function decisionsNode(item) {
+/** The item's decision buttons. */
+export function decisionsNode(item, engine, onDone) {
   const box = el('div', 'wt-actions');
-  if (item.kind === 'question') box.append(disabledBtn('Answer'));
-  else if (item.kind === 'variant') {
-    for (const o of Array.isArray(item.content?.options) ? item.content.options : []) box.append(disabledBtn(`Pick ${rnClean(o?.title ?? o?.id, 60) ?? ''}`.trim()));
-    box.append(disabledBtn('Reject'));
-  } else box.append(disabledBtn('Approve'), disabledBtn('Reject'));
-  box.append(el('span', 'wt-why', NEEDS_PHASE_4));
+  for (const plan of decisionPlans(item, engine)) box.append(decisionButton(plan, onDone));
   return box;
 }
 
 /** The whole item, as a row opens it. */
-export function waitingBody(item, engine) {
+export function waitingBody(item, engine, onDone) {
   const body = el('div', 'wt-body');
   body.dataset.kind = rnClean(item.kind, 24) ?? '';
   body.addEventListener('click', (e) => e.stopPropagation());
@@ -112,7 +116,7 @@ export function waitingBody(item, engine) {
     a.rel = 'noopener noreferrer';
     meta.append(a);
   }
-  body.append(meta, fieldsNode(item.content ?? {}), decisionsNode(item));
+  body.append(meta, fieldsNode(item.content ?? {}), decisionsNode(item, engine, onDone));
   return body;
 }
 

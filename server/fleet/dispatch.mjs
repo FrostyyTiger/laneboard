@@ -30,7 +30,9 @@ export const TIERS = Object.freeze(['read', 'click', 'ask', 'confirm']);
 export const KINDS = Object.freeze(['local', 'direct', 'hub']);
 export const VIAS = Object.freeze(['hub', 'direct', 'legacy']);
 /** Target kinds; each may carry the suffix `-or-all` to also accept `*`. `all` accepts only `*`. */
-export const TARGET_KINDS = Object.freeze(['session', 'session-new', 'lane', 'builder', 'alarm', 'all']);
+export const TARGET_KINDS = Object.freeze(['session', 'session-new', 'lane', 'builder', 'alarm', 'engine', 'all']);
+/** `<engine>/<item, run or product>` (server/engine/actions.mjs). */
+const ENGINE_TARGET_RE = /^[a-z0-9][a-z0-9-]{0,31}\/[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NAME_RE = /^[a-z][a-z0-9-]{0,31}$/;
@@ -290,6 +292,9 @@ function checkTarget(def, target, deps, config) {
     case 'builder':
       if (!config?.fleet?.id || target !== config.fleet.id) throw new ActionRefused(400, 'bad_target', 'target is not this builder');
       return;
+    case 'engine':
+      if (!ENGINE_TARGET_RE.test(target) || target.includes('..')) throw new ActionRefused(400, 'bad_target', 'invalid engine target');
+      return;
     case 'alarm':
       if (!ALARM_ID_RE.test(target)) throw new ActionRefused(400, 'bad_target', 'invalid alarm id');
       return;
@@ -443,7 +448,7 @@ function takeLimitsFor(limiter, rec, def, target, args, auth) {
 }
 
 async function execute({ def, runFn, target, args, rec, auth, deps, config }) {
-  const result = await runFn({ action: def.name, target, args: structuredClone(args), user: rec.user, via: rec.via, kind: auth.kind, auth, deps, config });
+  const result = await runFn({ action: def.name, requestId: rec.id, target, args: structuredClone(args), user: rec.user, via: rec.via, kind: auth.kind, auth, deps, config });
   const plain = result === undefined || result === null ? {} : result;
   let status = 200;
   if (def.status) {

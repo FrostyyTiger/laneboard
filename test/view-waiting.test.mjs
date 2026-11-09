@@ -4,7 +4,7 @@ import { makeDocument } from './helpers/fakedom.mjs';
 import { create as fakeEngine } from '../server/engine/fake.mjs';
 import { waitingBody as routeBody } from '../server/routes/engines.mjs';
 import { buildInbox, keyAction } from '../public/js/core/inbox-model.js';
-import { NEEDS_PHASE_4, loadWaiting, waitingBody } from '../public/js/views/inbox-waiting.js';
+import { decisionPlans, loadWaiting, waitingBody } from '../public/js/views/inbox-waiting.js';
 
 const byClass = (n, c) => n.querySelectorAll(`.${c}`);
 async function withDom(fn) {
@@ -15,7 +15,7 @@ async function withDom(fn) {
 const items = async () => (await routeBody([fakeEngine({ id: 'main' })])).items;
 const STORE = { sessions: [], lanes: [], attention: [], approvals: [], flags: [], builders: [] };
 
-test('every fixture kind opens in full, its buttons disabled with the reason', async () => withDom(async () => {
+test('every fixture kind opens in full, its buttons live', async () => withDom(async () => {
   const all = await items();
   assert.deepEqual([...new Set(all.map((i) => i.kind))].sort(),
     ['change', 'deploy', 'merge', 'proposal', 'question', 'recipe', 'repo', 'requirement', 'variant']);
@@ -24,8 +24,7 @@ test('every fixture kind opens in full, its buttons disabled with the reason', a
     for (const k of Object.keys(it.content)) assert.ok(byClass(b, 'wt-field').some((f) => f.dataset.key === k), `${it.kind}: ${k}`);
     const buttons = byClass(b, 'wt-btn');
     assert.ok(buttons.length > 0, it.kind);
-    assert.ok(buttons.every((x) => x.disabled === true && x.title === NEEDS_PHASE_4), it.kind);
-    assert.match(b.textContent, /needs phase 4/);
+    assert.ok(buttons.length && buttons.every((x) => x.disabled !== true), it.kind);
   }
 }));
 

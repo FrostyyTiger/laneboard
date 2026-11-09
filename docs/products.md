@@ -2,7 +2,7 @@
 
 `#/products` (`g p`; Packages moved to `g k`) answers: is each product ready for
 its next goal, and if not, why? One card per product, from every run engine
-([engines.md](engines.md)). Read-only.
+([engines.md](engines.md)). A ready goal has a Start button ([decisions.md](decisions.md)).
 
 Each goal shows `ready` or `not ready`, its title (a link to the goal's file)
 and its runs (links to the run page). A goal that is not ready lists its
@@ -25,4 +25,4 @@ add one. A hub has no engine data yet and says so.
 
 `GET /api/engines/products` answers `{products, engines}`, builder mode only.
 
-Not yet: starting a goal (phase 4), last PRs and CI on main per product.
+Not yet: last PRs and CI on main per product.

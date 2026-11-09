@@ -15,11 +15,12 @@
 //
 // A refusal is `{error, code}`: 400 bad-request, 404 unknown engine, not-found
 // or unsupported, 502 incompatible or degraded, 503 engine-down. No writes
-// here: decisions go through the control plane (phase 4). Builder only, behind
+// here: decisions are actions (server/engine/actions.mjs). Builder only, behind
 // the normal request guards like every route.
 import * as engines from '../engine/index.mjs';
 import { ACCEPTED } from '../engine/contract.mjs';
 import { setEngineRuns } from '../map.mjs';
+import { registerEngineActions } from '../engine/actions.mjs';
 
 export const LIST_PATH = '/api/engines';
 export const RUNS_PATH = '/api/engines/runs';
@@ -129,6 +130,7 @@ export default {
     mapPoll = null;
   },
   register(ctx) {
+    registerEngineActions();
     ctx.route('GET', LIST_PATH, async (req, res) => ctx.json(res, await listBody()));
     ctx.route('GET', RUNS_PATH, async (req, res) => ctx.json(res, await runsBody()));
     ctx.route('GET', WAITING_PATH, async (req, res) => ctx.json(res, await waitingBody()));
