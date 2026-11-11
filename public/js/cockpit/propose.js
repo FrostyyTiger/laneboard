@@ -5,7 +5,7 @@
 // as them (docs/decisions.md). The answer goes back as `propose.answer`.
 //
 //   const p = createProposals({ page, send });   // send(msg): the room link's
-//   p.apply(msg)                                 // propose.open / propose.end
+//   p.apply(msg)                                 // propose.open / propose.end / welcome
 import { askEngineText, runDecision } from '../views/engine-actions.js';
 import { decisionPlans, loadWaiting } from '../views/inbox-waiting.js';
 import { runControls } from '../views/runs-engine.js';
@@ -88,7 +88,7 @@ export function createProposals({ page = 'app', send, io = {} } = {}) {
   }
 
   function end(msg) {
-    if (!current || current.id !== msg.proposalId) return;
+    if (!current || (msg && current.id !== msg.proposalId)) return;
     current.ended = true;
     for (const d of current.root.querySelectorAll('dialog')) if (d.open) d.close();
   }
@@ -97,6 +97,8 @@ export function createProposals({ page = 'app', send, io = {} } = {}) {
     apply: (msg) => {
       if (msg.type === 'propose.open') open(msg).catch(() => answer(msg.proposalId, 'failed', { text: 'The page failed to show it.' }));
       else if (msg.type === 'propose.end') end(msg);
+      // A new link: the room ended any open proposal when the old one went.
+      else if (msg.type === 'welcome') end(null);
     },
   };
 }

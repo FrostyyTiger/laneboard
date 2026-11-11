@@ -82,7 +82,11 @@ export function initCockpit({ page = 'app', configured = boardSaysCockpit } = {}
       url: roomLinkUrl(),
       page,
       onState: (s) => pane.setLink(s),
-      onMessage: (m) => (m.type === 'propose.open' || m.type === 'propose.end' ? proposals.apply(m) : pane.apply(m)),
+      onMessage: (m) => {
+        if (m.type === 'propose.open' || m.type === 'propose.end') return proposals.apply(m);
+        if (m.type === 'welcome') proposals.apply(m);
+        return pane.apply(m);
+      },
     });
     started.link = link;
     link.start();
