@@ -1,0 +1,29 @@
+name: authors
+
+# Every commit in a pull request must carry a GitHub noreply address as author
+# and committer: this repo is public, so a personal address or a machine's
+# hostname in a commit is a leak (docs/hygiene.md).
+on:
+  pull_request:
+
+jobs:
+  authors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Only noreply addresses
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bad=$(git log --format='%h %ae %ce' "$BASE..$HEAD" \
+            | awk '{ for (i = 2; i <= 3; i++) if ($i !~ /@users\.noreply\.github\.com$/ && $i != "noreply@github.com") { print; next } }')
+          if [ -n "$bad" ]; then
+            echo "::error::Commits with an address that is not a GitHub noreply address (author, committer):"
+            echo "$bad"
+            echo "Fix: git config user.email '<id>+<login>@users.noreply.github.com', then rewrite these commits."
+            exit 1
+          fi
+          echo "All $(git rev-list --count "$BASE..$HEAD") commits use noreply addresses."
