@@ -5,6 +5,7 @@
 // Everything here was written by an engine: it goes in through textContent and
 // setAttribute only, and a link only when it is http(s) (safeHref).
 import { decisionButton } from './engine-actions.js';
+import { decisionPlans, waitingKindWord } from './inbox-waiting.js';
 import { el } from '../core/dom.js';
 import { money } from '../core/format.js';
 import { rnClean, safeHref } from '../core/run-text.js';
@@ -46,7 +47,7 @@ export function toListRow(r) {
   return { ...r, engineRow: true, engineState: r.state, runId: r.id, run: r.key, state: live ? 'running' : 'stopped' };
 }
 
-export const engineNeedsYou = (row) => row.engineState === 'at-gate' || row.engineState === 'waiting-approval';
+export const engineNeedsYou = (row) => row.engineState === 'at-gate' || row.engineState === 'waiting-approval' || row.waiting?.length > 0;
 
 /** GET /api/engines/runs -> {rows, engines, failed}. A hub has no such route: no rows, no complaint. */
 export async function loadEngineRuns(fetchFn = globalThis.fetch) {
@@ -67,6 +68,93 @@ export function engineBanners(engines, failed = false) {
     .map((e) => `Engine ${rnClean(e.id, 32) ?? '?'} is ${rnClean(e.state, 16) ?? '?'}${e.reason ? `: ${rnClean(e.reason)}` : ''}. Its runs may be old or missing.`);
   if (failed) out.push('The engines could not be read. Only run-file runs are listed.');
   return out;
+}
+
+// ---------------------------------------------------------------- the foreman's health
+
+const FOREMAN_P = Object.freeze({ up: 'ok', stale: '2', down: '1', unknown: 'off' });
+const LIVE = new Set(['running', 'at-gate', 'waiting-approval', 'paused', 'queued']);
+
+function shortAge(ms) {
+  if (typeof ms !== 'number') return null;
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 90) return `${s}s ago`;
+  return engineAge(ms);
+}
+
+function windowText(name, w) {
+  if (!w || typeof w.usedPct !== 'number') return null;
+  return w.known === false ? `${name} unknown` : `${name} ${Math.round(w.usedPct)}%`;
+}
+
+/**
+ * One line per engine that reports health: the foreman's state, the
+ * heartbeat's age, its hosts, queue and usage windows, and the live runs with
+ * their node. Pure: `engines` and `rows` as loadEngineRuns gives them.
+ */
+export function healthLines(engines, rows = []) {
+  const out = [];
+  for (const e of Array.isArray(engines) ? engines : []) {
+    const h = e?.health;
+    if (!h) continue;
+    const id = rnClean(e.id, 32) ?? '?';
+    const foreman = FOREMAN_P[h.foreman] ? h.foreman : 'unknown';
+    const parts = [];
+    const beat = shortAge(h.beatAge);
+    if (beat) parts.push(`heartbeat ${beat}`);
+    if (h.foreman === 'unknown' && h.reason) parts.push(rnClean(h.reason, 120));
+    const hosts = (Array.isArray(h.hosts) ? h.hosts : []).map((x) => `${rnClean(x.id, 32)} ${rnClean(x.state, 12)}`);
+    if (hosts.length) parts.push(hosts.join(', '));
+    if (typeof h.queue === 'number') parts.push(`queue ${h.queue}`);
+    const wins = [windowText('5h', h.windows?.window5h), windowText('7d', h.windows?.window7d)].filter(Boolean);
+    if (wins.length) parts.push(`usage ${wins.join(' · ')}`);
+    const live = (Array.isArray(rows) ? rows : []).filter((r) => r.engine === e.id && LIVE.has(r.engineState))
+      .map((r) => ({ key: r.run, text: [rnClean(r.runId, 64), engineStateOf(r).word, r.node ? `at ${rnClean(r.node, 48)}` : null].filter(Boolean).join(' ') }));
+    out.push({ engine: id, foreman, p: FOREMAN_P[foreman], text: parts.filter(Boolean).join(' · '), live });
+  }
+  return out;
+}
+
+export function healthNode(lines) {
+  const box = el('div', 'rn-health');
+  box.setAttribute('aria-label', 'Run engines');
+  for (const l of lines) {
+    const row = el('p', 'rn-health-line');
+    row.dataset.foreman = l.foreman;
+    row.append(lamp(l.p, { label: `foreman ${l.foreman}` }), el('b', null, `${l.engine}: foreman ${l.foreman}`));
+    if (l.text) row.append(el('span', 'rn-health-t', l.text));
+    if (l.live.length) {
+      for (const r of l.live) {
+        const a = el('a', 'rn-health-run', r.text);
+        a.href = runHref(r.key);
+        row.append(a);
+      }
+    } else row.append(el('span', 'rn-health-t', 'no run now'));
+    box.append(row);
+  }
+  return box;
+}
+
+// ---------------------------------------------------------------- what waits, on a run's row
+
+/** The run's waiting items under its row: kind, title, revision, and the board's own buttons. */
+export function gatesNode(row, onDone) {
+  const items = Array.isArray(row?.waiting) ? row.waiting : [];
+  if (!items.length) return null;
+  const box = el('div', 'rn-gates');
+  for (const it of items) {
+    const g = el('div', 'rn-gate');
+    g.dataset.item = rnClean(it.id, 120) ?? '';
+    const rev = typeof it.revision === 'string' ? it.revision.replace(/^sha256:/, '').slice(0, 8) : '';
+    const rv = el('span', 'rn-gate-rev', rev ? `rev ${rev}` : '');
+    rv.title = `revision ${rnClean(it.revision, 40) ?? '?'}: a decision applies only to this exact content`;
+    g.append(el('span', 'rn-gate-kind', waitingKindWord(it.kind)), el('span', 'rn-gate-t', rnClean(it.title, 200) ?? rnClean(it.id, 120) ?? ''), rv);
+    const btns = el('span', 'rn-gate-btns');
+    for (const plan of decisionPlans(it, row.engine)) btns.append(decisionButton(plan, onDone));
+    g.append(btns);
+    box.append(g);
+  }
+  return box;
 }
 
 export function bannersNode(lines) {
@@ -104,7 +192,7 @@ export function sourceLabel(product, engine) {
   return s;
 }
 
-export function engineRow(row, now = Date.now()) {
+export function engineRow(row, now = Date.now(), onDone = null) {
   const li = el('li', 'rn-row');
   li.dataset.run = rnClean(row.run, 100) ?? '';
   li.dataset.state = row.state;
@@ -126,6 +214,8 @@ export function engineRow(row, now = Date.now()) {
   if (row.stale) left.title = `last good answer, ${engineAge(row.age)}`;
   const usd = usdOf(row);
   li.append(engineStateCell(engineStateOf(row)), goal, node, rooms, left, el('span', 'rn-f rn-cost', usd === null ? DASH : money(usd)));
+  const gates = gatesNode(row, onDone);
+  if (gates) li.append(gates);
   return li;
 }
 

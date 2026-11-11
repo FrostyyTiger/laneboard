@@ -1,7 +1,8 @@
 // Route module: run engines, read-only (docs/engines.md).
 //
 //   GET /api/engines                        -> {accepts, engines: [status + capabilities]}
-//   GET /api/engines/runs                   -> {runs, engines, errors}, every engine but jsonl (the Runs view)
+//   GET /api/engines/runs                   -> {runs, engines, errors}, every engine but jsonl (the Runs view);
+//                                              each engine with its foreman `health`, each run with its `waiting` items
 //   GET /api/engines/products               -> {products, engines}, every engine (the Products view)
 //   GET /api/engines/waiting                -> {items, engines}, every engine (the Inbox, Morning)
 //   GET /api/engine/:id/hello               -> {engine, at, stale, age, dropped, data}
@@ -67,9 +68,51 @@ export async function runsBody(list = engines.list()) {
     if (!a.ok) return;
     for (const p of a.data.products) for (const g of p.goals) titles.set(`${e.id}/${p.id}/${g.id}`, g.title);
   }));
-  for (const r of runs) r.goalTitle ??= titles.get(`${r.engine}/${r.product}/${r.goal}`) ?? null;
-  const states = contract.map((e) => { const s = e.status(); return { id: e.id, kind: e.kind, state: s.state, reason: s.reason ?? null }; });
+  const waiting = new Map(); // `<engine>/<run>` -> items
+  const health = new Map();
+  await Promise.all(contract.map(async (e) => {
+    if (e.capabilities.includes('health')) health.set(e.id, foremanOf(await e.health()));
+    if (!e.capabilities.includes('waiting')) return;
+    const a = await e.waiting({});
+    if (!a.ok) return;
+    for (const it of a.data.items) {
+      if (!it.run) continue;
+      const k = `${e.id}/${it.run}`;
+      if (!waiting.has(k)) waiting.set(k, []);
+      waiting.get(k).push(it);
+    }
+  }));
+  for (const r of runs) {
+    r.goalTitle ??= titles.get(`${r.engine}/${r.product}/${r.goal}`) ?? null;
+    r.waiting = waiting.get(r.key) ?? [];
+  }
+  const states = contract.map((e) => {
+    const s = e.status();
+    return { id: e.id, kind: e.kind, state: s.state, reason: s.reason ?? null, health: health.get(e.id) ?? null };
+  });
   return { runs, engines: states, errors };
+}
+
+/** The foreman's heartbeat is this old (by the engine's own clock) and still counts as up, or as stale. */
+export const BEAT_UP_MS = 60_000;
+export const BEAT_STALE_MS = 300_000;
+
+/**
+ * An engine's `health` answer -> what the Runs view shows: `foreman` is up,
+ * stale or down by the heartbeat's age when the engine answered (its own clock,
+ * so no skew), or unknown when laneboard has no fresh answer.
+ */
+export function foremanOf(a) {
+  if (!a?.ok) return { foreman: 'unknown', reason: a?.reason ?? 'no answer', beatAge: null };
+  const d = a.data;
+  const beatAge = typeof a.at === 'number' && typeof d.heartbeatAt === 'number' ? Math.max(0, a.at - d.heartbeatAt) : null;
+  let foreman = beatAge === null ? 'unknown' : beatAge <= BEAT_UP_MS ? 'up' : beatAge <= BEAT_STALE_MS ? 'stale' : 'down';
+  if (a.stale === true) foreman = 'unknown';
+  return {
+    foreman, beatAge, heartbeatAt: d.heartbeatAt, at: a.at ?? null, stale: a.stale === true, age: a.age ?? null,
+    queue: d.queue, active: d.active ?? null, hosts: d.hosts, windows: d.windows,
+    reason: a.stale === true ? (a.reason ?? 'the last good answer') : null,
+  };
 }
 
 /** The body of GET /api/engines/products: every engine's products, each with `engine`, and the engines' states. */
