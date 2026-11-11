@@ -364,7 +364,7 @@ const MAP = {
   },
   health(d, drop) {
     if (!Array.isArray(d.hosts)) bad('health has no hosts');
-    const w = (x) => (isObj(x) && num(x.used_pct) !== null ? { usedPct: x.used_pct, resetsAt: ms(x.resets_at) } : null);
+    const w = (x) => (isObj(x) && num(x.used_pct) !== null ? { usedPct: x.used_pct, resetsAt: ms(x.resets_at), known: x.known !== false } : null);
     return {
       heartbeatAt: ms(d.heartbeat) ?? bad('health heartbeat missing'),
       hosts: rows(d.hosts, (h) => (isObj(h) && str(h.id)

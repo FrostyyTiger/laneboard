@@ -46,7 +46,7 @@ import { toast } from '../ui/toast.js';
 import { sparkRange } from '../ui/spark.js';
 import { rnClean, safeHref } from '../core/run-text.js';
 import {
-  applyRun, bannersNode, engineBanners, engineNeedsYou, engineRow, loadEngineRun, loadEngineRuns, newPage, parseRunKey,
+  applyRun, bannersNode, engineBanners, engineNeedsYou, engineRow, healthLines, healthNode, loadEngineRun, loadEngineRuns, newPage, parseRunKey,
   renderEnginePage, sourceLabel, toggleFold,
 } from './runs-engine.js';
 
@@ -511,8 +511,8 @@ function needsNode(row) {
 }
 
 /** One `.rn-row` <li> for a summary row at `now`. */
-export function runRow(row, now = Date.now()) {
-  if (row.engineRow) return engineRow(row, now);
+export function runRow(row, now = Date.now(), onDone = null) {
+  if (row.engineRow) return engineRow(row, now, onDone);
   const li = el('li', 'rn-row');
   li.dataset.run = rnClean(row.run, 64) ?? '';
   li.dataset.state = STATE_META[row.state] ? row.state : 'running';
@@ -571,7 +571,7 @@ function emptyNode(st) {
  */
 export function renderRuns(container, runs, st = { status: 'ok' }, now = Date.now()) {
   const sorted = st.status === 'ok' || st.status === 'error' ? sortRuns(runs) : [];
-  const rows = sorted.map((r) => runRow(r, now));
+  const rows = sorted.map((r) => runRow(r, now, st.onDone));
   let out;
   if (rows.length) {
     out = el('ol', 'rn-list');
@@ -582,6 +582,7 @@ export function renderRuns(container, runs, st = { status: 'ok' }, now = Date.no
   }
   if (container) {
     container.textContent = '';
+    if (st.health?.length) container.append(healthNode(st.health));
     if (st.banners?.length) container.append(bannersNode(st.banners));
     container.append(out);
   }
@@ -1272,7 +1273,9 @@ function rnPaint(st) {
   const n = st.status === 'ok' ? st.runs.length : null;
   delete st.panel.root.dataset.page;
   setPanel(st.panel.root, { scope: null, n });
-  renderRuns(st.panel.body, st.runs, { status: st.status, message: st.message, banners: st.banners }, Date.now());
+  renderRuns(st.panel.body, st.runs, {
+    status: st.status, message: st.message, banners: st.banners, health: st.health, onDone: () => rnRefresh(st),
+  }, Date.now());
 }
 
 async function refreshEnginePage(st, seq) {
@@ -1294,7 +1297,10 @@ async function rnRefresh(st) {
     id ? null : loadEngineRuns(st.fetchFn),
   ]);
   if (STATE_OF.view !== st || seq !== st.seq || id !== st.runId) return; // unmounted, newer load, or moved
-  if (eng) st.banners = engineBanners(eng.engines, eng.failed);
+  if (eng) {
+    st.banners = engineBanners(eng.engines, eng.failed);
+    st.health = healthLines(eng.engines, eng.rows);
+  }
   if (eng?.rows.length && (res.kind === 'unavailable' || res.kind === 'ok')) {
     st.status = 'ok';
     st.runs = [...(res.kind === 'ok' ? res.runs : []), ...eng.rows];

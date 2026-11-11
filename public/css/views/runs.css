@@ -52,6 +52,19 @@
 .rn-node { grid-column: span 2; overflow: hidden; text-overflow: ellipsis; }
 .rn-src { font-size: var(--fs-11); color: var(--text-3); white-space: nowrap; }
 .rn-row[data-stale] { opacity: 0.6; }
+/* ---- the foreman's health above the list, and what waits under a run's row */
+.rn-health { display: grid; gap: var(--sp-1); margin-block-end: var(--sp-2); }
+.rn-health-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0; padding: var(--sp-1) var(--sp-2); border: var(--bw) solid var(--line-weak); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+.rn-health-line > b { color: var(--text-1); font-weight: 600; }
+.rn-health-line[data-foreman="down"] { border-inline-start: var(--bw) solid var(--p1); }
+.rn-health-line[data-foreman="stale"] { border-inline-start: var(--bw) solid var(--p2); }
+.rn-health-t { color: var(--text-3); }
+.rn-gates { grid-column: 1 / -1; display: grid; gap: var(--sp-1); position: relative; z-index: 1; padding-inline-start: 14ch; }
+.rn-gate { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; }
+.rn-gate-kind { color: var(--p2); }
+.rn-gate-t { color: var(--text-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 20ch; }
+.rn-gate-rev { color: var(--text-3); font-size: var(--fs-11); }
+.rn-gate-btns { display: inline-flex; gap: var(--sp-1); }
 .rn-banners { display: grid; gap: var(--sp-1); margin-block-end: var(--sp-2); }
 .rn-banner { margin: 0; padding: var(--sp-1) var(--sp-2); border-inline-start: var(--bw) solid var(--p2); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-1); }
 
@@ -383,6 +396,7 @@ a.rn-tl-role-a:focus-visible { outline: var(--bw) solid var(--accent); outline-o
     column-gap: var(--sp-2);
   }
   .rn-row { gap: var(--sp-1) var(--sp-2); }
+  .rn-gates { padding-inline-start: 0; }
   .rn-scores,
   .rn-burn { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
   /* a lone unlabelled dash on its own line says nothing here (T54) */

@@ -10,6 +10,8 @@ Each row shows the state, the goal, the product and engine, then what fits the
 run: the current node, rooms, age or stop reason and cost for an engine run;
 round, scores and burn for a run file. Runs that wait for a person sort first.
 An engine that is stale, down or incompatible says so above the list.
+Above the list, each engine's foreman health, and under a run, what waits on it
+([runs-health.md](runs-health.md)).
 
 Pause, Resume and Stop are on the page of a run from an engine ([decisions.md](decisions.md)).
 
