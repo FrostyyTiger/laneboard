@@ -38,6 +38,7 @@ export function runRow(run) {
     recipe: null,
     state: run.state,
     stop: run.stop?.reason ?? null,
+    reason: null,
     node: null,
     rooms: [],
     usage: usd === null ? null : { tokens: null, usd, byRole: {}, byTier: {} },

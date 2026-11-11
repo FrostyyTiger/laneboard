@@ -77,7 +77,8 @@ test('each failure says what happened', () => {
 test('run controls follow the state', () => {
   const labels = (state) => runControls('main/R-1', { state }).map((c) => c.label);
   assert.deepEqual(labels('running'), ['Pause', 'Stop']);
-  assert.deepEqual(labels('at-gate'), ['Pause', 'Stop']);
+  assert.deepEqual(runControls('main/R-1', { state: 'at-gate', gates: [{ state: 'open' }] }).map((c) => c.label), ['Pause', 'Stop']);
+  assert.deepEqual(labels('at-gate'), ['Pause', 'Resume', 'Stop'], 'blocked: nothing to decide, so it can be resumed');
   assert.deepEqual(labels('paused'), ['Resume', 'Stop']);
   assert.deepEqual(labels('waiting-approval'), ['Stop']);
   assert.deepEqual(labels('done'), []);

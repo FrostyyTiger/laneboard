@@ -188,6 +188,7 @@ function runRow(r) {
     recipe: recipe(r.recipe),
     state: oneOf(r.state, VOCAB.runState, 'run state'),
     stop: maybeOf(r.stop_reason, VOCAB.stopReason),
+    reason: str(r.reason),
     node: str(r.node),
     rooms: rows(r.rooms, room),
     usage: usage(r.usage),
@@ -460,7 +461,7 @@ S.usage = { tokens: ['nullable', S.tokens], usd: 'num?', byRole: 'obj', byTier: 
 S.pr = { id: 'str', url: 'str', state: 'str?', title: 'str?', updatedAt: 'ms?' };
 S.room = { name: 'str', host: 'str?', state: 'str?', expiresAt: 'ms?', purpose: 'str?' };
 S.runRow = {
-  id: 'str', product: 'str?', goal: 'str?', goalTitle: 'str?', recipe: 'obj?', state: 'str', stop: 'str?', node: 'str?',
+  id: 'str', product: 'str?', goal: 'str?', goalTitle: 'str?', recipe: 'obj?', state: 'str', stop: 'str?', reason: 'str?', node: 'str?',
   rooms: [S.room], usage: ['nullable', S.usage], pr: ['nullable', S.pr], lastSeq: 'int?', startedAt: 'ms?', endedAt: 'ms?',
   url: 'str?', updatedAt: 'ms?',
 };

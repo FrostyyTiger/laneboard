@@ -23,6 +23,13 @@ nothing is decided and you are told (`stale-revision`). See
 A run with something waiting sorts with the runs that need you, even while
 other parts of it still build.
 
+## Blocked runs
+
+A run can be **at a gate with nothing to decide**: a round hit its stop rule, or a check could
+not run. Its row then shows **blocked**, the engine's reason, and **Resume** and **Stop**. Fix
+the cause outside the engine (a profile, a token, the code), then press Resume: the blocked step
+runs again. The cockpit agent may propose Resume for such a run too.
+
 ## Try it
 
 ```json
@@ -37,4 +44,5 @@ has a recipe, a variant and a change waiting; the run at the gate has a merge.
 `GET /api/engines/runs` adds `health` to each engine (`foreman`, `beatAge`,
 `heartbeatAt`, `hosts`, `queue`, `active`, `windows`, `stale`, `reason`; `null`
 for an engine without health) and `waiting` to each run (its items, in the
-shape of `GET /api/engines/waiting`).
+shape of `GET /api/engines/waiting`). Each run row also carries the engine's
+`reason` for its state.
