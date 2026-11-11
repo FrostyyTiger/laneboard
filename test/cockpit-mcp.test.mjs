@@ -38,13 +38,13 @@ test('only with the token, never from a browser, only on loopback', async (t) =>
   assert.equal(reads, 0);
 });
 
-test('the handshake and the list: three tools, none that acts', async (t) => {
+test('the handshake and the list: three reads and propose, none that decides', async (t) => {
   const { rpc, post } = await setup(t);
   const init = await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '1' } });
   assert.equal(init.result.protocolVersion, '2025-03-26');
   assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
   const names = (await rpc('tools/list')).result.tools.map((x) => x.name).sort();
-  assert.deepEqual(names, ['focus', 'runs', 'waiting']);
+  assert.deepEqual(names, ['focus', 'propose', 'runs', 'waiting']);
 });
 
 test('"what waits for me?" lists the fixture gates, without long text', async (t) => {

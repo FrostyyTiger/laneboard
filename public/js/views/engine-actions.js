@@ -28,8 +28,8 @@ export function decisionOutcome(word, r) {
   }
 }
 
-/** A small form for a reason or an answer. Resolves the text, or null on cancel. */
-function askEngineText(title) {
+/** A small form for a reason or an answer, `start` already in it. Resolves the text, or null on cancel. */
+export function askEngineText(title, start = '', root = null) {
   return new Promise((resolve) => {
     const dlg = document.createElement('dialog');
     dlg.className = 'cfm';
@@ -38,6 +38,7 @@ function askEngineText(title) {
     area.rows = 5;
     area.maxLength = 4000;
     area.setAttribute('aria-label', title);
+    area.value = start ?? '';
     const row = el('div', 'cfm-b');
     const cancel = el('button', 'btn', 'Cancel');
     cancel.type = 'button';
@@ -50,7 +51,8 @@ function askEngineText(title) {
     cancel.addEventListener('click', () => done(null));
     dlg.addEventListener('cancel', (e) => { e.preventDefault(); done(null); });
     form.addEventListener('submit', (e) => { e.preventDefault(); const v = area.value.trim(); if (v) done(v); });
-    document.body.append(dlg);
+    dlg.addEventListener('close', () => { if (dlg.isConnected) done(null); });
+    (root ?? document.body).append(dlg);
     dlg.showModal();
     area.focus();
   });
@@ -75,7 +77,7 @@ export async function runDecision(plan, io = {}) {
     lines.push(plan.showBack ? `Your answer: ${text}` : `Reason: ${text}`);
   }
   // A confirm-tier action shows a card with one button, no typing (the plan's Q8).
-  const needsCard = plan.tier === 'confirm' || plan.tier === 'ask' || plan.showBack;
+  const needsCard = io.alwaysCard === true || plan.tier === 'confirm' || plan.tier === 'ask' || plan.showBack;
   if (needsCard) {
     if ((io.peerCheck ?? store.peerCheck) === 'unavailable') lines.push(POSE_WARNING);
     const a = await ask({ action: plan.word, targets: [plan.target], tier: 'ask', consequence: lines });

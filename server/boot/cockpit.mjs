@@ -36,14 +36,14 @@ import * as roomClock from '../cockpit/clock.mjs';
  * `mcp.json` are written after the listen, so the file names the real port. A
  * port in use costs the tools, not the room: the agent then reports tools-down.
  */
-async function startMcp({ log: say, focusOf }) {
-  const mcp = createMcp({ boardUrl: config.cockpit.board.url, focusOf, log: say });
+async function startMcp({ log: say, focusOf, proposeTo }) {
+  const mcp = createMcp({ boardUrl: config.cockpit.board.url, focusOf, proposeTo, log: say });
   const file = path.join(fillPath(DEFAULT_CWD, { stateDir: config.stateDir }), 'mcp.json');
   let servers = {};
   try {
     const { port } = await mcp.listen(config.cockpit.mcp.port);
     fs.writeFileSync(path.join(config.stateDir, 'cockpit', 'mcp.token'), `${mcp.token}\n`, { mode: 0o600 });
-    servers = { laneboard: { type: 'http', url: `http://127.0.0.1:${port}/mcp`, headers: { Authorization: 'Bearer ${LANEBOARD_MCP_TOKEN}' }, timeout: 15000 } };
+    servers = { laneboard: { type: 'http', url: `http://127.0.0.1:${port}/mcp`, headers: { Authorization: 'Bearer ${LANEBOARD_MCP_TOKEN}' }, timeout: 150000 } }; // propose waits up to 2 min
   } catch (err) {
     say(`cockpit: the agent's board tools did not start: ${err?.message ?? err}`);
   }
@@ -94,7 +94,7 @@ export async function startRoom(ctx = null, opts = {}) {
   // begins the first conversation, and seeds the turn counter and the
   // once-only memory from what it loaded.
   let link = null;
-  const mcp = await startMcp({ log: say, focusOf: () => link?.screensFocus() ?? null });
+  const mcp = await startMcp({ log: say, focusOf: () => link?.screensFocus() ?? null, proposeTo: (p, signal) => (link ? link.propose(p, signal) : Promise.resolve({ end: 'refused', text: 'No screen can show the proposal now.' })) });
   const session = createSession({
     stateDir: config.stateDir,
     emit: (msg) => link.emit(msg),

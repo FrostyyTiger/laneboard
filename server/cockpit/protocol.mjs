@@ -94,6 +94,9 @@ const UTTERANCE = rx(/^u-\d{1,9}$/, 'u- and a counter'); // §6.1
 const SPEAKUP_ID = rx(/^su-\d{4,}$/, 'su- and 4 digits'); // §3.9
 const CONFIRM_ID = rx(/^cf-\d{4,}$/, 'cf- and 4 digits'); // §3.10
 const SPEAK_ID = rx(/^sp-\d{4,}$/, 'sp- and 4 digits'); // §6.3
+const PROPOSAL_ID = rx(/^pr-\d{4,}$/, 'pr- and 4 digits'); // docs/cockpit-tools.md, propose
+/** What the agent may propose; the page sends it as the person who said yes. */
+export const PROPOSE_DECISIONS = Object.freeze(['approve', 'reject', 'pick', 'answer', 'pause', 'resume', 'stop']);
 const DETAIL = str(120); // §3.2: at most 120 characters, drawn as text
 const TURN_STATES = ['thinking', 'working', 'answering', 'stopping']; // §3.2, D56
 const END_STATES = ['done', 'stopped', 'error'];
@@ -339,6 +342,7 @@ const SCREEN = {
   'talk.state': { seq: LINK_SEQ, request: id, talk: oneOf(...TALK_STATES) },
   'confirm.ask': { seq: LINK_SEQ, kind: oneOf('job.cancel'), job: id },
   'confirm.answer': { seq: LINK_SEQ, confirmId: CONFIRM_ID, answer: oneOf('yes', 'no'), typed: nul(str(200)) },
+  'propose.answer': { seq: LINK_SEQ, proposalId: PROPOSAL_ID, answer: oneOf('sent', 'no', 'failed'), ok: bool, code: nul(line(40, 1)), text: nul(str(300)) },
   'speak.result': {
     seq: LINK_SEQ, speakId: SPEAK_ID, state: oneOf('played', 'stopped', 'muted', 'busy', 'blocked', 'failed'),
     why: when((m) => m.state === 'failed', oneOf('fetch', 'decode')),
@@ -441,6 +445,20 @@ const ROOM = {
     expiresAt: iso,
   },
   'confirm.state': { seq: ROOM_SEQ, ...CONFIRM_STATE_FIELDS },
+  'propose.open': {
+    proposalId: PROPOSAL_ID,
+    turnId: nul(id),
+    engine: line(64, 1),
+    item: nul(line(128, 1)),
+    run: nul(line(128, 1)),
+    decision: oneOf(...PROPOSE_DECISIONS),
+    choice: nul(line(64, 1)),
+    text: nul(str(4000, 1)),
+    why: str(1000, 1),
+    openedAt: iso,
+    expiresAt: iso,
+  },
+  'propose.end': { proposalId: PROPOSAL_ID, end: oneOf('sent', 'no', 'failed', 'timeout', 'gone') },
   'job.put': { seq: ROOM_SEQ, job: JOB },
   show: { showId: id, turnId: id, cmd: line(32, 1), args: obj, receivedAt: epochMs },
   'show.line': { seq: ROOM_SEQ, turnId: id, ...SHOW_LINE_FIELDS },

@@ -16,6 +16,7 @@ import { createPane } from './pane.js';
 import { tooOld } from './fit.js';
 import { createWallHold } from './wall-hold.js';
 import { installAppView } from './app-view.js';
+import { createProposals } from './propose.js';
 
 /** cb(true|false) once: the board's word on whether it has a cockpit (D93). */
 export function boardSaysCockpit(cb) {
@@ -76,11 +77,12 @@ export function initCockpit({ page = 'app', configured = boardSaysCockpit } = {}
     });
     started.pane = pane;
     if (old) return;
+    const proposals = createProposals({ page, send: (m) => link?.send(m) ?? false });
     link = createRoomLink({
       url: roomLinkUrl(),
       page,
       onState: (s) => pane.setLink(s),
-      onMessage: (m) => pane.apply(m),
+      onMessage: (m) => (m.type === 'propose.open' || m.type === 'propose.end' ? proposals.apply(m) : pane.apply(m)),
     });
     started.link = link;
     link.start();
