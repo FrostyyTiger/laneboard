@@ -34,7 +34,7 @@ import { WebSocketServer } from 'ws';
 import { warnRateLimited } from '../security.mjs';
 import { atConnection, atInbound, atOutbound, atUpgrade } from './faults.mjs';
 import { linkRefusal } from './link-checks.mjs';
-import { BOARD_USER, createFailWarner, newLine, promptLine, stopLine } from './audit-lines.mjs';
+import { BOARD_USER, createFailWarner, newLine, promptLine, proposeLine, stopLine } from './audit-lines.mjs';
 import { createPromptRate } from './prompt-rate.mjs';
 import { checkMessage, MAX_PROMPT_CHARS } from './protocol.mjs';
 import { nextConversation } from './session.mjs';
@@ -71,6 +71,8 @@ export const PING_MS = 30_000;
 export const HELLO_MS = 5_000;
 /** Without pairing every screen is the board's (D212, D37: no names drawn). */
 export const SCREEN_NAME = BOARD_USER;
+/** docs/cockpit-tools.md: a proposal the owner has not answered ends after this long. */
+export const PROPOSE_MS = 120_000;
 
 const pad = (n, w) => String(n).padStart(w, '0');
 const bytes = (v) => Buffer.byteLength(JSON.stringify(v));
@@ -153,6 +155,10 @@ export function createLink({ session, store, audit = null, config, log = () => {
   const once = new Map();
   const pending = new Set(); // clientIds accepted whose turn.prompt has not gone yet
   let askedNew = null; // the owner's `new`, until its conversation is up: {from, stoppedTurn}
+  let promptLink = null; // the link that sent the last prompt: where a proposal is asked
+  let lastLink = null; // the link welcomed or heard from last
+  let proposalCount = 0;
+  let open = null; // the one open proposal: {msg, link, resolve, timer}
   // D228: 10 prompts a minute per device token; without pairing every link is the one screen (B179).
   const rate = createPromptRate({ now: () => clock.now() });
   seedOnce(clientIds);
@@ -306,6 +312,9 @@ export function createLink({ session, store, audit = null, config, log = () => {
     });
     const gone = () => {
       links.delete(link);
+      if (promptLink === link) promptLink = null;
+      if (lastLink === link) lastLink = null;
+      if (open?.link === link) endProposal('gone');
       if (link.helloTimer) clock.clearTimeout(link.helloTimer);
       link.helloTimer = null;
     };
@@ -365,6 +374,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
       return;
     }
     if (!link.welcomed) return hello(link, msg);
+    lastLink = link;
     switch (msg.type) {
       case 'hello':
         sendTo(link, { type: 'error', re: msg.seq, code: 'not-now', message: 'hello: the link already has its welcome' });
@@ -373,6 +383,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
         noteFocus(msg, false);
         return;
       case 'prompt':
+        promptLink = link;
         if (msg.focus) noteFocus({ ...msg.focus }, true);
         prompt(link, msg).catch((err) => log(`cockpit: prompt failed: ${err?.message ?? err}`));
         return;
@@ -397,6 +408,17 @@ export function createLink({ session, store, audit = null, config, log = () => {
         if (!r.ok) sendTo(link, { type: 'error', re: msg.seq, code: r.code, message: 'new: a new conversation is already starting' });
         return;
       }
+      case 'propose.answer':
+        if (!open || open.msg.proposalId !== msg.proposalId) {
+          sendTo(link, { type: 'error', re: msg.seq, code: 'too-late', message: 'propose.answer: that proposal already ended' });
+          return;
+        }
+        if (open.link !== link) {
+          sendTo(link, { type: 'error', re: msg.seq, code: 'not-yours', message: 'propose.answer: another screen was asked' });
+          return;
+        }
+        endProposal(msg.answer, { ok: msg.ok, code: msg.code, text: msg.text });
+        return;
       default:
         // Valid messages of later slices (focus, history, show.result, audio …) change nothing yet (B98).
     }
@@ -433,6 +455,46 @@ export function createLink({ session, store, audit = null, config, log = () => {
       for (const part of snapshotParts({ seq, conversation, startedAt, turns: store.turns() })) sendTo(link, part);
     }
     link.welcomed = true;
+    lastLink = link;
+  }
+
+  /**
+   * docs/cockpit-tools.md: the agent's proposal, as a card on one screen.
+   * Resolves {end, ok, code, text} when the owner answers, the screen goes or
+   * 2 min pass; or at once {end:'refused', text} when no screen can show it
+   * or another one is open. The room sends nothing to the engine: the page
+   * does, as the person who said yes, through the board's own dispatcher.
+   */
+  function propose(p, signal = null) {
+    if (open) return Promise.resolve({ end: 'refused', text: "Another proposal is open; wait for the owner's answer." });
+    const live = (l) => l && links.has(l) && l.welcomed && l.ws.readyState === l.ws.OPEN;
+    const link = live(promptLink) ? promptLink : live(lastLink) ? lastLink : null;
+    if (!link) return Promise.resolve({ end: 'refused', text: 'No screen can show the proposal now.' });
+    proposalCount += 1;
+    const at = clock.now();
+    const msg = {
+      type: 'propose.open', proposalId: `pr-${pad(proposalCount, 4)}`, turnId: session.bridge?.turn?.turnId ?? null,
+      engine: p.engine, item: p.item ?? null, run: p.run ?? null, decision: p.decision, choice: p.choice ?? null,
+      text: p.text ?? null, why: p.why, openedAt: isoAt(at), expiresAt: isoAt(at + PROPOSE_MS),
+    };
+    return new Promise((resolve) => {
+      const timer = clock.setTimeout(() => endProposal('timeout'), PROPOSE_MS);
+      open = { msg, link, resolve, timer };
+      sendTo(link, msg);
+      // The agent gave up on the call: the card goes, as if the screen had.
+      signal?.addEventListener('abort', () => { if (open?.msg === msg) endProposal('gone'); }, { once: true });
+    });
+  }
+
+  function endProposal(end, { ok = false, code = null, text = null } = {}) {
+    if (!open) return;
+    const { msg, link, resolve, timer } = open;
+    open = null;
+    clock.clearTimeout(timer);
+    sendTo(link, { type: 'propose.end', proposalId: msg.proposalId, end });
+    const line = proposeLine(audit, { proposal: msg, end, ok, code });
+    if (!line.ok) auditFailed('cockpit.propose', line.reason);
+    resolve({ end, ok, code, text });
   }
 
   /**
@@ -526,6 +588,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
   }
 
   function close() {
+    endProposal('gone');
     clock.clearInterval(heartbeat);
     clearInterval(pinger);
     for (const link of links) {
@@ -538,7 +601,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
 
   return {
     screensFocus: () => focuses,
-    handleUpgrade, emit, close, conversationStarted,
+    handleUpgrade, emit, close, conversationStarted, propose,
     get count() { return links.size; },
     get epoch() { return epoch; },
     get seq() { return seq; },

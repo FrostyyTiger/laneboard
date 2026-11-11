@@ -71,6 +71,21 @@ export function newLine(audit, { user = BOARD_USER, conversation, from = null, s
   });
 }
 
+/**
+ * `cockpit.propose`: the agent asked the owner to decide something
+ * (docs/cockpit-tools.md). Written when it ends; the decision itself, when
+ * the owner said yes, is the dispatcher's own line under the person's name.
+ */
+export function proposeLine(audit, { user = BOARD_USER, proposal, end, ok = null, code = null }) {
+  return writeLine(audit, {
+    user,
+    action: 'cockpit.propose',
+    target: `${proposal.engine}/${proposal.item ?? proposal.run}`,
+    args: { decision: proposal.decision, choice: proposal.choice ?? null, why: proposal.why },
+    result: { ok: end === 'sent' && ok === true, status: end, ...(code ? { code } : {}) },
+  });
+}
+
 /** §6.4: an audit failure that does not refuse is one stderr line at most this often. */
 export const FAIL_WARN_MS = 10_000;
 

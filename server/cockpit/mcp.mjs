@@ -1,10 +1,13 @@
 // The room's MCP server: what the cockpit's agent may read (docs/cockpit-tools.md).
 //
-//   createMcp({boardUrl, focusOf, log, fetchImpl, now, token}) → {token, listen(port), stop(), call(name, args)}
+//   createMcp({boardUrl, focusOf, proposeTo, log, fetchImpl, now, token}) → {token, listen(port), stop(), call(name, args)}
 //
 // Streamable HTTP, JSON answers only, POST /mcp on 127.0.0.1 (spec c3-see.md §1).
-// Every tool reads; none can change anything. Board text is untrusted: a tool
-// copies named fields into fresh objects, cut to length, never a whole response.
+// Every tool reads, and none can change anything. `propose` only puts a card
+// in front of the owner (proposeTo, the room link's propose): on their yes
+// their own page sends the decision, as them, through the board's dispatcher.
+// Board text is untrusted: a tool copies named fields into fresh objects, cut
+// to length, never a whole response.
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { isoAt } from './iso.mjs';
@@ -22,6 +25,9 @@ const PROTOCOL = '2025-06-18';
 const RUN_ARG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\/[A-Za-z0-9][A-Za-z0-9._-]{0,127})?$/;
 const SCREEN_ARG = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$/;
 const WHENS = ['prompt', 'now'];
+const ID_ARG = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}(\/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?$/;
+const ITEM_DECISIONS = ['approve', 'reject', 'pick', 'answer'];
+const RUN_DECISIONS = ['pause', 'resume', 'stop'];
 
 class BadArg extends Error {}
 /** A failure the agent can act on: one sentence, `isError`. */
@@ -59,6 +65,24 @@ const TOOLS = [
       when: { type: 'string', enum: WHENS, description: 'prompt: when the owner asked (default); now: as it is' },
     } },
     check: { screen: SCREEN_ARG, when: new RegExp(`^(${WHENS.join('|')})$`) },
+  },
+  {
+    name: 'propose',
+    description: 'Ask the owner to decide something. A card with your why shows on their screen; only their yes sends it, as them. '
+      + 'For a waiting item (item: its id from waiting): approve, reject (text: the reason), pick (choice: an option id), answer (text: the answer). '
+      + 'For a run (run: its id): pause, resume, stop. Waits up to 2 min for the answer.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['decision', 'why'], properties: {
+      item: { type: 'string', description: 'a waiting item id, or engine/item id' },
+      run: { type: 'string', description: 'a run id, or engine/run id' },
+      decision: { type: 'string', enum: [...ITEM_DECISIONS, ...RUN_DECISIONS] },
+      choice: { type: 'string', description: 'for pick: the option id' },
+      text: { type: 'string', description: 'for reject: the reason; for answer: the answer. The owner sees and can change it.' },
+      why: { type: 'string', description: 'one or two sentences: why you propose this' },
+    } },
+    check: {
+      item: ID_ARG, run: RUN_ARG, decision: new RegExp(`^(${[...ITEM_DECISIONS, ...RUN_DECISIONS].join('|')})$`),
+      choice: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/, text: /^[\s\S]{1,4000}$/, why: /^[\s\S]{1,1000}$/,
+    },
   },
 ];
 
@@ -106,7 +130,7 @@ function engineTrouble(engines) {
   return bad.length ? { missing: bad.slice(0, 10).map((e) => ({ source: cut(e.id, 64), why: cut(e.reason) ?? cut(e.state, 32) })) } : {};
 }
 
-export function createMcp({ boardUrl, focusOf = () => null, log = () => {}, fetchImpl = fetch, now = Date.now, token = crypto.randomBytes(32).toString('hex') }) {
+export function createMcp({ boardUrl, focusOf = () => null, proposeTo = null, log = () => {}, fetchImpl = fetch, now = Date.now, token = crypto.randomBytes(32).toString('hex') }) {
   const cache = new Map();
   let running = 0;
   const queue = [];
@@ -216,7 +240,63 @@ export function createMcp({ boardUrl, focusOf = () => null, log = () => {}, fetc
     };
   }
 
-  const handlers = { waiting, runs, focus };
+  /** One item of the waiting list by id or engine/id, read fresh (a decision needs its newest revision). */
+  async function findItem(wanted) {
+    cache.delete('/api/engines/waiting');
+    const b = await board('/api/engines/waiting');
+    const items = b.items ?? [];
+    const hits = items.filter((it) => it.id === wanted || `${it.engine}/${it.id}` === wanted);
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) throw new Said(`Item "${cut(wanted, 64)}" waits on more than one engine; give engine/id.`);
+    throw new Said(`Nothing waits as "${cut(wanted, 64)}" now; call waiting for what does.`);
+  }
+
+  async function propose({ item, run, decision, choice, text, why }, signal = null) {
+    if (!proposeTo) throw new Said('No screen can show the proposal now.');
+    if (Boolean(item) === Boolean(run)) throw new Said('Give item or run, one of them.');
+    let p;
+    if (item) {
+      if (!ITEM_DECISIONS.includes(decision)) throw new Said(`For an item the decision is ${ITEM_DECISIONS.join(', ')}.`);
+      const it = await findItem(item);
+      const kind = it.kind;
+      if (kind === 'question' && decision !== 'answer') throw new Said('A question takes answer, with text.');
+      if (kind !== 'question' && decision === 'answer') throw new Said(`This is a ${cut(kind, 32)}, not a question: approve, reject or pick.`);
+      if (decision === 'pick') {
+        const ids = (Array.isArray(it.content?.options) ? it.content.options : []).map((o) => o?.id).filter((x) => typeof x === 'string');
+        if (kind !== 'variant' || !ids.length) throw new Said('Only a variant item takes pick.');
+        if (!ids.includes(choice)) throw new Said(`choice must be one of: ${ids.slice(0, 8).join(', ')}.`);
+      } else if (choice) throw new Said('choice goes with pick only.');
+      if (kind === 'variant' && decision === 'approve') throw new Said('A variant takes pick, with a choice.');
+      if ((decision === 'reject' || decision === 'answer') && !text) throw new Said(`${decision} needs text: ${decision === 'reject' ? 'the reason' : 'the answer'}.`);
+      if (decision === 'approve' && text) throw new Said('approve takes no text.');
+      p = { engine: it.engine, item: it.id, decision, choice: choice ?? null, text: text ?? null, why, title: it.title };
+    } else {
+      if (!RUN_DECISIONS.includes(decision)) throw new Said(`For a run the decision is ${RUN_DECISIONS.join(', ')}.`);
+      if (choice || text) throw new Said('A run decision takes no choice or text.');
+      cache.delete('/api/engines/runs');
+      const b = await board('/api/engines/runs');
+      const r = await findRun(b.runs ?? [], run);
+      const ok = decision === 'pause' ? ['running', 'at-gate', 'queued'].includes(r.state)
+        : decision === 'resume' ? r.state === 'paused' : !['done', 'stopped'].includes(r.state);
+      if (!ok) throw new Said(`Run ${cut(r.id, 64)} is ${cut(r.state, 32)}; it cannot ${decision} now.`);
+      p = { engine: r.engine, run: r.id, decision, choice: null, text: null, why, title: r.goalTitle ?? r.id };
+    }
+    const { title, ...card } = p;
+    const out = await proposeTo(card, signal);
+    const what = `${decision} ${cut(title ?? card.item ?? card.run, 120)}`;
+    switch (out?.end) {
+      case 'sent':
+        if (out.ok) return { done: true, said: `The owner said yes; ${what} went through.` };
+        throw new Said(`The owner said yes, but it did not go through: ${cut(out.text, 300) ?? out.code ?? 'no reason given'}.`);
+      case 'no': throw new Said('The owner said no.');
+      case 'timeout': throw new Said('The owner did not answer within 2 min.');
+      case 'gone': throw new Said('The screen went away before the owner answered.');
+      case 'failed': throw new Said(`The screen could not show it: ${cut(out.text, 300) ?? 'no reason given'}.`);
+      default: throw new Said(cut(out?.text, 300) ?? 'No screen can show the proposal now.');
+    }
+  }
+
+  const handlers = { waiting, runs, focus, propose };
 
   function take() {
     return new Promise((ok) => { if (running < MAX_CALLS_AT_ONCE) { running += 1; ok(); } else queue.push(ok); });
@@ -228,7 +308,7 @@ export function createMcp({ boardUrl, focusOf = () => null, log = () => {}, fetc
 
   const said = (text) => ({ content: [{ type: 'text', text }], isError: true });
 
-  async function call(name, args = {}) {
+  async function call(name, args = {}, signal = null) {
     const tool = TOOLS.find((t) => t.name === name);
     if (!tool) throw new BadArg(`name: no tool ${cut(String(name), 64)}`);
     checkArgs(tool, args);
@@ -236,6 +316,16 @@ export function createMcp({ boardUrl, focusOf = () => null, log = () => {}, fetc
     window = window.filter((t) => at - t < 60000);
     if (window.length >= MAX_CALLS_PER_MIN) return said('Too many board reads this minute; wait and ask again.');
     window.push(at);
+    if (name === 'propose') {
+      try {
+        const result = await propose(args, signal);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
+      } catch (err) {
+        if (err instanceof Said) return said(err.message);
+        log(`cockpit mcp: propose failed: ${err?.message ?? err}`);
+        return said('The proposal failed inside the room; nothing was decided.');
+      }
+    }
     await take();
     try {
       const result = await handlers[name](args);
@@ -254,7 +344,7 @@ export function createMcp({ boardUrl, focusOf = () => null, log = () => {}, fetc
     }
   }
 
-  async function rpc(msg) {
+  async function rpc(msg, signal = null) {
     const reply = (result) => ({ jsonrpc: '2.0', id: msg.id, result });
     const fail = (code, message) => ({ jsonrpc: '2.0', id: msg.id ?? null, error: { code, message } });
     if (msg?.jsonrpc !== '2.0' || typeof msg.method !== 'string') return fail(-32600, 'not a JSON-RPC 2.0 request');
@@ -268,7 +358,7 @@ export function createMcp({ boardUrl, focusOf = () => null, log = () => {}, fetc
       case 'ping': return reply({});
       case 'tools/list': return reply({ tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
       case 'tools/call':
-        try { return reply(await call(msg.params?.name, msg.params?.arguments ?? {})); } catch (err) {
+        try { return reply(await call(msg.params?.name, msg.params?.arguments ?? {}, signal)); } catch (err) {
           if (err instanceof BadArg) return fail(-32602, err.message);
           throw err;
         }
@@ -305,7 +395,9 @@ export function createMcp({ boardUrl, focusOf = () => null, log = () => {}, fetc
     let msg;
     try { msg = JSON.parse(Buffer.concat(parts).toString('utf8')); } catch { return send(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'not JSON' } }); }
     if (Array.isArray(msg) || msg === null || typeof msg !== 'object') return send(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'one request at a time' } });
-    const out = await rpc(msg);
+    const gaveUp = new AbortController();
+    res.on('close', () => { if (!res.writableFinished) gaveUp.abort(); });
+    const out = await rpc(msg, gaveUp.signal);
     return out === null ? send(res, 202, null) : send(res, 200, out);
   }
 

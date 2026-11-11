@@ -6,7 +6,13 @@
 //                           REVIEW-REQUIRED (D240, D244): it holds the allowlist
 //                           and the permission mode, the read-only fence of
 //                           Q-O23 a) for this kind of agent
-//   createClaudeCodeAdapter({allowedTools, write, log})
+//   createClaudeCodeAdapter({allowedTools, write, log, session})
+//     .start()              asks Claude Code to start now: `initialize`, then
+//                           `mcp_status` until the laneboard server is no longer
+//                           pending; their answers are the `ready` (a Claude
+//                           Code that says nothing until its first input, as
+//                           2.1 does, would otherwise never be ready). An
+//                           `init` line that comes first is the ready instead
 //     .fromAgent(line)      one parsed stdout line → the bridge events it means
 //                           (§11.4, middle column), in order; [] for the lines
 //                           §11.4 maps to nothing
@@ -45,10 +51,19 @@ export function launchArgs({ mcpConfig, allowedTools, instructions, session, res
 
 /** The interrupt request the adapter sends itself on a failed login (§11.4). */
 const LOGIN_INTERRUPT = 'i-login';
+/** The adapter's own start requests, and how often a pending MCP server is asked again. */
+const INIT_REQUEST = 'i-init';
+const MCP_REQUEST = 'i-mcp';
+export const MCP_ASK_MS = 500;
+export const MCP_ASKS = 20;
 
 const cut = (s, n = DETAIL_MAX) => (String(s).length > n ? String(s).slice(0, n) : String(s));
 
-export function createClaudeCodeAdapter({ allowedTools, write = () => {}, log = () => {} } = {}) {
+export function createClaudeCodeAdapter({ allowedTools, write = () => {}, log = () => {}, session = '', setTimer = setTimeout } = {}) {
+  let readied = false;
+  let startReady = false; // the ready came from start()'s answers
+  let initInfo = null; // the initialize answer, until mcp_status says the server is up
+  let mcpAsks = 0;
   // Prompts written and not taken yet, in order: {id, echoed}.
   const waiting = [];
   const taken = new Set();
@@ -90,6 +105,7 @@ export function createClaudeCodeAdapter({ allowedTools, write = () => {}, log = 
   }
 
   function ready(o) {
+    readied = true;
     const servers = Array.isArray(o.mcp_servers) ? o.mcp_servers : [];
     const lb = servers.find((s) => s?.name === 'laneboard');
     // A server still `pending` is passed on as it is (research Q2 recheck:
@@ -188,7 +204,7 @@ export function createClaudeCodeAdapter({ allowedTools, write = () => {}, log = 
   function system(o) {
     switch (o.subtype) {
       case 'init':
-        return [ready(o)];
+        return startReady ? [] : [ready(o)];
       case 'permission_denied': {
         const id = o.tool_use_id;
         if (typeof id !== 'string' || ended.has(id)) return [];
@@ -235,11 +251,39 @@ export function createClaudeCodeAdapter({ allowedTools, write = () => {}, log = 
     const id = r.request_id ?? o.request_id;
     if (id === LOGIN_INTERRUPT) return [];
     const inner = r.response ?? {};
+    if (id === INIT_REQUEST || id === MCP_REQUEST) return startAnswer(id, r, inner);
     const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
     return [{ type: 'interrupted', id: String(id ?? ''), stillQueued: list(inner.still_queued), cancelled: list(inner.cancelled) }];
   }
 
+  /** §11.2 (start): the answers to the adapter's own `initialize` and `mcp_status`. */
+  function startAnswer(id, r, inner) {
+    if (readied) return [];
+    if (r.subtype === 'error') {
+      log(`cockpit agent: ${id === INIT_REQUEST ? 'initialize' : 'mcp_status'} failed: ${cut(r.error ?? 'no reason')}`);
+      if (id === INIT_REQUEST) return [];
+      startReady = true;
+      return [ready({ ...initInfo, session_id: session, mcp_servers: [] })];
+    }
+    if (id === INIT_REQUEST) {
+      initInfo = { claude_code_version: inner.claude_code_version, capabilities: inner.capabilities };
+      write({ type: 'control_request', request_id: MCP_REQUEST, request: { subtype: 'mcp_status' } });
+      return [];
+    }
+    const servers = Array.isArray(inner.mcpServers) ? inner.mcpServers : [];
+    const lb = servers.find((x) => x?.name === 'laneboard');
+    if (lb?.status === 'pending' && ++mcpAsks < MCP_ASKS) {
+      setTimer(() => { if (!readied) write({ type: 'control_request', request_id: MCP_REQUEST, request: { subtype: 'mcp_status' } }); }, MCP_ASK_MS);
+      return [];
+    }
+    startReady = true;
+    return [ready({ ...initInfo, session_id: session, mcp_servers: servers.map((x) => ({ name: x?.name, status: x?.status })) })];
+  }
+
   return {
+    start() {
+      write({ type: 'control_request', request_id: INIT_REQUEST, request: { subtype: 'initialize' } });
+    },
     fromAgent(o) {
       if (!o || typeof o !== 'object') return [];
       // A helper agent's lines are its own (§11.4).
@@ -260,6 +304,9 @@ export function createClaudeCodeAdapter({ allowedTools, write = () => {}, log = 
         }
         case 'result': return result(o);
         case 'control_response': return controlResponse(o);
+        case 'command_lifecycle':
+        case 'rate_limit_event':
+          return []; // Claude Code 2.1's bookkeeping lines: nothing for the room
         default:
           log(`cockpit agent: unknown line ${JSON.stringify(o).slice(0, 200)}`);
           return [];

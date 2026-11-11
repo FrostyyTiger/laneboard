@@ -196,7 +196,7 @@ export function createBridge(opts) {
     const envNames = ['LANEBOARD_MCP_TOKEN', ...names, ...Object.keys(extra)];
     const argv = spawnArgv({ agent, stateDir, instructions, session: id, resume, envNames });
     adapter = agent.kind === 'claude-code'
-      ? createClaudeCodeAdapter({ allowedTools: agent.allowedTools, write: (o) => writeLine(o), log: (l) => log(redactor.text(l)) })
+      ? createClaudeCodeAdapter({ allowedTools: agent.allowedTools, write: (o) => writeLine(o), log: (l) => log(redactor.text(l)), session: id })
       : null;
     state = 'starting';
     let c;
@@ -228,6 +228,7 @@ export function createBridge(opts) {
       if (stderrLines.length > STDERR_KEEP) stderrLines.shift();
     });
     c.on('close', (code, signal) => exited(c, code, signal));
+    adapter?.start?.();
     log(`cockpit agent: started pid ${c.pid} (${agent.kind}, ${resume ? 'resume' : 'new'} session ${id})`);
     return true;
   }

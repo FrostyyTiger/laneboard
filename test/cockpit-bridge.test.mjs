@@ -104,8 +104,12 @@ test('the mapping test: lines §11.4 maps to nothing, and odd ones', () => {
   assert.deepEqual(a.fromAgent({ type: 'system', subtype: 'hook_started' }), []);
   assert.deepEqual(a.fromAgent({ type: 'assistant', parent_tool_use_id: 'toolu_9', message: { content: [{ type: 'text', text: 'helper' }] } }), []);
   // A native line not in the table yields nothing and a log line (§13).
-  assert.deepEqual(a.fromAgent({ type: 'rate_limit_event', info: {} }), []);
-  assert.ok(logs.some((l) => l.includes('unknown line') && l.includes('rate_limit_event')));
+  assert.deepEqual(a.fromAgent({ type: 'some_new_line', info: {} }), []);
+  assert.ok(logs.some((l) => l.includes('unknown line') && l.includes('some_new_line')));
+  // Claude Code 2.1's bookkeeping lines are known and quiet.
+  assert.deepEqual(a.fromAgent({ type: 'rate_limit_event', rate_limit_info: {} }), []);
+  assert.deepEqual(a.fromAgent({ type: 'command_lifecycle', state: 'queued' }), []);
+  assert.ok(!logs.some((l) => l.includes('rate_limit_event') || l.includes('command_lifecycle')));
   // Other result subtypes are E8 with the subtype (§11.4).
   assert.deepEqual(a.fromAgent({ type: 'result', subtype: 'error_max_budget_usd', is_error: true }),
     [{ type: 'turn.end', state: 'error', code: 'failed', detail: 'error_max_budget_usd' }]);
