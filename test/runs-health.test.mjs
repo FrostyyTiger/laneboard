@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { makeDocument, texts } from './helpers/fakedom.mjs';
 import * as fake from '../server/engine/fake.mjs';
 import { BEAT_STALE_MS, BEAT_UP_MS, foremanOf, runsBody } from '../server/routes/engines.mjs';
-import { engineNeedsYou, gatesNode, healthLines, healthNode, toListRow } from '../public/js/views/runs-engine.js';
+import { blockedNode, engineNeedsYou, gatesNode, healthLines, healthNode, isBlocked, runControls, toListRow } from '../public/js/views/runs-engine.js';
 
 const T = Date.parse('2026-11-11T12:00:00Z');
 const answer = (lag, o = {}) => ({ ok: true, at: T, data: { heartbeatAt: T - lag, hosts: [{ id: 'steady', state: 'up' }], queue: 0, active: 1, windows: null }, ...o });
@@ -83,5 +83,24 @@ test('gatesNode: kind, title, short revision and the board own buttons; a run wi
     assert.match(t, /Approve/);
     assert.match(t, /Reject/);
     assert.equal(gatesNode({ ...row, waiting: [] }), null);
+  });
+});
+
+test('a blocked run (at a gate, nothing to decide) shows why, with Resume and Stop; a run with a gate does not', () => {
+  const row = toListRow({ id: 'R-1', key: 'main/R-1', engine: 'main', state: 'at-gate', reason: 'blocked at G1.F1 (tests): the stack needs Docker', waiting: [] });
+  assert.equal(isBlocked({ ...row, state: 'at-gate' }), true);
+  assert.equal(isBlocked({ state: 'at-gate', gates: [{ state: 'open' }] }), false);
+  assert.equal(isBlocked({ state: 'paused' }), false);
+  assert.deepEqual(runControls('main/R-1', { state: 'at-gate', gates: [] }).map((p) => p.word), ['pause', 'resume', 'stop']);
+  assert.deepEqual(runControls('main/R-1', { state: 'at-gate', gates: [{ state: 'open' }] }).map((p) => p.word), ['pause', 'stop']);
+  withDom(() => {
+    const t = texts(blockedNode(row)).join(' ');
+    assert.match(t, /blocked/);
+    assert.match(t, /the stack needs Docker/);
+    assert.match(t, /Resume/);
+    assert.match(t, /Stop/);
+    assert.doesNotMatch(t, /Pause/);
+    assert.equal(blockedNode({ ...row, waiting: [{ id: 'x' }] }), null);
+    assert.equal(blockedNode(toListRow({ id: 'R-2', key: 'main/R-2', engine: 'main', state: 'running', waiting: [] })), null);
   });
 });

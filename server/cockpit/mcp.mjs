@@ -277,7 +277,9 @@ export function createMcp({ boardUrl, focusOf = () => null, proposeTo = null, lo
       const b = await board('/api/engines/runs');
       const r = await findRun(b.runs ?? [], run);
       const ok = decision === 'pause' ? ['running', 'at-gate', 'queued'].includes(r.state)
-        : decision === 'resume' ? r.state === 'paused' : !['done', 'stopped'].includes(r.state);
+        // Resume: paused, or blocked (at a gate with nothing to decide; docs/runs-health.md).
+        : decision === 'resume' ? r.state === 'paused' || (r.state === 'at-gate' && !r.waiting?.length)
+          : !['done', 'stopped'].includes(r.state);
       if (!ok) throw new Said(`Run ${cut(r.id, 64)} is ${cut(r.state, 32)}; it cannot ${decision} now.`);
       p = { engine: r.engine, run: r.id, decision, choice: null, text: null, why, title: r.goalTitle ?? r.id };
     }

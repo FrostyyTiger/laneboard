@@ -157,6 +157,23 @@ export function gatesNode(row, onDone) {
   return box;
 }
 
+/** A blocked run's line under its row: why, and Resume or Stop. */
+export function blockedNode(row, onDone) {
+  if (!isBlocked({ ...row, state: row?.engineState ?? row?.state })) return null;
+  const box = el('div', 'rn-gates');
+  const g = el('div', 'rn-gate');
+  g.dataset.blocked = '';
+  const t = el('span', 'rn-gate-t', rnClean(row.reason, 300) ?? 'Blocked: it waits for you to fix the cause, then resume.');
+  t.title = rnClean(row.reason, 2000) ?? '';
+  g.append(el('span', 'rn-gate-kind', 'blocked'), t);
+  const btns = el('span', 'rn-gate-btns');
+  const plans = runControls(row.run, { ...row, state: row.engineState ?? row.state }).filter((p) => p.word !== 'pause');
+  for (const plan of plans) btns.append(decisionButton(plan, onDone));
+  g.append(btns);
+  box.append(g);
+  return box;
+}
+
 export function bannersNode(lines) {
   const box = el('div', 'rn-banners');
   box.setAttribute('role', 'status');
@@ -214,7 +231,7 @@ export function engineRow(row, now = Date.now(), onDone = null) {
   if (row.stale) left.title = `last good answer, ${engineAge(row.age)}`;
   const usd = usdOf(row);
   li.append(engineStateCell(engineStateOf(row)), goal, node, rooms, left, el('span', 'rn-f rn-cost', usd === null ? DASH : money(usd)));
-  const gates = gatesNode(row, onDone);
+  const gates = gatesNode(row, onDone) ?? blockedNode(row, onDone);
   if (gates) li.append(gates);
   return li;
 }
@@ -396,11 +413,22 @@ function engineSection(cls, name, count = null) {
 }
 
 /** What a person can do to an engine run in this state. Pure. */
+/**
+ * Blocked: at a gate with nothing to decide. A round hit its stop rule or a
+ * check could not run; the person fixes the cause and resumes (or stops).
+ */
+export function isBlocked(run) {
+  if (run?.state !== 'at-gate') return false;
+  if (Array.isArray(run.waiting) && run.waiting.length) return false;
+  if (Array.isArray(run.gates) && run.gates.some((g) => g?.state === 'open')) return false;
+  return true;
+}
+
 export function runControls(key, run) {
   const out = [];
   const on = (label, word, action, tier) => out.push({ label, word, action, target: key, tier, args: {}, lines: [rnClean(key, 100) ?? '', 'Gentle: the current step finishes first.'] });
   if (['running', 'at-gate', 'queued'].includes(run?.state)) on('Pause', 'pause', 'engine-pause', 'click');
-  if (run?.state === 'paused') on('Resume', 'resume', 'engine-resume', 'click');
+  if (run?.state === 'paused' || isBlocked(run)) on('Resume', 'resume', 'engine-resume', 'click');
   if (run && !['done', 'stopped'].includes(run.state)) on('Stop', 'stop', 'engine-stop', 'confirm');
   return out;
 }
