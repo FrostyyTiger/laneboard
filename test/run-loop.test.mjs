@@ -308,3 +308,15 @@ test('loopPosition: both tasks frozen and the feature checking is Acceptance; ea
   assert.equal(pos.stations.tests.sub, '2 rounds, 1 red');
   assert.equal(pos.stations.doubt.n, 0);
 });
+
+test('foundry #48 shapes: goal phase pr is the PR station; a 4000-character reason is kept whole behind full text', () => {
+  const run = { id: 'R', state: 'running', node: 'G1', recipe: { kind: 'build' }, gates: approved, tree: tree({ G1: { phase: 'pr' }, F1: { state: 'passed', phase: 'done' } }) };
+  assert.deepEqual([loopPosition(run, [], P).current, loopPosition(run, [], P).exact], ['pr', true]);
+  const long = `blocked at G1.F1 (tests): First sentence here. ${'x'.repeat(3900)}`;
+  withDom(() => {
+    const sec = loopSection({ ...blockedRun(), reason: long }, { events: blockedAtTests(), controls: [] });
+    const full = sec.querySelectorAll('lp-full')[0];
+    assert.ok(full);
+    assert.equal(texts(full).at(-1).length, long.length);
+  });
+});

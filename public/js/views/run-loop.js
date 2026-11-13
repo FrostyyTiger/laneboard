@@ -181,7 +181,7 @@ const hm = (ms) => {
 };
 const mins = (ms) => (ms < 60_000 ? `${Math.max(0, Math.round(ms / 1000))} s` : ms < 3_600_000 ? `${(ms / 60_000).toFixed(1)} min` : `${(ms / 3_600_000).toFixed(1)} h`);
 const firstSentence = (t) => {
-  const s = rnClean(t, 2000) ?? '';
+  const s = rnClean(t, 4000) ?? '';
   const m = /^(.{20,280}?[.!?])(\s|$)/.exec(s);
   return m ? m[1] : s.slice(0, 280);
 };
@@ -216,10 +216,10 @@ export function loopCallout(pattern, pos, run, { events = [], controls = [], gat
     box.append(el('p', 'lp-now', `■ Stopped at ${where}${sinceText}`));
     const why = el('div', 'lp-why');
     why.append(el('span', 'lp-k', 'What is wrong'), el('span', 'lp-t', firstSentence(run.reason) || 'It stopped and waits for you.'));
-    if ((rnClean(run.reason, 2000) ?? '').length > firstSentence(run.reason).length) {
+    if ((rnClean(run.reason, 4000) ?? '').length > firstSentence(run.reason).length) {
       const d = el('details', 'lp-full rn-keep');
       d.dataset.keep = 'reason';
-      d.append(el('summary', null, 'full text'), el('p', null, rnClean(run.reason, 2000)));
+      d.append(el('summary', null, 'full text'), el('p', null, rnClean(run.reason, 4000)));
       why.append(d);
     }
     box.append(why, el('p', 'lp-hint', 'Nothing to approve. Fix the cause, then Resume: the foreman tries this step again.'));

@@ -189,7 +189,7 @@ const recipe = (r) => (isObj(r) && str(r.id)
     loop: loopParams(r.loop),
   } : null);
 /** A node's place in its loop (foundry's `x.phase`), when the engine sends it. */
-const PHASE = /^[a-z]{1,16}$/;
+const PHASE = /^[a-z][a-z_-]{0,23}$/;
 const counts = (c) => (isObj(c) && [c.passed, c.failed, c.skipped].every((x) => int(x) !== null)
   ? { passed: c.passed, failed: c.failed, skipped: c.skipped } : null);
 const check = (c) => (isObj(c) && str(c.name) && typeof c.pass === 'boolean'
