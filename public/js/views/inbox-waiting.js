@@ -72,6 +72,16 @@ export function fieldsNode(obj, depth = 0) {
 
 /** The decisions an item takes (docs/decisions.md). Pure. */
 export function decisionPlans(item, engine) {
+  // A blocked run: nothing to approve. Fix the cause, then Resume; or Stop (it asks first).
+  if (item.kind === 'needs') {
+    if (typeof item.run !== 'string' || !item.run) return [];
+    const run = `${engine}/${item.run}`;
+    const lines = [rnClean(run, 100) ?? '', 'Gentle: the current step finishes first.'];
+    return [
+      { label: 'Resume', word: 'resume', action: 'engine-resume', target: run, tier: 'click', args: {}, lines },
+      { label: 'Stop', word: 'stop', action: 'engine-stop', target: run, tier: 'confirm', args: {}, lines },
+    ];
+  }
   const target = `${engine}/${item.id}`;
   const title = rnClean(item.title, 200) ?? rnClean(item.id, 120) ?? '';
   const lines = [title, `revision ${item.revision}`];
@@ -120,4 +130,4 @@ export function waitingBody(item, engine, onDone) {
   return body;
 }
 
-export const waitingKindWord = (kind) => rnClean(kind, 24) ?? '';
+export const waitingKindWord = (kind) => (kind === 'needs' ? 'blocked' : rnClean(kind, 24) ?? '');

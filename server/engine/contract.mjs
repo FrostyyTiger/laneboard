@@ -58,7 +58,8 @@ export const VOCAB = Object.freeze({
   prState: set('draft', 'open', 'merged', 'closed'),
   gateState: set('open', 'decided', 'withdrawn'),
   decision: set('approved', 'rejected'),
-  waitingKind: set('requirement', 'recipe', 'variant', 'question', 'merge', 'deploy', 'proposal', 'repo', 'change'),
+  // `needs`: a blocked run waits for a person to fix the cause and resume; nothing to approve.
+  waitingKind: set('requirement', 'recipe', 'variant', 'question', 'merge', 'deploy', 'proposal', 'repo', 'change', 'needs'),
   readiness: set('ready', 'not-ready'),
   readinessKind: set('question-open', 'requirement-unapproved', 'low-claim', 'budget'),
   knowledgeType: set('claim', 'question', 'requirement', 'source'),
@@ -69,6 +70,7 @@ const CONTENT_NEEDS = {
   recipe: ['revision', 'text'], requirement: ['items'], variant: ['question', 'options'], question: ['question', 'context'],
   merge: ['report', 'pr'], deploy: ['target', 'what'], proposal: ['title', 'text'], repo: ['product', 'name', 'template'],
   change: ['chain', 'items'],
+  needs: [],
 };
 
 // --- small readers ------------------------------------------------------------

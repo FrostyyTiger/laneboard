@@ -146,8 +146,8 @@ const TEST_WRITER_CHECK = /^acceptance tests written/i;
 /** Blocked: at a gate with nothing to decide (same rule as the Runs view). */
 export function blockedRun(run) {
   if (run?.state !== 'at-gate') return false;
-  if (Array.isArray(run.waiting) && run.waiting.length) return false;
-  if (Array.isArray(run.gates) && run.gates.some((g) => g?.state === 'open')) return false;
+  if (Array.isArray(run.waiting) && run.waiting.some((w) => w?.kind !== 'needs')) return false;
+  if (Array.isArray(run.gates) && run.gates.some((g) => g?.state === 'open' && g.kind !== 'needs')) return false;
   return true;
 }
 
