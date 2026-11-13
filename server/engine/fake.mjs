@@ -31,7 +31,7 @@ export const DEMO_RUNS = path.resolve(FIXTURES, '..', 'demo');
 
 const notFound = (what) => Object.assign(new Error(`${what} not found`), { code: 'not-found' });
 
-export function create({ id = 'fake', dir = FIXTURES, override = {}, timeoutMs, staleMs, downMs, now } = {}) {
+export function create({ id = 'fake', dir = FIXTURES, override = {}, timeoutMs, staleMs, downMs, freshMs = 0, now } = {}) {
   const read = (name) => fsp.readFile(path.join(dir, name), 'utf8');
   const json = async (name) => JSON.parse(await read(name));
   const replays = new Map(); // requestId -> answer
@@ -115,5 +115,5 @@ export function create({ id = 'fake', dir = FIXTURES, override = {}, timeoutMs, 
     }
   }
 
-  return createContractEngine({ id, kind, call, timeoutMs, staleMs, downMs, now });
+  return createContractEngine({ id, kind, call, timeoutMs, staleMs, downMs, freshMs, now });
 }

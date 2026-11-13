@@ -53,10 +53,10 @@ export function envFor(config, path = process.env.PATH ?? '') {
   return config ? { PATH: path, FOUNDRY_CONFIG: config } : { PATH: path };
 }
 
-export function create({ id = 'foundry', bin, config, cwd, timeoutMs, staleMs, downMs, now, exec = execJson } = {}) {
+export function create({ id = 'foundry', bin, config, cwd, timeoutMs, staleMs, downMs, freshMs, now, exec = execJson } = {}) {
   const env = envFor(config);
   async function call(verb, args, meta) {
     return exec(bin, argsFor(verb, args, meta), { timeoutMs, cwd, env });
   }
-  return createContractEngine({ id, kind, call, timeoutMs, staleMs, downMs, now });
+  return createContractEngine({ id, kind, call, timeoutMs, staleMs, downMs, freshMs, now });
 }

@@ -11,6 +11,8 @@
 //            timeoutMs  one call's limit, default 10000 (100..120000)
 //            staleMs    no good answer for this long is `stale`, default 30000
 //            downMs     ... and for this long `down`, default 120000 (>= staleMs)
+//            freshMs    an answer this young is served again without a call, default
+//                       4000 (0 = always ask; products and knowledge keep 30 s)
 //
 // The `jsonl` engine (run.jsonl files, docs/runs.md) needs no entry: it reads
 // the runs collector's store, which `runs.files`, `runs.lanes` and the API's
@@ -23,11 +25,12 @@ export const ENGINE_KINDS = Object.freeze(['none', 'fake', 'foundry-cli']);
 export const MAX_ENGINES = 8;
 export const RESERVED_IDS = Object.freeze(['jsonl']);
 const ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
-const KEYS = ['id', 'kind', 'dir', 'bin', 'config', 'cwd', 'timeoutMs', 'staleMs', 'downMs'];
+const KEYS = ['id', 'kind', 'dir', 'bin', 'config', 'cwd', 'timeoutMs', 'staleMs', 'downMs', 'freshMs'];
 export const LIMITS = Object.freeze({
   timeoutMs: [100, 120_000],
   staleMs: [1000, 24 * 3600_000],
   downMs: [1000, 7 * 24 * 3600_000],
+  freshMs: [0, 60_000],
 });
 
 export function defaults() {
