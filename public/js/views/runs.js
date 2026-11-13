@@ -1314,7 +1314,7 @@ function rnPaint(st) {
   if (st.page) {
     setPanel(st.panel.root, { scope: st.runId, n: null });
     st.panel.root.dataset.page = '';
-    renderEnginePage(st.panel.body, st.runId, st.page, { status: st.status, message: st.message }, Date.now());
+    renderEnginePage(st.panel.body, st.runId, st.page, { status: st.status, message: st.message }, Date.now(), () => rnRefresh(st));
     return;
   }
   if (st.runId) {

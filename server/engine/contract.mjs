@@ -171,8 +171,23 @@ const room = (r) => {
   return { name: need(r.name, 'room name'), host: str(r.host), state: maybeOf(r.state, VOCAB.roomState),
     expiresAt: ms(r.expires), purpose: str(r.purpose) };
 };
+/** The loop numbers a recipe may send (`recipe.loop`, foundry's own names): small whole numbers only. */
+const LOOP_KEYS = ['task_rounds', 'escalate_after', 'blame_rounds', 'review_cycles', 'review_task_cap', 'no_progress'];
+function loopParams(l) {
+  if (!isObj(l)) return null;
+  const out = {};
+  for (const k of LOOP_KEYS) if (Number.isInteger(l[k]) && l[k] >= 0 && l[k] <= 99) out[k] = l[k];
+  return Object.keys(out).length ? out : null;
+}
+const PATTERN_ID = /^[a-z][a-z0-9-]{0,47}@[0-9]{1,3}$/;
 const recipe = (r) => (isObj(r) && str(r.id)
-  ? { id: r.id, revision: int(r.revision), kind: str(r.kind), url: url(r.url) } : null);
+  ? {
+    id: r.id, revision: int(r.revision), kind: str(r.kind), url: url(r.url),
+    patterns: Array.isArray(r.patterns) ? r.patterns.filter((p) => typeof p === 'string' && PATTERN_ID.test(p)).slice(0, 8) : null,
+    loop: loopParams(r.loop),
+  } : null);
+/** A node's place in its loop (foundry's `x.phase`), when the engine sends it. */
+const PHASE = /^[a-z]{1,16}$/;
 const counts = (c) => (isObj(c) && [c.passed, c.failed, c.skipped].every((x) => int(x) !== null)
   ? { passed: c.passed, failed: c.failed, skipped: c.skipped } : null);
 const check = (c) => (isObj(c) && str(c.name) && typeof c.pass === 'boolean'
@@ -210,6 +225,7 @@ function node(n) {
     title: need(n.title, 'node title'),
     state: oneOf(n.state, VOCAB.nodeState, 'node state'),
     reason: str(n.reason),
+    phase: typeof n.phase === 'string' && PHASE.test(n.phase) ? n.phase : null,
     check: str(n.check),
     lastCheck: check(n.last_check),
     attempts: isObj(n.attempts) && int(n.attempts.rounds) !== null

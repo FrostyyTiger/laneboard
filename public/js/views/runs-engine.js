@@ -13,6 +13,7 @@ import {
   buildTree, costBelow, defaultOpen, isOpen, mergeEvents, noteFailures, parseRunKey, placeEvents, retriesOf,
 } from '../core/run-tree.js';
 import { lamp } from '../ui/components.js';
+import { loopSection } from './run-loop.js';
 
 export const ENGINE_RUNS_URL = '/api/engines/runs';
 const LIST_HREF = '#/runs';
@@ -404,6 +405,32 @@ export function sourceLabel(product, engine) {
   return s;
 }
 
+const GLYPH_MARKS = new Set(['done', 'current', 'blocked', 'gate', 'stopped', 'idle']);
+
+/**
+ * A live row's small loop: seven dots (Plan · Recipe · Tests · Build · Check ·
+ * Review · PR), the lit one where the run is, and the word with its node. The
+ * server works the spot out (`loop`, routes/engines.mjs loopSpots).
+ */
+export function loopGlyph(loop) {
+  const box = el('span', 'rn-f rn-node rn-glyph');
+  const dots = el('span', 'rn-glyph-dots');
+  dots.setAttribute('aria-hidden', 'true');
+  const marks = Array.isArray(loop.marks) ? loop.marks.slice(0, 7) : [];
+  marks.forEach((m, i) => {
+    const d = el('span', 'rn-dot');
+    d.dataset.mark = GLYPH_MARKS.has(m) ? m : 'idle';
+    if (i === loop.at) d.dataset.at = '';
+    dots.append(d);
+  });
+  const word = [rnClean(loop.label, 24), rnClean(loop.node, 48)].filter(Boolean).join(' · ');
+  box.append(dots, el('span', 'rn-glyph-w', word || DASH));
+  const words = Array.isArray(loop.words) ? loop.words.map((w) => rnClean(w, 16)).filter(Boolean).join(' → ') : '';
+  box.title = `${loop.blocked ? 'blocked at' : 'at'} ${word}${words ? `\n${words}` : ''}${loop.exact ? '' : '\n(worked out from the events)'}`;
+  box.dataset.station = rnClean(loop.station, 24) ?? '';
+  return box;
+}
+
 /** One engine run's list row. What waits on it is in the Needs you band above the list (needsBand). */
 export function engineRow(row, now = Date.now()) {
   const li = el('li', 'rn-row');
@@ -420,8 +447,8 @@ export function engineRow(row, now = Date.now()) {
   goal.append(a, el('span', 'rn-goal-sub', sub || (rnClean(row.run, 100) ?? '')));
   goal.title = [rowName(row), rnClean(row.goalTitle, 200), rnClean(row.run, 100)].filter(Boolean).join('\n');
 
-  const node = el('span', 'rn-f rn-node', rnClean(row.node, 80) ?? DASH);
-  node.title = row.node ? `working on ${rnClean(row.node, 80)}` : 'no current node';
+  const node = row.loop ? loopGlyph(row.loop) : el('span', 'rn-f rn-node', rnClean(row.node, 80) ?? DASH);
+  if (!row.loop) node.title = row.node ? `working on ${rnClean(row.node, 80)}` : 'no current node';
   const hosts = [...new Set((row.rooms ?? []).map((r) => rnClean(r.host, 32)).filter(Boolean))];
   const rooms = el('span', 'rn-f rn-rooms', hosts.length ? `on ${hosts.join(', ')}` : DASH);
   if (row.rooms?.length) rooms.title = row.rooms.map((r) => `${rnClean(r.name, 48)} ${rnClean(r.state, 16) ?? ''}`.trim()).join(', ');
@@ -630,6 +657,29 @@ export function runControls(key, run) {
   return out;
 }
 
+/** The `⋯` menu in a run page's head: the links and raw facts that are rarely needed. */
+function moreMenu(key, run) {
+  const d = el('details', 'rn-more rn-keep');
+  d.dataset.keep = 'more';
+  d.append(el('summary', 'rn-more-s', '⋯'));
+  d.querySelector?.('summary')?.setAttribute('aria-label', 'More about this run');
+  const ul = el('ul', 'rn-more-l');
+  const item = (node) => { const li = el('li'); li.append(node); ul.append(li); };
+  if (safeHref(run.url)) item(link('rn-more-a', 'state repo ↗', run.url));
+  if (safeHref(run.recipe?.url)) item(link('rn-more-a', `recipe${typeof run.recipe.revision === 'number' ? ` rev ${run.recipe.revision}` : ''} ↗`, run.recipe.url));
+  if (run.product && run.goal) {
+    const flow = el('a', 'rn-more-a', 'Flow of the goal');
+    flow.href = `#/flow?product=${encodeURIComponent(run.product)}&goal=${encodeURIComponent(run.goal)}`;
+    item(flow);
+  }
+  for (const r of run.rooms ?? []) item(el('span', 'rn-more-f', `room ${rnClean(r.name, 48) ?? '?'} · ${rnClean(r.host, 32) ?? '?'} · ${rnClean(r.state, 16) ?? '?'}`));
+  item(el('span', 'rn-more-f', `${rnClean(key, 100) ?? ''}${typeof run.lastSeq === 'number' ? ` · ${run.lastSeq} events` : ''}`));
+  d.append(ul);
+  return d;
+}
+
+const DAY_TIME = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
+
 function enginePageHead(key, run, page, now) {
   const head = el('header', 'rn-head');
   const back = el('a', 'rn-back', '← Runs');
@@ -640,27 +690,18 @@ function enginePageHead(key, run, page, now) {
   const name = rnClean(run.name, 120);
   const t = el('span', 'rn-goal-t', name ?? [rnClean(run.product, 48), rnClean(run.goal, 32), rnClean(title)].filter(Boolean).join(' · '));
   t.title = rnClean(key, 100) ?? '';
-  goal.append(t, el('span', 'rn-goal-sub', [name ? rnClean(title) : null, rnClean(key, 100)].filter(Boolean).join(' · ')));
-  top.append(engineStateCell(engineStateOf(run)), goal);
+  goal.append(t, el('span', 'rn-goal-sub', (name ? rnClean(title) : null) ?? rnClean(key, 100) ?? ''));
+  top.append(engineStateCell(engineStateOf(run)), goal, moreMenu(key, run));
   const facts = el('div', 'rn-facts');
   const add = (cls, text, t) => { const f = el('span', `rn-f ${cls}`, text); if (t) f.title = t; facts.append(f); };
   if (run.node) add('rn-node', `at ${rnClean(run.node, 80)}`);
   if (run.stop) add('rn-left', `stop: ${rnClean(run.stop, 32)}`);
+  if (typeof run.startedAt === 'number') add('rn-left', `started ${new Date(run.startedAt).toLocaleString('en-GB', DAY_TIME)}`);
   if (usdOf(run) !== null) add('rn-cost', money(usdOf(run)), 'API price equivalent');
-  if (run.rooms?.length) add('rn-rooms', run.rooms.map((r) => `${rnClean(r.name, 48)} ${rnClean(r.state, 16) ?? ''}`.trim()).join(', '));
+  const hosts = [...new Set((run.rooms ?? []).map((r) => rnClean(r.host, 32)).filter(Boolean))];
+  if (hosts.length) add('rn-rooms', `on ${hosts.join(', ')}`);
   if (typeof run.updatedAt === 'number') add('rn-left', `updated ${engineAge(now - run.updatedAt)}`);
-  if (run.product && run.goal) {
-    const flow = el('a', 'rn-back', 'Flow overview');
-    flow.href = `#/flow?product=${encodeURIComponent(run.product)}&goal=${encodeURIComponent(run.goal)}`;
-    facts.append(flow);
-  }
   head.append(back, top, facts);
-  const controls = runControls(key, run);
-  if (controls.length) {
-    const box = el('div', 'rn-facts');
-    for (const c of controls) box.append(decisionButton(c));
-    head.append(box);
-  }
   if (page.stale) head.append(el('p', 'rn-stale', `The engine is not answering. This is its last good answer, ${engineAge(page.age)}.`));
   return head;
 }
@@ -692,7 +733,7 @@ function prsSection(prs) {
 }
 
 /** The whole page. `st` is {status, message}; `page` from newPage/applyRun. */
-export function renderEnginePage(container, key, page, st = { status: 'ok' }, now = Date.now()) {
+export function renderEnginePage(container, key, page, st = { status: 'ok' }, now = Date.now(), onDone = undefined) {
   const root = el('div', 'rn-page');
   const run = page?.run;
   if (!run) {
@@ -709,8 +750,10 @@ export function renderEnginePage(container, key, page, st = { status: 'ok' }, no
     const tree = buildTree(run.tree);
     const placed = placeEvents(tree, page.events);
     const v = { defaults: defaultOpen(tree, run.node), overrides: page.overrides, placed, cost: costBelow(tree, page.events) };
+    const gates = gatesNode({ ...run, engine: parseRunKey(key)?.engine ?? run.engine }, onDone);
+    root.append(loopSection(run, { events: page.events, controls: runControls(key, run), gates, onDone, now }));
     const open = (run.gates ?? []).filter((g) => g.state === 'open');
-    if (open.length) root.append(gatesSection(run.gates));
+    if (open.length && !gates) root.append(gatesSection(run.gates));
     const treeSec = engineSection('rt-tree', 'Tree', tree.byId.size);
     const ul = el('ul', 'rt-list');
     for (const r of tree.roots) ul.append(nodeItem(r, v, 0));
@@ -733,8 +776,11 @@ export function renderEnginePage(container, key, page, st = { status: 'ok' }, no
   }
   if (container) {
     const focus = container.ownerDocument?.activeElement?.dataset?.fold ?? null;
+    // A repaint keeps what the person opened (the ⋯ menu, a full reason).
+    const kept = new Set([...(container.querySelectorAll?.('.rn-keep') ?? [])].filter((d) => d.open).map((d) => d.dataset.keep));
     container.textContent = '';
     container.append(root);
+    if (kept.size) for (const d of root.querySelectorAll('.rn-keep')) if (kept.has(d.dataset.keep)) d.open = true;
     if (focus) [...root.querySelectorAll('[data-fold]')].find((b) => b.dataset.fold === focus)?.focus();
   }
   return root;

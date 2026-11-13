@@ -22,16 +22,18 @@ From top to bottom ([runs-health.md](runs-health.md) has the details):
 **One plain name per run**: `Bauplan · build #2` is that product's second build
 run. The number counts runs of one kind for one product, oldest first, so it is
 not the number in the run id (which counts runs of a day). The id is the name's
-tooltip. A row shows the name, the goal and start day under it, the current
-node, the host, the age or stop reason and the cost. Finished runs are grey.
+tooltip. A row shows the name, the goal and start day under it, where it is in
+its loop (seven dots and the station, [run-loop.md](run-loop.md)) or else the
+current node, the host, the age or stop reason and the cost. Finished runs are grey.
 
 Pause, Resume and Stop are also on the page of a run from an engine ([decisions.md](decisions.md)).
 
 ## The run page
 
 A run-file run keeps its page: rounds, charts, needs. An engine run
-(`#/runs?run=<engine>/<run>`) shows its plain name, state, cost, rooms, what waits for a
-person, the tree, its PRs and its report.
+(`#/runs?run=<engine>/<run>`) shows its plain name, state, start, cost and host,
+then **the loop** with the callout and the one control row ([run-loop.md](run-loop.md)),
+then the tree, its PRs and its report. The rarely needed links are behind `⋯`.
 
 The tree is goal, then feature, then task. One row per node: state, id, title,
 last check, a ❄ if it is frozen, `↻n` for retries, the cost at and below it.

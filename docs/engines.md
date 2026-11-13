@@ -37,7 +37,7 @@ Every engine has every member; one it lacks answers `{ok: false, code: 'unsuppor
 | `health()` | foreman heartbeat, hosts and their states, queue length, the account usage windows |
 | `products()` | products, their goals, readiness per goal with reasons that link |
 | `runs()` | run rows: product, goal, state, stop reason, current node, rooms, usage, PR |
-| `run(id)` | one run: its row plus the tree, gates, PRs and report (`tree: null` for a run-file run) |
+| `run(id)` | one run: its row plus the tree, gates, PRs and report (`tree: null` for a run-file run). The recipe keeps `patterns` and `loop` (its loop numbers) and a node its `phase` when the engine sends them ([run-loop.md](run-loop.md)) |
 | `events(runId, since)` | the events after `since`, plus `next` to pass next time |
 | `waiting(filter)` | what waits for a person: gates and questions with their content and revision |
 | `knowledge(product, filter)` | claims, questions, requirements, source headers (never raw sources); filter by `kind`, `status`, `id`, `limit`, `cursor` |

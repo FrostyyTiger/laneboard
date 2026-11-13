@@ -3,7 +3,8 @@
 //   GET /api/engines                        -> {accepts, engines: [status + capabilities]}
 //   GET /api/engines/runs                   -> {runs, engines, errors}, every engine but jsonl (the Runs view);
 //                                              each engine with its foreman `health` and `questions` (items for no
-//                                              run), each run with its `waiting` items, `productTitle` and `name`
+//                                              run), each run with its `waiting` items, `productTitle` and `name`;
+//                                              a live run with a known loop pattern also has `loop`, its spot (loopSpots)
 //   GET /api/engines/products               -> {products, engines}, every engine (the Products view)
 //   GET /api/engines/waiting                -> {items, engines}, every engine (the Inbox, Morning)
 //   GET /api/engine/:id/hello               -> {engine, at, stale, age, dropped, data}
@@ -23,6 +24,7 @@ import * as engines from '../engine/index.mjs';
 import { ACCEPTED } from '../engine/contract.mjs';
 import { setEngineRuns } from '../map.mjs';
 import { registerEngineActions } from '../engine/actions.mjs';
+import { glyphOf, loopPosition, paramsOf, patternOf } from '../../public/js/core/loop.js';
 
 export const LIST_PATH = '/api/engines';
 export const RUNS_PATH = '/api/engines/runs';
@@ -94,6 +96,7 @@ export async function runsBody(list = engines.list()) {
     r.waiting = waiting.get(r.key) ?? [];
   }
   nameRuns(runs);
+  await loopSpots(contract, runs);
   const states = contract.map((e) => {
     const s = e.status();
     return {
@@ -102,6 +105,56 @@ export async function runsBody(list = engines.list()) {
     };
   });
   return { runs, engines: states, errors };
+}
+
+const LIVE_ROW = new Set(['running', 'at-gate', 'waiting-approval', 'paused', 'queued']);
+const SPOT_PAGES = 10;
+const SPOT_EVENTS = 5000;
+/** `<engine>/<run>` -> {seq, updatedAt, events, next, loop}: a live run's events, read again only when it moves. */
+const spots = new Map();
+
+/**
+ * Each live run's spot in its loop, in place: `loop {station, label, node, at,
+ * marks, blocked, exact}` for the Runs row glyph (docs/run-loop.md). A run's
+ * page and events are read only when its `lastSeq` or `updatedAt` moved since the
+ * last time, and then only the new events. A run with no known pattern gets none.
+ */
+export async function loopSpots(list, runs) {
+  const byId = new Map(list.map((e) => [e.id, e]));
+  const keep = new Set();
+  await Promise.all(runs.map(async (r) => {
+    if (!LIVE_ROW.has(r.state)) return;
+    const { pattern } = patternOf(r);
+    const e = byId.get(r.engine);
+    if (!pattern || !e) return;
+    keep.add(r.key);
+    const m = spots.get(r.key);
+    if (m && m.seq === r.lastSeq && m.updatedAt === r.updatedAt) { r.loop = m.loop; return; }
+    const a = await e.run(r.id);
+    if (!a?.ok || !a.data?.run) { if (m) r.loop = m.loop; return; }
+    let events = m?.events ?? [];
+    let next = m?.next ?? 0;
+    for (let i = 0; i < SPOT_PAGES; i += 1) {
+      const b = await e.events(r.id, next);
+      if (!b?.ok) break;
+      events = events.concat(b.data.events);
+      next = b.data.next;
+      if (!b.data.more) break;
+    }
+    events = events.slice(-SPOT_EVENTS);
+    const run = { ...a.data.run, waiting: r.waiting };
+    const pos = loopPosition(run, events, pattern, paramsOf(run, pattern));
+    const g = glyphOf(pattern, pos);
+    const station = pattern.stations.find((s) => s.id === pos.current);
+    const loop = {
+      station: pos.current, label: station?.label ?? null, node: pos.node,
+      at: g.at, marks: g.dots.map((d) => d.mark), words: g.dots.map((d) => d.word), blocked: pos.blocked, exact: pos.exact,
+    };
+    spots.set(r.key, { seq: r.lastSeq, updatedAt: r.updatedAt, events, next, loop });
+    r.loop = loop;
+  }));
+  for (const k of spots.keys()) if (!keep.has(k)) spots.delete(k);
+  return runs;
 }
 
 /** A run's kind as its name says it: the recipe's kind, else `run`. */
@@ -136,7 +189,8 @@ export function nameRuns(runs) {
  */
 export async function namedRun(e, a) {
   if (!a?.ok || !a.data?.run) return a;
-  const [runs, products] = await Promise.all([e.runs(), e.products()]);
+  const [runs, products, waiting] = await Promise.all([e.runs(), e.products(),
+    e.capabilities.includes('waiting') ? e.waiting({}) : null]);
   if (!runs.ok) return a;
   const titles = new Map();
   if (products.ok) for (const p of products.data.products) titles.set(p.id, { title: p.title, goals: new Map(p.goals.map((g) => [g.id, g.title])) });
@@ -145,7 +199,8 @@ export async function namedRun(e, a) {
   const row = rows.find((r) => r.id === a.data.run.id);
   if (!row) return a;
   const run = a.data.run;
-  const named = { ...run, name: row.name, productTitle: row.productTitle, goalTitle: run.goalTitle ?? titles.get(run.product)?.goals.get(run.goal) ?? null };
+  const named = { ...run, name: row.name, productTitle: row.productTitle, goalTitle: run.goalTitle ?? titles.get(run.product)?.goals.get(run.goal) ?? null,
+    waiting: waiting?.ok ? waiting.data.items.filter((it) => it.run === run.id) : [] };
   return { ...a, data: { ...a.data, run: named } };
 }
 
