@@ -14,6 +14,8 @@ import {
 } from '../core/run-tree.js';
 import { lamp } from '../ui/components.js';
 import { loopSection } from './run-loop.js';
+import { drawerNode, miniLoops, tabsNode } from './run-drawer.js';
+import { patternOf } from '../core/loop.js';
 
 export const ENGINE_RUNS_URL = '/api/engines/runs';
 const LIST_HREF = '#/runs';
@@ -503,7 +505,7 @@ export async function loadEngineRun(key, since = 0, fetchFn = globalThis.fetch) 
 }
 
 /** A new page state for one run. */
-export const newPage = () => ({ run: null, stale: false, age: null, events: [], next: 0, eventsFailed: false, overrides: new Map(), seen: new Set() });
+export const newPage = () => ({ run: null, stale: false, age: null, events: [], next: 0, eventsFailed: false, overrides: new Map(), seen: new Set(), drawer: null, pos: null });
 
 /** A good answer folded into the page state. */
 export function applyRun(page, res) {
@@ -597,6 +599,8 @@ function nodeItem(item, v, depth) {
     row.append(f);
   }
   row.append(el('span', 'rt-id', rnClean(n.id, 100) ?? ''), el('span', 'rt-title', rnClean(n.title) ?? ''));
+  const mini = v.mini?.get(n.id);
+  if (mini) row.append(el('span', 'rt-mini', rnClean(mini, 200)));
   const chip = checkChip(n.lastCheck);
   if (chip) row.append(chip);
   const retries = retriesOf(n);
@@ -751,14 +755,25 @@ export function renderEnginePage(container, key, page, st = { status: 'ok' }, no
     const placed = placeEvents(tree, page.events);
     const v = { defaults: defaultOpen(tree, run.node), overrides: page.overrides, placed, cost: costBelow(tree, page.events) };
     const gates = gatesNode({ ...run, engine: parseRunKey(key)?.engine ?? run.engine }, onDone);
-    root.append(loopSection(run, { events: page.events, controls: runControls(key, run), gates, onDone, now }));
+    root.append(loopSection(run, { events: page.events, controls: runControls(key, run), gates, onDone, now, page }));
     const open = (run.gates ?? []).filter((g) => g.state === 'open');
     if (open.length && !gates) root.append(gatesSection(run.gates));
-    const treeSec = engineSection('rt-tree', 'Tree', tree.byId.size);
-    const ul = el('ul', 'rt-list');
-    for (const r of tree.roots) ul.append(nodeItem(r, v, 0));
-    treeSec.append(ul);
-    root.append(treeSec);
+    v.mini = miniLoops(run, page.events);
+    const treeList = () => {
+      const ul = el('ul', 'rt-list');
+      for (const r of tree.roots) ul.append(nodeItem(r, v, 0));
+      return ul;
+    };
+    if (patternOf(run).pattern) {
+      // The loop is the picture; the tree and the rest are in the drawer, closed by default.
+      root.append(tabsNode(page));
+      const d = drawerNode(run, page, { built: page.drawer?.id === 'built' ? treeList() : null, now });
+      if (d) root.append(d);
+    } else {
+      const treeSec = engineSection('rt-tree', 'Tree', tree.byId.size);
+      treeSec.append(treeList());
+      root.append(treeSec);
+    }
     if (page.eventsFailed) root.append(el('p', 'rn-stale', 'The events could not be read.'));
     if (run.prs?.length) root.append(prsSection(run.prs));
     if (run.report) {

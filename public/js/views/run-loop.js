@@ -84,7 +84,7 @@ function labelAt(pts) {
 }
 
 /** The drawing. Pure apart from the DOM it builds. */
-export function loopSvg(pattern, pos, layout = LAYOUTS[pattern.id]) {
+export function loopSvg(pattern, pos, layout = LAYOUTS[pattern.id], open = null) {
   const [vw, vh] = layout.view;
   const s = svg('svg', { class: 'lp-svg', viewBox: `0 0 ${vw} ${vh}`, role: 'img', 'aria-label': `The loop, at ${stationOf(pattern, pos.current)?.label ?? '?'}` });
   const defs = svg('defs');
@@ -133,6 +133,10 @@ export function loopSvg(pattern, pos, layout = LAYOUTS[pattern.id]) {
     const g = svg('g', { class: `lp-st${st.back ? ' lp-st--back' : ''}${st.side ? ' lp-st--side' : ''}`, transform: `translate(${xy[0]},${xy[1]})` });
     g.dataset.station = st.id;
     g.dataset.mark = m.mark;
+    g.dataset.drawer = `station:${st.id}`;
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', 'button');
+    g.setAttribute('aria-pressed', String(open === st.id));
     const tip = svg('title');
     tip.textContent = [`${st.label}${MARK_WORD[m.mark] ? ` · ${MARK_WORD[m.mark]}` : ''}`, m.more ?? m.sub, st.text].filter(Boolean).join('\n');
     g.append(tip);
@@ -152,13 +156,17 @@ export function loopSvg(pattern, pos, layout = LAYOUTS[pattern.id]) {
 }
 
 /** The same stations as a list: the phone's view and the drawing's text. */
-export function loopList(pattern, pos) {
+export function loopList(pattern, pos, open = null) {
   const ol = el('ol', 'lp-list');
   for (const st of pattern.stations) {
     const m = pos.stations[st.id] ?? { mark: 'idle' };
     const li = el('li', `lp-li${st.back ? ' lp-li--back' : ''}${st.side ? ' lp-li--side' : ''}`);
     li.dataset.station = st.id;
     li.dataset.mark = m.mark;
+    li.dataset.drawer = `station:${st.id}`;
+    li.setAttribute('tabindex', '0');
+    li.setAttribute('role', 'button');
+    li.setAttribute('aria-pressed', String(open === st.id));
     li.append(el('span', 'lp-li-m', MARK_SIGN[m.mark] || (st.back ? '↺' : st.side ? '·' : '○')), el('span', 'lp-li-t', st.label));
     if (m.sub) li.append(el('span', 'lp-li-sub', rnClean(m.sub, 60)));
     if (MARK_WORD[m.mark] && m.mark !== 'done') li.append(el('span', 'lp-li-w', MARK_WORD[m.mark]));
@@ -270,11 +278,13 @@ export function loopSection(run, ctx = {}) {
   }
   const params = paramsOf(run, pattern);
   const pos = loopPosition(run, ctx.events ?? [], pattern, params);
+  if (ctx.page) ctx.page.pos = pos;
+  const open = ctx.page?.drawer?.kind === 'station' ? ctx.page.drawer.id : null;
   const callout = loopCallout(pattern, pos, run, ctx);
   sec.dataset.mark = callout.dataset.mark;
   sec.dataset.station = pos.current;
   const draw = el('div', 'lp-draw');
-  draw.append(loopSvg(pattern, pos), loopList(pattern, pos));
+  draw.append(loopSvg(pattern, pos, LAYOUTS[pattern.id], open), loopList(pattern, pos, open));
   sec.append(draw, callout, patternLine(pattern, from, params));
   if (!pos.exact && pos.current !== 'end') {
     sec.append(el('p', 'lp-pattern lp-guess', 'The spot is worked out from the events: foundry does not send each node\'s phase yet.'));

@@ -44,7 +44,8 @@ drawing**, only a note: a wrong drawing is worse than none.
 | PR ▲ | you | the PR and the run report |
 | End | | one stop reason: done, checks-red, no-progress, budget, window-7d, errors, stopped-by-person |
 
-Grey edges go forward; red dashed edges go back. Under each station a short
+Grey edges go forward; red dashed edges go back. Every station is a button: it
+opens its rounds and checks in the drawer ([run-drawer.md](run-drawer.md)). Under each station a short
 number: rounds, tasks frozen, reviews of the cap, the last checks. Its tooltip
 has the long form and what the station does.
 

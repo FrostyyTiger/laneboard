@@ -355,3 +355,87 @@ export function glyphOf(pattern, pos) {
 
 /** Station label by id. */
 export const stationOf = (pattern, id) => pattern.stations.find((s) => s.id === id) ?? null;
+
+// ---------------------------------------------------------------- rounds and checks, for the drawer
+
+/**
+ * The run's rounds from its events: each round.start paired with its end (same
+ * node and role, oldest open first). -> [{n, role, tier, model, round, node,
+ * level, start, end, ms, usd, tokens, result, open}], oldest first.
+ */
+export function roundsOf(events = []) {
+  const out = [];
+  const open = [];
+  for (const e of (Array.isArray(events) ? events : []).slice().sort((a, b) => a.seq - b.seq)) {
+    if (e.type === 'round.start') {
+      const r = { n: out.length + 1, role: e.role ?? null, tier: e.tier ?? null, model: e.model ?? null, round: e.round ?? null,
+        node: e.node ?? null, level: e.level ?? null, start: e.at ?? null, end: null, ms: null, usd: null, tokens: null, result: null, open: true };
+      out.push(r);
+      open.push(r);
+    } else if (e.type === 'round.end') {
+      const i = open.findIndex((r) => r.node === (e.node ?? null) && r.role === (e.role ?? null));
+      const r = i >= 0 ? open.splice(i, 1)[0] : null;
+      if (!r) continue;
+      Object.assign(r, { end: e.at ?? null, result: e.result ?? null, usd: typeof e.usd === 'number' ? e.usd : null, tokens: e.tokens ?? null, open: false });
+      if (e.model && !r.model) r.model = e.model;
+      if (typeof r.start === 'number' && typeof r.end === 'number') r.ms = r.end - r.start;
+    }
+  }
+  return out;
+}
+
+/** The run's checks from its events, oldest first. */
+export const checksOf = (events = []) => (Array.isArray(events) ? events : []).filter((e) => e?.type === 'check')
+  .slice().sort((a, b) => a.seq - b.seq)
+  .map((e) => ({ name: e.name ?? '?', pass: e.pass === true, counts: e.counts ?? null, node: e.node ?? null, level: e.level ?? null, at: e.at ?? null, output: e.output ?? null }));
+
+/** Which rounds and checks belong to a station. -> {rounds, checks} */
+export function stationLog(id, rounds, checks, levels = new Map()) {
+  const isTw = (c) => TEST_WRITER_CHECK.test(c.name);
+  // A test writer round after its feature's first build round is a doubt round.
+  const feat = (node) => (typeof node === 'string' ? node.split('.').slice(0, 2).join('.') : null);
+  const firstBuild = new Map();
+  for (const x of rounds) if (x.role === 'builder' && typeof x.start === 'number' && !(firstBuild.get(feat(x.node)) <= x.start)) firstBuild.set(feat(x.node), x.start);
+  const isDoubt = (x) => x.role === 'test-writer' && firstBuild.has(feat(x.node)) && x.start > firstBuild.get(feat(x.node));
+  const r = (pred) => rounds.filter(pred);
+  const c = (pred) => checks.filter(pred);
+  switch (id) {
+    case 'plan': return { rounds: r((x) => x.role === 'decomposer'), checks: c((x) => x.name === 'tree format') };
+    case 'recipe': return { rounds: [], checks: c((x) => x.level === 'goal' && x.name === 'install') };
+    case 'tests': return { rounds: r((x) => x.role === 'test-writer' && !isDoubt(x)), checks: c(isTw) };
+    case 'doubt': return { rounds: r(isDoubt), checks: [] };
+    case 'build': return { rounds: r((x) => x.role === 'builder'), checks: [] };
+    case 'taskcheck': return { rounds: [], checks: c((x) => x.level === 'task') };
+    case 'fixer': return { rounds: r((x) => x.role === 'fixer'), checks: c((x) => x.level === 'task') };
+    case 'featurecheck': return { rounds: [], checks: c((x) => x.level === 'feature' && !isTw(x)) };
+    case 'blame': return { rounds: r((x) => x.role === 'blame' && levels.get(x.node) !== 'goal'), checks: [] };
+    case 'review': return { rounds: r((x) => x.role === 'reviewer' && levels.get(x.node) !== 'goal'), checks: c((x) => x.name === 'review' && x.level !== 'goal') };
+    case 'merge': return { rounds: [], checks: [] };
+    case 'suite': return { rounds: [], checks: c((x) => x.name === 'suite') };
+    case 'goalcheck': return { rounds: r((x) => x.role === 'reviewer' && levels.get(x.node) === 'goal'), checks: c((x) => x.level === 'goal' && !['tree format', 'install'].includes(x.name)) };
+    case 'goalblame': return { rounds: r((x) => x.role === 'blame' && levels.get(x.node) === 'goal'), checks: [] };
+    default: return { rounds: [], checks: [] };
+  }
+}
+
+/** One node's mini loop in words, for the Built tab. */
+export function miniLoop(node, tree, rounds, checks, params) {
+  const kids = tree.filter((n) => n.parent === node.id);
+  const ends = rounds.filter((r) => !r.open);
+  const lastCheck = checks.filter((c) => c.node === node.id).at(-1);
+  const last = lastCheck ? `last check ${lastCheck.pass ? 'green' : 'red'}` : null;
+  if (node.level === 'task') {
+    const n = ends.filter((r) => r.node === node.id && (r.role === 'builder' || r.role === 'fixer')).length;
+    return [`${n} of ${params.task_rounds.value} rounds`, last, node.state === 'frozen' ? 'frozen' : null].filter(Boolean).join(' · ');
+  }
+  if (node.level === 'feature') {
+    const tw = ends.filter((r) => r.node === node.id && r.role === 'test-writer' && r.result === 'ok').length;
+    const frozen = kids.filter((k) => k.state === 'frozen').length;
+    const blame = ends.filter((r) => r.role === 'blame' && typeof r.node === 'string' && r.node.startsWith(node.id)).length;
+    const rev = ends.filter((r) => r.role === 'reviewer' && r.node === node.id).length;
+    return [`tests ${tw ? 'written' : 'not yet'}`, `${frozen} of ${kids.length} tasks frozen`, blame ? `blame ${blame}` : null,
+      `review ${rev} of ${params.review_cycles.value}`, node.state === 'passed' ? 'merged' : null].filter(Boolean).join(' · ');
+  }
+  const merged = kids.filter((k) => k.state === 'passed').length;
+  return [`${merged} of ${kids.length} features merged`, last].filter(Boolean).join(' · ');
+}

@@ -33,7 +33,9 @@ Pause, Resume and Stop are also on the page of a run from an engine ([decisions.
 A run-file run keeps its page: rounds, charts, needs. An engine run
 (`#/runs?run=<engine>/<run>`) shows its plain name, state, start, cost and host,
 then **the loop** with the callout and the one control row ([run-loop.md](run-loop.md)),
-then the tree, its PRs and its report. The rarely needed links are behind `⋯`.
+then the drawer with the tree under **Built** ([run-drawer.md](run-drawer.md)), its PRs
+and its report. The rarely needed links are behind `⋯`. A run with no loop drawing
+shows its tree right away.
 
 The tree is goal, then feature, then task. One row per node: state, id, title,
 last check, a ❄ if it is frozen, `↻n` for retries, the cost at and below it.

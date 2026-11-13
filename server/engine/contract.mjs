@@ -248,6 +248,7 @@ function gate(g) {
     kind: oneOf(g.kind, VOCAB.waitingKind, 'gate kind'),
     state: oneOf(g.state, VOCAB.gateState, 'gate state'),
     for: str(g.for),
+    node: str(g.node),
     openedAt: ms(g.opened),
     decided: isObj(d) && VOCAB.decision.has(d.decision)
       ? { decision: d.decision, choice: str(d.choice), by: str(d.by), via: str(d.via), at: ms(d.at), request: str(d.request) } : null,
@@ -256,7 +257,8 @@ function gate(g) {
 }
 
 const EVENT_SCALARS = ['title', 'state', 'reason', 'role', 'tier', 'round', 'result', 'what', 'ok', 'name', 'pass',
-  'output', 'path', 'gate', 'kind', 'for', 'decision', 'by', 'via', 'choice', 'request', 'text', 'url', 'room', 'expires'];
+  'output', 'path', 'gate', 'kind', 'for', 'decision', 'by', 'via', 'choice', 'request', 'text', 'url', 'room', 'expires',
+  'model', 'host', 'why'];
 const CAMEL = { usd_notional: 'usd', window_5h: 'window5h', window_7d: 'window7d' };
 
 function event(e) {

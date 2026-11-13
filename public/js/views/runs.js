@@ -49,6 +49,7 @@ import {
   applyRun, bannersNode, engineBanners, engineNeedsYou, engineRow, chipsNode, defaultFilter, filterRuns, needsBand, statusLine, statusNode, loadEngineRun, loadEngineRuns, newPage, parseRunKey,
   renderEnginePage, sourceLabel, toggleFold,
 } from './runs-engine.js';
+import { toggleDrawer } from './run-drawer.js';
 
 export { rnClean, safeHref };
 
@@ -1429,7 +1430,14 @@ export function mountRuns(host, ctx = {}, { fetchFn = globalThis.fetch, postFn =
   st.page = parseRunKey(st.runId) ? newPage() : null;
   st.panel = panel({ name: 'Runs' });
   host.append(st.panel.root);
-  st.panel.body.addEventListener?.('click', (e) => { if (st.page && toggleFold(st.page, e.target)) rnPaint(st); });
+  st.panel.body.addEventListener?.('click', (e) => { if (st.page && (toggleFold(st.page, e.target) || toggleDrawer(st.page, e.target))) rnPaint(st); });
+  // A loop station is a button: Enter or Space opens it too.
+  st.panel.body.addEventListener?.('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target?.closest?.('[data-drawer]')?.getAttribute('role') === 'button' && st.page && toggleDrawer(st.page, e.target)) {
+      e.preventDefault();
+      rnPaint(st);
+    }
+  });
   STATE_OF.view = st;
   rnPaint(st);
   if (poll && typeof setInterval === 'function') {
