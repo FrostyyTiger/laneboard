@@ -1,6 +1,7 @@
-# Foreman health and gates on the Runs list
+# The status line and Needs you on the Runs list
 
-The top of Runs (`#/runs`) has one line per run engine that reports health:
+The top of Runs (`#/runs`) is one status line. It starts with how many runs
+need you, then, for each run engine that reports health:
 
 - **foreman up, stale or down**, from the age of its last heartbeat. The age is
   measured on the engine's own clock, so a clock that is off does not matter.
@@ -8,12 +9,17 @@ The top of Runs (`#/runs`) has one line per run engine that reports health:
   laneboard has no fresh answer from the engine at all.
 - the heartbeat's age, the hosts and their states, the queue, and the usage
   windows (`unknown` when the engine does not know them yet);
-- the runs that are on now, each with its state and node, linked to its page.
-  `no run now` when there is none.
+- how many runs are on now.
 
-## Gates on the run row
+Then what the runs started today cost (a run counts on the day it started; the
+API price) and the product questions that belong to no run, linked to the Inbox.
+With more than one engine, each foreman part starts with its engine's id.
 
-What waits for a person on a run is listed under that run's row: kind, title,
+## Needs you: gates
+
+Under the status line, the **Needs you** band has one card per run that waits
+for you: the run's plain name and goal, its node, how long ago it moved, and
+what it waits for. What waits on a gate is listed on the card: kind, title,
 the short revision, and the same buttons as the Inbox (Approve, Reject, Pick,
 Answer). Each button shows the card with the full revision first. The decision
 names that revision (`--expect`), so if the item changed since you read it,
@@ -26,7 +32,8 @@ other parts of it still build.
 ## Blocked runs
 
 A run can be **at a gate with nothing to decide**: a round hit its stop rule, or a check could
-not run. Its row then shows **blocked**, the engine's reason, and **Resume** and **Stop**. Fix
+not run. Its row and its page say **blocked** in red. Its card shows **What is wrong** (the
+engine's reason), a big **Resume** and a small **Stop** that asks first, and **Open**. Fix
 the cause outside the engine (a profile, a token, the code), then press Resume: the blocked step
 runs again. The cockpit agent may propose Resume for such a run too.
 
@@ -37,7 +44,8 @@ runs again. The cockpit agent may propose Resume for such a run too.
 ```
 
 The demo foreman is up, with two hosts and its usage windows. The running run
-has a recipe, a variant and a change waiting; the run at the gate has a merge.
+has a recipe, a variant and a change waiting, the run at the gate a merge, and
+the done run its deploy. All three are in the Needs you band.
 
 ## API
 

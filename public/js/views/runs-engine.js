@@ -36,6 +36,9 @@ const NODE_STATES = Object.freeze({
 });
 
 export function engineStateOf(row) {
+  if (isBlocked({ ...row, state: row?.engineState ?? row?.state })) {
+    return { p: '1', word: 'blocked', title: `blocked: ${rnClean(row.reason, 300) ?? 'it waits for you to fix the cause, then resume'}` };
+  }
   const m = RUN_STATES[row?.engineState ?? row?.state] ?? { p: 'off', word: rnClean(row?.state, 16) ?? '?' };
   const stop = rnClean(row?.stop, 32);
   return { p: (row?.engineState ?? row?.state) === 'stopped' ? STOP_P[stop] ?? 'off' : m.p, word: m.word, title: stop ? `${m.word}: ${stop}` : m.word };
@@ -87,53 +90,245 @@ function windowText(name, w) {
   return w.known === false ? `${name} unknown` : `${name} ${Math.round(w.usedPct)}%`;
 }
 
+/** Midnight of `now`'s day, local time: where "today" starts. */
+function dayStart(now) {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 /**
- * One line per engine that reports health: the foreman's state, the
- * heartbeat's age, its hosts, queue and usage windows, and the live runs with
- * their node. Pure: `engines` and `rows` as loadEngineRuns gives them.
+ * The one status line above the Runs list (docs/runs-home.md): what needs you,
+ * then per engine the foreman, its heartbeat, hosts, what is on and queued, the
+ * usage windows, then the spend of runs started today and the questions that
+ * belong to no run. Pure: `engines` and `rows` as loadEngineRuns gives them.
+ * -> [{key, text, p?, href?, title?}]
  */
-export function healthLines(engines, rows = []) {
+export function statusLine(engines, rows = [], now = Date.now()) {
+  const list = Array.isArray(rows) ? rows : [];
   const out = [];
-  for (const e of Array.isArray(engines) ? engines : []) {
-    const h = e?.health;
-    if (!h) continue;
+  const needs = list.filter(rowNeedsYou).length;
+  out.push(needs
+    ? { key: 'needs', text: `${needs} ${needs === 1 ? 'needs' : 'need'} you`, p: '1' }
+    : { key: 'needs', text: 'nothing needs you', p: 'ok' });
+  const withHealth = (Array.isArray(engines) ? engines : []).filter((e) => e?.health);
+  for (const e of withHealth) {
+    const h = e.health;
     const id = rnClean(e.id, 32) ?? '?';
     const foreman = FOREMAN_P[h.foreman] ? h.foreman : 'unknown';
-    const parts = [];
+    const parts = [`${withHealth.length > 1 ? `${id}: ` : ''}foreman ${foreman}`];
     const beat = shortAge(h.beatAge);
-    if (beat) parts.push(`heartbeat ${beat}`);
-    if (h.foreman === 'unknown' && h.reason) parts.push(rnClean(h.reason, 120));
-    const hosts = (Array.isArray(h.hosts) ? h.hosts : []).map((x) => `${rnClean(x.id, 32)} ${rnClean(x.state, 12)}`);
-    if (hosts.length) parts.push(hosts.join(', '));
+    if (beat) parts.push(`beat ${beat}`);
+    if (foreman === 'unknown' && h.reason) parts.push(rnClean(h.reason, 120));
+    const up = (Array.isArray(h.hosts) ? h.hosts : []).filter((x) => x?.state === 'up').map((x) => rnClean(x.id, 32));
+    if (up.length) parts.push(`on ${up.join(', ')}`);
+    const on = list.filter((r) => r.engine === e.id && LIVE.has(r.engineState)).length;
+    parts.push(`${on} on now`);
     if (typeof h.queue === 'number') parts.push(`queue ${h.queue}`);
     const wins = [windowText('5h', h.windows?.window5h), windowText('7d', h.windows?.window7d)].filter(Boolean);
     if (wins.length) parts.push(`usage ${wins.join(' · ')}`);
-    const live = (Array.isArray(rows) ? rows : []).filter((r) => r.engine === e.id && LIVE.has(r.engineState))
-      .map((r) => ({ key: r.run, text: [rnClean(r.runId, 64), engineStateOf(r).word, r.node ? `at ${rnClean(r.node, 48)}` : null].filter(Boolean).join(' ') }));
-    out.push({ engine: id, foreman, p: FOREMAN_P[foreman], text: parts.filter(Boolean).join(' · '), live });
+    out.push({ key: `foreman:${id}`, text: parts.join(' · '), p: FOREMAN_P[foreman], foreman });
   }
+  const since = dayStart(now);
+  const today = list.filter((r) => r.engineRow && typeof r.startedAt === 'number' && r.startedAt >= since && usdOf(r) !== null);
+  if (today.length) {
+    out.push({ key: 'spend', text: `${money(today.reduce((n, r) => n + usdOf(r), 0))} today`,
+      title: 'API price of the runs started today (a run counts on the day it started)' });
+  }
+  const q = (Array.isArray(engines) ? engines : []).reduce((n, e) => n + (typeof e?.questions === 'number' ? e.questions : 0), 0);
+  if (q) out.push({ key: 'questions', text: `${q} ${q === 1 ? 'question' : 'questions'}`, href: '#/inbox', title: 'Product questions that belong to no run, in the Inbox' });
   return out;
 }
 
-export function healthNode(lines) {
-  const box = el('div', 'rn-health');
-  box.setAttribute('aria-label', 'Run engines');
-  for (const l of lines) {
-    const row = el('p', 'rn-health-line');
-    row.dataset.foreman = l.foreman;
-    row.append(lamp(l.p, { label: `foreman ${l.foreman}` }), el('b', null, `${l.engine}: foreman ${l.foreman}`));
-    if (l.text) row.append(el('span', 'rn-health-t', l.text));
-    if (l.live.length) {
-      for (const r of l.live) {
-        const a = el('a', 'rn-health-run', r.text);
-        a.href = runHref(r.key);
-        row.append(a);
-      }
-    } else row.append(el('span', 'rn-health-t', 'no run now'));
+export function statusNode(parts) {
+  const box = el('p', 'rn-status');
+  box.setAttribute('aria-label', 'Status');
+  for (const x of parts) {
+    const n = el(x.href ? 'a' : 'span', 'rn-status-x');
+    if (x.href) n.href = x.href;
+    if (x.p) n.append(lamp(x.p, { label: x.text }));
+    n.append(el('span', 'rn-status-t', x.text));
+    n.dataset.key = x.key.split(':')[0];
+    if (x.foreman) n.dataset.foreman = x.foreman;
+    if (x.title) n.title = x.title;
+    box.append(n);
+  }
+  return box;
+}
+
+// ---------------------------------------------------------------- Needs you, chips, filters
+
+/** Does this row (engine or run file) need you? */
+export function rowNeedsYou(row) {
+  if (row?.engineRow) return engineNeedsYou(row);
+  return row?.needs?.length > 0 || row?.state === 'waiting';
+}
+
+/** A row's product and kind, for the filters. */
+export const productOf = (r) => (r?.engineRow ? rnClean(r.product, 64) : null);
+export const kindOf = (r) => (r?.engineRow ? rnClean(r.recipe?.kind, 32) ?? 'run' : 'run file');
+const isHistory = (r) => r?.state === 'stopped';
+
+export const SHOWS = Object.freeze(['live', 'needs', 'history']);
+export const defaultFilter = () => ({ show: 'live', product: '', kind: '', open: false });
+
+/** How many rows each chip holds. */
+export function runCounts(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  return {
+    live: list.filter((r) => !isHistory(r)).length,
+    needs: list.filter(rowNeedsYou).length,
+    history: list.filter(isHistory).length,
+  };
+}
+
+/** The rows a filter keeps. `show`: live (not finished), needs (needs you) or history (finished or stopped). */
+export function filterRuns(rows, f = defaultFilter()) {
+  const show = SHOWS.includes(f?.show) ? f.show : 'live';
+  return (Array.isArray(rows) ? rows : []).filter((r) => (show === 'live' ? !isHistory(r) : show === 'needs' ? rowNeedsYou(r) : isHistory(r))
+    && (!f?.product || productOf(r) === f.product)
+    && (!f?.kind || kindOf(r) === f.kind));
+}
+
+/** The values the product and kind filters offer: [{value, label}], from the rows themselves. */
+export function filterOptions(rows) {
+  const products = new Map();
+  const kinds = new Set();
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const p = productOf(r);
+    if (p && !products.has(p)) products.set(p, rnClean(r.productTitle, 64) ?? p);
+    kinds.add(kindOf(r));
+  }
+  return {
+    products: [...products].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label)),
+    kinds: [...kinds].sort().map((k) => ({ value: k, label: k })),
+  };
+}
+
+const CHIP_WORDS = Object.freeze({ live: 'Live', needs: 'Needs you', history: 'History' });
+
+function selectNode(label, value, options, onPick) {
+  const wrap = el('label', 'rn-filter-f');
+  const sel = el('select', 'rn-filter-sel');
+  const opt = (text, value) => { const o = el('option', null, text); o.value = value; return o; };
+  sel.append(opt(`all ${label}s`, ''));
+  for (const o of options) sel.append(opt(o.label, o.value));
+  sel.value = value ?? '';
+  sel.addEventListener('change', () => onPick(sel.value));
+  wrap.append(el('span', 'rn-filter-k', label), sel);
+  return wrap;
+}
+
+/** The chips row: Live · Needs you · History with their counts, and `filter ⋯` for product and kind. */
+export function chipsNode(rows, f, onFilter) {
+  const counts = runCounts(rows);
+  const box = el('div', 'rn-chips');
+  box.setAttribute('role', 'toolbar');
+  box.setAttribute('aria-label', 'Show runs');
+  for (const k of SHOWS) {
+    const b = el('button', 'rn-chip', CHIP_WORDS[k]);
+    b.type = 'button';
+    b.dataset.show = k;
+    b.append(el('span', 'rn-chip-n', String(counts[k])));
+    b.setAttribute('aria-pressed', String(f.show === k));
+    if (k === 'needs' && counts.needs) b.dataset.p = '1';
+    b.addEventListener('click', () => onFilter({ ...f, show: k }));
+    box.append(b);
+  }
+  const narrowed = Boolean(f.product || f.kind);
+  const more = el('button', 'rn-chip rn-chip-more', narrowed ? 'filter · on' : 'filter ⋯');
+  more.type = 'button';
+  more.setAttribute('aria-expanded', String(Boolean(f.open)));
+  more.addEventListener('click', () => onFilter({ ...f, open: !f.open }));
+  box.append(more);
+  if (f.open) {
+    const opts = filterOptions(rows);
+    const row = el('div', 'rn-filter');
+    row.append(
+      selectNode('product', f.product, opts.products, (v) => onFilter({ ...f, product: v })),
+      selectNode('kind', f.kind, opts.kinds, (v) => onFilter({ ...f, kind: v })),
+    );
+    if (narrowed) {
+      const clear = el('button', 'btn btn--s', 'Clear');
+      clear.type = 'button';
+      clear.addEventListener('click', () => onFilter({ ...f, product: '', kind: '' }));
+      row.append(clear);
+    }
     box.append(row);
   }
   return box;
 }
+
+/** What a needing run waits for, in one word. */
+function needWord(row) {
+  if (isBlocked({ ...row, state: row.engineState })) return 'blocked';
+  if (row.waiting?.length) return [...new Set(row.waiting.map((w) => waitingKindWord(w.kind)))].join(', ');
+  return engineStateOf(row).word;
+}
+
+/**
+ * The Needs you band on top of Runs: one card per engine run that waits for
+ * you. A blocked run says what is wrong, with Resume and a small Stop (it asks
+ * first); a run at a gate lists its items with Approve and Reject. Null when
+ * nothing waits.
+ */
+export function needsBand(rows, onDone, now = Date.now()) {
+  const list = (Array.isArray(rows) ? rows : []).filter((r) => r?.engineRow && engineNeedsYou(r));
+  if (!list.length) return null;
+  const box = el('section', 'rn-band');
+  box.setAttribute('aria-label', 'Needs you');
+  box.append(el('h2', 'rn-band-h', 'Needs you'));
+  for (const row of list) {
+    const blocked = isBlocked({ ...row, state: row.engineState });
+    const card = el('article', 'rn-card');
+    card.dataset.run = rnClean(row.run, 100) ?? '';
+    if (blocked) card.dataset.blocked = '';
+    const head = el('p', 'rn-card-head');
+    head.append(el('span', 'rn-card-kind', needWord(row)));
+    if (row.node) head.append(el('span', 'rn-card-node', rnClean(row.node, 48)));
+    const seen = typeof row.updatedAt === 'number' ? now - row.updatedAt : null;
+    head.append(el('span', 'rn-card-ago', engineAge(seen)));
+    const name = el('p', 'rn-card-name');
+    const a = el('a', 'rn-card-open', rowName(row));
+    a.href = runHref(row.run);
+    a.title = rnClean(row.run, 100) ?? '';
+    name.append(a);
+    if (row.goalTitle) name.append(el('span', 'rn-card-goal', rnClean(row.goalTitle, 200)));
+    card.append(head, name);
+    if (blocked) {
+      const why = el('p', 'rn-card-why');
+      const t = rnClean(row.reason, 300) ?? 'It stopped and waits for you.';
+      why.append(el('span', 'rn-card-k', 'What is wrong'), el('span', 'rn-card-t', t));
+      why.title = rnClean(row.reason, 2000) ?? '';
+      card.append(why, el('p', 'rn-card-hint', 'Nothing to approve. Fix the cause, then Resume: the foreman tries again.'));
+      const btns = el('p', 'rn-card-btns');
+      const plans = runControls(row.run, { ...row, state: row.engineState }).filter((x) => x.word !== 'pause');
+      for (const plan of plans) {
+        const b = decisionButton(plan, onDone);
+        if (plan.word === 'resume') b.classList.add('btn--primary', 'rn-go');
+        else b.classList.add('rn-quiet');
+        btns.append(b);
+      }
+      const open = el('a', 'btn btn--s rn-card-go', 'Open');
+      open.href = runHref(row.run);
+      btns.append(open);
+      card.append(btns);
+    } else {
+      const gates = gatesNode(row, onDone);
+      if (gates) card.append(gates);
+    }
+    box.append(card);
+  }
+  return box;
+}
+
+/** A row's plain name: the server's `name`, else product · goal, else the run id. */
+export function rowName(row) {
+  return rnClean(row?.name, 120) ?? (goalText(row) || rnClean(row?.runId, 64) || '?');
+}
+
+const DAY_FMT = { day: 'numeric', month: 'short' };
+const dayText = (ms) => (typeof ms === 'number' ? new Date(ms).toLocaleDateString('en-GB', DAY_FMT) : null);
 
 // ---------------------------------------------------------------- what waits, on a run's row
 
@@ -209,7 +404,8 @@ export function sourceLabel(product, engine) {
   return s;
 }
 
-export function engineRow(row, now = Date.now(), onDone = null) {
+/** One engine run's list row. What waits on it is in the Needs you band above the list (needsBand). */
+export function engineRow(row, now = Date.now()) {
   const li = el('li', 'rn-row');
   li.dataset.run = rnClean(row.run, 100) ?? '';
   li.dataset.state = row.state;
@@ -218,21 +414,22 @@ export function engineRow(row, now = Date.now(), onDone = null) {
   if (row.stale) li.dataset.stale = '';
 
   const goal = el('span', 'rn-f rn-goal');
-  const a = el('a', 'rn-goal-t rn-open', goalText(row) || rnClean(row.runId, 64));
+  const a = el('a', 'rn-goal-t rn-open', rowName(row));
   a.href = runHref(row.run);
-  goal.append(a, sourceLabel(row.product, row.engine), el('span', 'rn-goal-sub', rnClean(row.run, 100) ?? ''));
-  goal.title = [goalText(row), rnClean(row.run, 100)].filter(Boolean).join('\n');
+  const sub = [rnClean(row.goalTitle, 200), dayText(row.startedAt)].filter(Boolean).join(' · ');
+  goal.append(a, el('span', 'rn-goal-sub', sub || (rnClean(row.run, 100) ?? '')));
+  goal.title = [rowName(row), rnClean(row.goalTitle, 200), rnClean(row.run, 100)].filter(Boolean).join('\n');
 
   const node = el('span', 'rn-f rn-node', rnClean(row.node, 80) ?? DASH);
   node.title = row.node ? `working on ${rnClean(row.node, 80)}` : 'no current node';
-  const rooms = el('span', 'rn-f rn-rooms', row.rooms?.length ? `${row.rooms.length} ${row.rooms.length === 1 ? 'room' : 'rooms'}` : DASH);
+  const hosts = [...new Set((row.rooms ?? []).map((r) => rnClean(r.host, 32)).filter(Boolean))];
+  const rooms = el('span', 'rn-f rn-rooms', hosts.length ? `on ${hosts.join(', ')}` : DASH);
+  if (row.rooms?.length) rooms.title = row.rooms.map((r) => `${rnClean(r.name, 48)} ${rnClean(r.state, 16) ?? ''}`.trim()).join(', ');
   const seen = typeof row.updatedAt === 'number' ? now - row.updatedAt : null;
   const left = el('span', 'rn-f rn-left', row.stop ? rnClean(row.stop, 32) : engineAge(seen));
   if (row.stale) left.title = `last good answer, ${engineAge(row.age)}`;
   const usd = usdOf(row);
   li.append(engineStateCell(engineStateOf(row)), goal, node, rooms, left, el('span', 'rn-f rn-cost', usd === null ? DASH : money(usd)));
-  const gates = gatesNode(row, onDone) ?? blockedNode(row, onDone);
-  if (gates) li.append(gates);
   return li;
 }
 
@@ -440,8 +637,10 @@ function enginePageHead(key, run, page, now) {
   const top = el('div', 'rn-head-top');
   const goal = el('span', 'rn-f rn-goal');
   const title = run.goalTitle ?? (Array.isArray(run.tree) ? run.tree.find((n) => n.id === run.goal)?.title : null);
-  goal.append(el('span', 'rn-goal-t', [rnClean(run.product, 48), rnClean(run.goal, 32), rnClean(title)].filter(Boolean).join(' · ')),
-    el('span', 'rn-goal-sub', rnClean(key, 100) ?? ''));
+  const name = rnClean(run.name, 120);
+  const t = el('span', 'rn-goal-t', name ?? [rnClean(run.product, 48), rnClean(run.goal, 32), rnClean(title)].filter(Boolean).join(' · '));
+  t.title = rnClean(key, 100) ?? '';
+  goal.append(t, el('span', 'rn-goal-sub', [name ? rnClean(title) : null, rnClean(key, 100)].filter(Boolean).join(' · ')));
   top.append(engineStateCell(engineStateOf(run)), goal);
   const facts = el('div', 'rn-facts');
   const add = (cls, text, t) => { const f = el('span', `rn-f ${cls}`, text); if (t) f.title = t; facts.append(f); };

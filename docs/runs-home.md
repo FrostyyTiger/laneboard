@@ -6,19 +6,31 @@ list holds every run laneboard can read, in one list:
 - runs from a **run engine** ([engines.md](engines.md)), named `<engine>/<run>`;
 - runs from **run files** ([runs.md](runs.md)), labelled `jsonl`.
 
-Each row shows the state, the goal, the product and engine, then what fits the
-run: the current node, rooms, age or stop reason and cost for an engine run;
-round, scores and burn for a run file. Runs that wait for a person sort first.
-An engine that is stale, down or incompatible says so above the list.
-Above the list, each engine's foreman health, and under a run, what waits on it
-([runs-health.md](runs-health.md)).
+From top to bottom ([runs-health.md](runs-health.md) has the details):
 
-Pause, Resume and Stop are on the page of a run from an engine ([decisions.md](decisions.md)).
+1. **One status line**: how many runs need you, the foreman and its heartbeat,
+   the hosts, how many runs are on, the queue, the usage windows, what the runs
+   started today cost, and the product questions (a link to the Inbox).
+2. **Needs you**: one card per run that waits for you. A blocked run says what is
+   wrong, with a big **Resume** and a small **Stop** that asks first. A run at a
+   gate lists its items with Approve and Reject. Nothing waits: no band.
+3. **Live · Needs you · History**: chips with their counts, Live by default.
+   `filter ⋯` adds product and kind. This browser remembers the choice.
+4. **The rows** the chips keep. Under Live, a line says how many runs are in
+   History, with a button to show them.
+
+**One plain name per run**: `Bauplan · build #2` is that product's second build
+run. The number counts runs of one kind for one product, oldest first, so it is
+not the number in the run id (which counts runs of a day). The id is the name's
+tooltip. A row shows the name, the goal and start day under it, the current
+node, the host, the age or stop reason and the cost. Finished runs are grey.
+
+Pause, Resume and Stop are also on the page of a run from an engine ([decisions.md](decisions.md)).
 
 ## The run page
 
 A run-file run keeps its page: rounds, charts, needs. An engine run
-(`#/runs?run=<engine>/<run>`) shows its state, cost, rooms, what waits for a
+(`#/runs?run=<engine>/<run>`) shows its plain name, state, cost, rooms, what waits for a
 person, the tree, its PRs and its report.
 
 The tree is goal, then feature, then task. One row per node: state, id, title,
@@ -48,6 +60,8 @@ shop. `G3 Product reviews` shows a failing check.
 
 `GET /api/engines/runs` answers `{runs, engines, errors}`: the runs of every
 engine except `jsonl` (those stay on `GET /api/runs`, unchanged), each with
-`engine`, `key`, `stale`, `age` and `goalTitle`; `engines` holds each one's
-state and reason. Builder mode only: a hub answers 404 and its Runs view says
+`engine`, `key`, `stale`, `age`, `goalTitle`, `productTitle`, `name` and
+`waiting`; `engines` holds each one's state, reason, `health` and `questions`
+(waiting items that belong to no run). `GET /api/engine/<id>/run/<run>` adds
+the same `name`, `productTitle` and `goalTitle`. Builder mode only: a hub answers 404 and its Runs view says
 where runs live.
