@@ -25,7 +25,10 @@ import {
   ACCEPTED, READ_VERBS, WRITE_VERBS, checkVersion, parseEnvelope, toShape,
 } from './contract.mjs';
 
-export const DEFAULTS = Object.freeze({ timeoutMs: 10_000, staleMs: 30_000, downMs: 120_000 });
+export const DEFAULTS = Object.freeze({ timeoutMs: 10_000, staleMs: 30_000, downMs: 120_000, freshMs: 4_000 });
+/** Reads that change slowly keep their answer this long (when `freshMs` is not 0). */
+export const SLOW_FRESH_MS = 30_000;
+const SLOW_VERBS = new Set(['products', 'knowledge']);
 
 /** Every member the interface has, in the order GET /api/engines lists them. */
 export const MEMBERS = Object.freeze(['hello', 'health', 'products', 'runs', 'run', 'events', 'waiting', 'knowledge', 'act']);
@@ -80,6 +83,7 @@ export function createContractEngine(opts) {
   const timeoutMs = opts.timeoutMs ?? DEFAULTS.timeoutMs;
   const staleMs = opts.staleMs ?? DEFAULTS.staleMs;
   const downMs = opts.downMs ?? DEFAULTS.downMs;
+  const freshMs = opts.freshMs ?? DEFAULTS.freshMs;
   const now = opts.now ?? (() => Date.now());
 
   const st = {
@@ -91,6 +95,8 @@ export function createContractEngine(opts) {
     lastFailAt: null,
     lastError: null,
     cannotStart: false,
+    calls: {},              // verb -> calls made to the engine
+    freshAfter: -Infinity,  // only answers got after this are served from memory (an act moves it)
   };
   const snapshots = new Map(); // read key -> {data, at, gotAt}
   const inflight = new Map();  // read key -> promise of the raw answer
@@ -109,6 +115,7 @@ export function createContractEngine(opts) {
     // slow engine is waited out, never stacked. The timeout is the caller's.
     let underlying = inflight.get(key);
     if (!underlying) {
+      st.calls[verb] = (st.calls[verb] ?? 0) + 1;
       underlying = Promise.resolve().then(() => call(verb, args, meta))
         .then((raw) => ({ raw }), (err) => ({ err }))
         .finally(() => inflight.delete(key));
@@ -121,6 +128,16 @@ export function createContractEngine(opts) {
     const s = snapshots.get(key);
     if (!s) return refuse(code, reason);
     return { ok: true, data: s.data, at: s.at, stale: true, age: now() - s.gotAt, reason };
+  }
+
+  /** The answer in memory for `key`, if it is young enough to serve without a call. */
+  function fresh(verb, key) {
+    if (freshMs <= 0) return null;
+    const s = snapshots.get(key);
+    if (!s || s.askedAt <= st.freshAfter || (st.lastFailAt !== null && s.askedAt <= st.lastFailAt)) return null;
+    const ttl = SLOW_VERBS.has(verb) ? Math.max(freshMs, SLOW_FRESH_MS) : freshMs;
+    if (now() - s.askedAt >= ttl) return null;
+    return { ok: true, data: s.data, at: s.at, contract: s.contract, engineVersion: s.engineVersion, dropped: 0, cached: true };
   }
 
   /** Raw answer -> laneboard shape, updating the status. */
@@ -173,6 +190,9 @@ export function createContractEngine(opts) {
         if (!h.ok) return h.code === 'engine-down' ? fromSnapshot(key, h.code, h.reason) : h;
       }
       if (st.incompatible) return refuse('incompatible', st.incompatible);
+      const mem = fresh(verb, key);
+      if (mem) return mem;
+      const askedAt = now();
       const r = await send(key, verb, args);
       if (r.err) {
         if (r.err?.code === 'not-found') { good(); return refuse('not-found', why(r.err)); }
@@ -180,7 +200,7 @@ export function createContractEngine(opts) {
         return fromSnapshot(key, 'engine-down', st.lastError);
       }
       const a = accept(verb, r.raw);
-      if (a.ok) snapshots.set(key, { data: a.data, at: a.at, gotAt: now() });
+      if (a.ok) snapshots.set(key, { data: a.data, at: a.at, contract: a.contract, engineVersion: a.engineVersion, askedAt, gotAt: now() });
       return a;
     } catch (err) {
       // Nothing above should throw; if it does, it is laneboard's bug, not the engine's.
@@ -201,6 +221,8 @@ export function createContractEngine(opts) {
       if (st.incompatible) return refuse('incompatible', st.incompatible);
       // Never queued: an engine that does not answer refuses the decision now.
       const r = await send(`act:${meta.requestId}`, verb, args, meta);
+      // Whatever the answer, the next read asks the engine: what was read before may be gone.
+      st.freshAfter = now();
       // A timeout may have decided anyway: only a retry with the same request id can tell.
       if (r.err) { fail(r.err); return refuse(r.err.code === 'timeout' ? 'timeout' : 'engine-down', st.lastError); }
       // The engine's result (laneboard shape `result`), refusals included.
@@ -226,7 +248,7 @@ export function createContractEngine(opts) {
     return {
       id, kind, state, reason, accepts: ACCEPTED,
       contract: st.hello?.contract ?? null, version: st.hello?.version ?? null,
-      lastGoodAt: st.lastGoodAt, lastFailAt: st.lastFailAt, dropped: { ...st.dropped },
+      lastGoodAt: st.lastGoodAt, lastFailAt: st.lastFailAt, dropped: { ...st.dropped }, calls: { ...st.calls },
     };
   }
 

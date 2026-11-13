@@ -73,7 +73,7 @@ The child's environment is exactly `PATH` and `FOUNDRY_CONFIG` (`config`).
 The Box view shows each engine's state, contract and version.
 
 `engines` defaults to `[]`: then the table holds only `jsonl`, and nothing
-changes. Each entry takes `timeoutMs`, `staleMs` and `downMs`; a `fake` takes
+changes. Each entry takes `timeoutMs`, `staleMs`, `downMs` and `freshMs`; a `fake` takes
 `dir`. Every key is in [config.md](config.md#engines--run-engines).
 
 ## The version check
@@ -105,6 +105,25 @@ at once: a slow one is waited out, not stacked. A decision is never queued: an
 engine that does not answer refuses it with `engine-down`. A CLI engine is
 called with `execFile`, never a shell, a fixed argument list, a 4 MiB output
 cap and only the environment it is given (`exec.mjs`).
+
+## How often laneboard asks
+
+Each read of a CLI engine starts a process. The Runs view alone asks for runs,
+products, health and waiting every 5 s, and the Inbox and the Map ask too. So
+the adapter keeps a short memory:
+
+| Read | Served again without a call for |
+| --- | --- |
+| runs, run, events, health, waiting | `freshMs` (default 4 s) |
+| products, knowledge | 30 s (`SLOW_FRESH_MS`) |
+
+- An answer from memory is the same answer, with its own `at` and `cached: true`.
+- Any decision (`act`) ends the memory, so the next read shows what it changed.
+- A failed call ends it too: after a failure the engine is asked again, and the
+  last good answer comes back only as `stale`, never as fresh.
+- `status().calls` counts the calls really made per verb (`GET /api/engines`).
+
+`freshMs: 0` turns the memory off. A `fake` engine has it off unless set.
 
 ## Routes
 

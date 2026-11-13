@@ -402,6 +402,7 @@ nothing changes. No env layer.
 | `engines[].timeoutMs` | `10000` | One call's limit; after it the engine counts as not answering (100..120000). |
 | `engines[].staleMs` | `30000` | No good answer for this long: the engine is `stale` and reads serve the last good answer with its age (1000..86400000). |
 | `engines[].downMs` | `120000` | No good answer for this long (or a CLI that cannot start): `down` (not below `staleMs`). |
+| `engines[].freshMs` | `4000` | An answer this young is served again without a call (0..60000; 0 = always ask; products and knowledge keep 30 s). A `fake` defaults to 0. See [engines.md](engines.md#how-often-laneboard-asks). |
 
 ### `cockpit` — the cockpit's room
 
