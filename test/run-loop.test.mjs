@@ -283,3 +283,28 @@ test('engineRow: the glyph and its word take the node cell', () => withDom(() =>
   assert.equal(g.querySelectorAll('rn-dot')[3].dataset.mark, 'current');
   assert.match(texts(g).join(' '), /Build · G1\.F1\.T3/);
 }));
+
+test('loopPosition: both tasks frozen and the feature checking is Acceptance; earlier test rounds are not doubt rounds', () => {
+  const events = blockedAtTests();
+  seq = events.length;
+  const t = (n, o) => ev(n, o);
+  events.push(
+    t('run.state', { state: 'running' }),
+    t('round.start', { level: 'feature', node: 'G1.F1', role: 'test-writer' }), t('round.end', { level: 'feature', node: 'G1.F1', role: 'test-writer', result: 'ok' }),
+    t('check', { level: 'feature', node: 'G1.F1', name: 'acceptance tests written REQ-1', pass: true }),
+    t('round.start', { level: 'task', node: 'G1.F1.T1', role: 'builder' }), t('round.end', { level: 'task', node: 'G1.F1.T1', role: 'builder', result: 'ok' }),
+    t('check', { level: 'task', node: 'G1.F1.T1', name: 'task tests', pass: true }), t('node.state', { level: 'task', node: 'G1.F1.T1', state: 'frozen' }),
+    t('round.start', { level: 'task', node: 'G1.F1.T2', role: 'builder' }), t('round.end', { level: 'task', node: 'G1.F1.T2', role: 'builder', result: 'ok' }),
+    t('check', { level: 'task', node: 'G1.F1.T2', name: 'task tests', pass: true }), t('node.state', { level: 'task', node: 'G1.F1.T2', state: 'frozen' }),
+    t('node.state', { level: 'feature', node: 'G1.F1', state: 'checking' }),
+  );
+  const run = { id: 'R', state: 'running', node: 'G1.F1.T2', recipe: { kind: 'build' }, gates: approved,
+    tree: tree({ F1: { state: 'checking' }, T1: { state: 'frozen' }, T2: { state: 'frozen' } }) };
+  const pos = loopPosition(run, events, P);
+  assert.equal(pos.current, 'featurecheck');
+  assert.equal(pos.node, 'G1.F1');
+  assert.equal(pos.stations.build.mark, 'done');
+  assert.equal(pos.stations.taskcheck.mark, 'done');
+  assert.equal(pos.stations.tests.sub, '2 rounds, 1 red');
+  assert.equal(pos.stations.doubt.n, 0);
+});
