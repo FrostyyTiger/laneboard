@@ -221,6 +221,7 @@ human starts. The guard flags and pushes; it never acts.
 | [docs/runs-home.md](docs/runs-home.md) | the Runs home view and the run tree: folding, what a row shows |
 | [docs/runs-health.md](docs/runs-health.md) | the foreman's health above Runs, and gates with their revision on a run's row |
 | [docs/run-loop.md](docs/run-loop.md) | the loop on a run page, drawn from the run's pattern, and the row glyph |
+| [docs/run-drawer.md](docs/run-drawer.md) | the drawer under the loop: a station's rounds and checks, Built, the Timeline |
 | [docs/hygiene.md](docs/hygiene.md) | what keeps private names, addresses and personal emails out of this public repo |
 | [docs/engines.md](docs/engines.md) | run engines: the interface laneboard reads runs through, the version check, the contract suite |
 | [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |
