@@ -100,3 +100,13 @@ test('the tie-in: #/network?sel=node:<host> selects a host; a run page links eac
   const line = statusLine([{ id: 'main', health: { foreman: 'up', beatAge: 1000, hosts: [] } }], []);
   assert.equal(line.find((p) => p.key === 'foreman:main').href, '#/network');
 });
+
+test('networkModel: a blocked run whose room ended keeps its slot in that host', () => {
+  const rows = [toListRow({ id: 'R', key: 'e/R', engine: 'e', state: 'at-gate', name: 'P · build #2', reason: 'blocked at G1.F1.T3 (build): x',
+    rooms: [{ name: 'room-2', host: 'heavy', state: 'ended', purpose: 'run' }], startedAt: NOW - 3_600_000 })];
+  const m = networkModel([], rows, NOW);
+  assert.equal(m.hosts[0].live.length, 1);
+  assert.equal(m.hosts[0].live[0].roomState, 'ended');
+  assert.equal(m.hosts[0].live[0].blocked, true);
+  assert.equal(m.hosts[0].ended.length, 0);
+});
