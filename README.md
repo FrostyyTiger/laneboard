@@ -21,6 +21,7 @@ signed, audited requests. Without one, nothing changes. See
 | **Packages** `#/packages` | *Lanes only.* What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |
 | **Morning** `#/morning` | Over a window (12 h / since 18:00 / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), review waits, stuck incidents, what it cost. |
 | **Runs** `#/runs` | The home view. What is running, waiting or done? Runs from a [run engine](docs/runs-home.md), with their tree of work, next to run files. Is an unattended loop getting anywhere? Each run's state, round, latest score and its trend, budget burn, time left and open needs; a run's page (`#/runs?run=<id>`, or `#/runs/<id>`) has the timeline of rounds, a chart per score, the stop reason and the PRs. Fed by run files a loop writes, see [docs/runs.md](docs/runs.md). |
+| **Network** `#/network` | Which machines does foundry run on, and what runs where? The tailnet drawn as one wire: each host, the foreman in it, its rooms with their runs and loop spot; an event is a packet on the wire. See [docs/network.md](docs/network.md). |
 | **Products** `#/products` | Is each product ready for its next goal, and if not, why? Goals, readiness, reasons that link, from a run engine. See [docs/products.md](docs/products.md). |
 | **Credit** `#/credit` | Where the 5 h and 7 d rate-limit windows have been, per account, and what each builder and lane spent. |
 | **Box** `#/box` | The machine and its health, a live stack next to it and its guard, the CI queue, the agent slots; on a hub, every builder's link, version, latency and health. |
@@ -32,7 +33,7 @@ signed, audited requests. Without one, nothing changes. See
 *Lanes only* needs `lanes.enabled`, off by default; see [docs/lanes-flag.md](docs/lanes-flag.md).
 
 `g m` map · `g b` board · `g i` inbox · `g p` products · `g k` packages · `g o` morning ·
-`g r` runs · `g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`
+`g r` runs · `g n` network · `g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`
 `]` step through builders, `\` splits the Map, `?` shows every key.
 
 The top strip counts alarms in eight tiles (NEED, APPR, BLKD, STCK, CI-F, DOWN, BUDG, CONF);
@@ -222,6 +223,7 @@ human starts. The guard flags and pushes; it never acts.
 | [docs/runs-health.md](docs/runs-health.md) | the foreman's health above Runs, and gates with their revision on a run's row |
 | [docs/run-loop.md](docs/run-loop.md) | the loop on a run page, drawn from the run's pattern, and the row glyph |
 | [docs/run-drawer.md](docs/run-drawer.md) | the drawer under the loop: a station's rounds and checks, Built, Timeline, Usage, Recipe, Gates, Events |
+| [docs/network.md](docs/network.md) | Network, the machines as the wire: hosts, the foreman, rooms with their runs, linked both ways with the run page |
 | [docs/hygiene.md](docs/hygiene.md) | what keeps private names, addresses and personal emails out of this public repo |
 | [docs/engines.md](docs/engines.md) | run engines: the interface laneboard reads runs through, the version check, the contract suite |
 | [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |

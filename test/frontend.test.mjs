@@ -484,7 +484,7 @@ test('the client reports its own render timings', () => {
 
 // --- the view shell (fleet D4) ---------------------------------------------
 
-const SHELL_VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs', 'products'];
+const SHELL_VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs', 'products', 'network'];
 
 test('every view has a section and exactly one nav button; diff is routable but not in the nav', () => {
   const html = read('index.html');
@@ -523,7 +523,7 @@ test('the shell keeps every id the page depends on, and has a slot for every lat
 
 test('the view chord follows the plan: g m map, g o morning, g p packages', async () => {
   const { VIEW_KEYS } = await import('../public/js/core/router.js');
-  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'products', k: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs' });
+  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'products', k: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs', n: 'network' });
   assert.ok(Object.isFrozen(VIEW_KEYS));
   for (const [k, v] of Object.entries(VIEW_KEYS)) {
     assert.match(read('index.html'), new RegExp(`data-view="${v}" title="[A-Za-z]+ \\(g ${k}\\)"`), `the ${v} button names g ${k}`);

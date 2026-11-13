@@ -37,6 +37,7 @@ const TABLE = [
   ['g c', 'map', 'view.credit'],
   ['g o', 'map', 'view.morning'],
   ['g r', 'map', 'view.runs'],
+  ['g n', 'map', 'view.network'],
   ['[', 'board', 'builder.prev'],
   [']', 'board', 'builder.next'],
   ['0', 'board', 'builder.all'],
