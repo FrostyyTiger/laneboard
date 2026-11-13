@@ -180,6 +180,7 @@ function eventStation(e, byId, tasksStarted) {
     return null;
   }
   if (e.type === 'node.state' && e.level === 'task') return e.state === 'building' ? 'build' : e.state === 'checking' ? 'taskcheck' : null;
+  if (e.type === 'node.state' && e.level === 'feature' && e.state === 'checking') return 'featurecheck';
   if (e.type === 'node.state' && e.level === 'feature' && e.state === 'passed') return 'merge';
   if (e.type === 'gate' || e.type === 'decision') return e.level === 'run' && (e.kind ?? 'recipe') === 'recipe' ? 'recipe' : null;
   return null;
@@ -286,7 +287,9 @@ export function loopPosition(run, events = [], pattern = PATTERNS['build-until-g
   if (recipeGate?.decided) stations.recipe.sub = `${recipeGate.decided.decision}${recipeGate.decided.by ? ` · ${String(recipeGate.decided.by).slice(0, 24)}` : ''}`;
   else if (stations.recipe.mark === 'gate') stations.recipe.sub = 'waits for you';
   if (feature) {
-    const tw = ends((e) => e.role === 'test-writer' && e.node === feature);
+    // Test writer rounds after the feature's first build round are doubt rounds.
+    const firstBuild = ev.find((e) => e.type === 'round.start' && e.role === 'builder' && under(e.node, feature))?.at ?? Infinity;
+    const tw = ends((e) => e.role === 'test-writer' && e.node === feature && !(e.at > firstBuild));
     const rejected = ev.filter((e) => e.type === 'check' && e.node === feature && TEST_WRITER_CHECK.test(e.name ?? '') && e.pass === false).length;
     stations.tests.n = tw;
     stations.tests.sub = tw ? `${plural(tw, 'round')}${rejected ? `, ${rejected} red` : ''}` : null;
@@ -301,7 +304,7 @@ export function loopPosition(run, events = [], pattern = PATTERNS['build-until-g
     stations.fixer.n = fixes;
     stations.fixer.sub = `${builds + fixes} of ${cap}${builds + fixes >= esc ? ' · tier up' : ' rounds'}`;
     stations.fixer.more = `${task}: ${builds + fixes} of ${cap} rounds (builder and fixer); from round ${esc + 1} one tier up; after ${cap} the task is blocked`;
-    const doubts = tasksStarted(feature) ? ends((e) => e.role === 'test-writer' && e.node === feature) : 0;
+    const doubts = ends((e) => e.role === 'test-writer' && e.node === feature && e.at > firstBuild);
     stations.doubt.n = doubts;
     stations.doubt.sub = doubts ? plural(doubts, 'round') : 'twice → a person';
     const blames = ends((e) => e.role === 'blame' && under(e.node, feature));
