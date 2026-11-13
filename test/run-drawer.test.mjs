@@ -166,6 +166,77 @@ function pageChecks(r, evs) {
 test('tabsNode marks the open tab; drawerNode is null when nothing is open', () => withDom(() => {
   const row = tabsNode({ drawer: { kind: 'tab', id: 'timeline' } });
   const pressed = row.children.map((b) => [b._text, b.getAttribute('aria-pressed')]);
-  assert.deepEqual(pressed, [['Built', 'false'], ['Timeline', 'true']]);
+  assert.deepEqual(pressed, [['Built', 'false'], ['Timeline', 'true'], ['Usage', 'false'], ['Recipe', 'false'], ['Gates', 'false'], ['Events', 'false']]);
   assert.equal(drawerNode(run(), { drawer: null }), null);
+}));
+
+// ---------------------------------------------------------------- step 4: usage, recipe, gates, events
+
+import { eventsPanel, EVENTS_PAGE, gatesPanel, recipePanel, usagePanel } from '../public/js/views/run-drawer.js';
+import { toShape } from '../server/engine/contract.mjs';
+
+const usage = {
+  usd: 2, tokens: { in: 10, out: 20, cacheRead: 30, cacheWrite: 40 },
+  byRole: { 'test-writer': { usd: 1.5, tokens: { in: 1, out: 2, cacheRead: 3, cacheWrite: 4 } }, builder: { usd: 0.5, tokens: { in: 1, out: 2, cacheRead: 3, cacheWrite: 4 } } },
+  byTier: { large: { usd: 2, tokens: { in: 1, out: 2, cacheRead: 3, cacheWrite: 4 } } },
+};
+
+test('usagePanel: cost, time, the windows as reported or not yet, by role and by tier', () => withDom(() => {
+  const r = { ...run(), usage, startedAt: 1_000_000 };
+  let box = usagePanel(r, events(), 1_000_000 + 30 * 60_000);
+  let t = texts(box).join(' | ');
+  assert.match(t, /cost \| \$2\.00/);
+  assert.match(t, /30\.0 min since start/);
+  assert.match(t, /5 h window \| not reported yet/);
+  assert.match(t, /test-writer \| 2 \| 1 \| 2 \| 3 \| 4 \| \$1\.50 \| 75%/);
+  assert.match(t, /large \| 3 \|/);
+  const withWin = [...events(), { seq: 99, at: 2_000_000, type: 'usage', level: 'run', window5h: { usedPct: 41.6, resetsAt: 3_000_000, known: true } }];
+  box = usagePanel(r, withWin, 2_000_000);
+  t = texts(box).join(' | ');
+  assert.match(t, /5 h window \| 42% · resets/);
+  assert.match(t, /7 d window \| not reported yet/);
+}));
+
+test('the contract keeps the windows on a usage event', () => {
+  const d = toShape('events', { run: 'R', since: 0, next: 1, events: [{ seq: 1, ts: '2026-11-13T10:00:00Z', type: 'usage', level: 'run', usd_notional: 1,
+    window_5h: { used_pct: 40, resets_at: '2026-11-13T12:00:00Z' }, window_7d: { used_pct: 0, resets_at: '2026-11-13T10:00:00Z', known: false } }] });
+  assert.equal(d.ok, true);
+  const e = d.value.events[0];
+  assert.deepEqual(e.window5h, { usedPct: 40, resetsAt: Date.parse('2026-11-13T12:00:00Z'), known: true });
+  assert.equal(e.window7d.known, false);
+});
+
+test('recipePanel: the pattern and its numbers with where each comes from, the stop reasons', () => withDom(() => {
+  const r = { ...run(), recipe: { kind: 'build', revision: 2, url: 'https://example.test/recipe.md', loop: { task_rounds: 6 } } };
+  const t = texts(recipePanel(r)).join(' | ');
+  assert.match(t, /build · rev 2/);
+  assert.match(t, /recipe\.md ↗/);
+  assert.match(t, /build-until-green@1 \(by the run kind\)/);
+  assert.match(t, /task_rounds \| 6 \| the recipe/);
+  assert.match(t, /escalate_after \| 2 \| pattern default/);
+  assert.match(t, /budget \| not reported yet/);
+  assert.match(t, /no-progress \|/);
+}));
+
+test('gatesPanel: every gate, open or decided, with how long it took', () => withDom(() => {
+  const r = { ...run(), gates: [
+    { id: 'R/recipe-1', kind: 'recipe', state: 'decided', for: 'owner', openedAt: 1_000_000, decided: { decision: 'approved', by: 'owner', via: 'laneboard', at: 1_300_000 } },
+    { id: 'R/merge-1', kind: 'merge', state: 'open', for: 'owner', openedAt: 2_000_000 },
+  ] };
+  const t = texts(gatesPanel(r, 2_600_000)).join(' | ');
+  assert.match(t, /R\/recipe-1 \| recipe \| owner \| — \| .* \| approved \| owner \| laneboard \| 5\.0 min/);
+  assert.match(t, /R\/merge-1 \| merge \| owner \| — \| .* \| open \| — \| — \| 10\.0 min so far/);
+}));
+
+test('eventsPanel: newest first, a page at a time', () => withDom(() => {
+  const many = Array.from({ length: EVENTS_PAGE + 5 }, (_, i) => ({ seq: i + 1, at: 1_000_000 + i, type: 'step', level: 'task', node: 'G1.F1.T1', what: 'x' }));
+  const page = { events: many, drawer: { kind: 'tab', id: 'events' } };
+  let box = eventsPanel(page);
+  const rows = box.querySelectorAll('dr-events')[0];
+  assert.ok(rows);
+  assert.match(texts(box).join(' | '), /^Events \| 105 \| × \| # \| at \| type \| node \|  ?\|? ?105/);
+  assert.equal(box.querySelectorAll('dr-more').length, 1);
+  assert.equal(toggleDrawer(page, { closest: () => ({ dataset: { drawer: 'more:events' } }) }), true);
+  box = eventsPanel(page);
+  assert.equal(box.querySelectorAll('dr-more').length, 0);
 }));

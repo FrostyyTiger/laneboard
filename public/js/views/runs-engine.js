@@ -781,7 +781,7 @@ export function renderEnginePage(container, key, page, st = { status: 'ok' }, no
       s.append(el('p', null, rnClean(run.report.summary, 2000) ?? ''), link('rt-pr', 'Full report', run.report.url));
       root.append(s);
     }
-    if (placed.run.length) {
+    if (placed.run.length && !patternOf(run).pattern) {
       const d = el('details', 'rt-runev');
       d.dataset.keep = 'run-events';
       d.open = page.runEventsOpen === true;

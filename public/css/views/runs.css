@@ -527,6 +527,15 @@ a.rn-tl-role-a:focus-visible { outline: var(--bw) solid var(--accent); outline-o
 .dr-tl-now { stroke: var(--text-1); stroke-dasharray: 3 2; }
 .rt-mini { margin-left: var(--sp-2); font-size: var(--fs-11); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.dr-facts { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); }
+.dr-fact { display: inline-flex; gap: var(--sp-1); align-items: baseline; }
+.dr-notyet { padding: 0 var(--sp-1); border: var(--bw) dashed var(--line); color: var(--text-3); background: var(--tex-hatch); }
+.dr-share { display: inline-flex; gap: var(--sp-1); align-items: center; }
+.dr-bar { display: inline-block; width: 64px; height: 6px; background: var(--line-weak); }
+.dr-bar-f { display: block; height: 100%; background: var(--text-3); }
+.dr-events td:last-child { white-space: normal; min-width: 30ch; }
+.dr-more { justify-self: start; }
+
 @media (max-width: 1024px) {
   .rn-list {
     grid-template-columns: minmax(10ch, auto) minmax(0, 1fr) auto;

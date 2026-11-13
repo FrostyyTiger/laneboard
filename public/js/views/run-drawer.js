@@ -10,8 +10,8 @@ import { money } from '../core/format.js';
 import { rnClean, safeHref } from '../core/run-text.js';
 import { checksOf, miniLoop, paramsOf, patternOf, roundsOf, stationLog, stationOf } from '../core/loop.js';
 
-/** The tabs, in order. Later steps add more. */
-export const TABS = Object.freeze([['built', 'Built'], ['timeline', 'Timeline']]);
+/** The tabs, in order. */
+export const TABS = Object.freeze([['built', 'Built'], ['timeline', 'Timeline'], ['usage', 'Usage'], ['recipe', 'Recipe'], ['gates', 'Gates'], ['events', 'Events']]);
 
 const DASH = '—';
 const hm = (ms) => {
@@ -36,7 +36,12 @@ export function parseDrawer(v) {
 export function toggleDrawer(page, target) {
   const hit = target?.closest?.('[data-drawer]');
   if (!hit || !page) return false;
-  const want = parseDrawer(hit.dataset?.drawer ?? hit.getAttribute?.('data-drawer'));
+  const raw = hit.dataset?.drawer ?? hit.getAttribute?.('data-drawer');
+  if (raw === 'more:events') {
+    page.eventsShown = (page.eventsShown ?? EVENTS_PAGE) + EVENTS_PAGE;
+    return true;
+  }
+  const want = parseDrawer(raw);
   if (want === undefined) return false;
   const same = want && page.drawer && page.drawer.kind === want.kind && page.drawer.id === want.id;
   page.drawer = same ? null : want;
@@ -271,6 +276,152 @@ export function timelinePanel(run, events, now = Date.now()) {
   return box;
 }
 
+// ---------------------------------------------------------------- usage, recipe, gates, events
+
+/** A value foundry does not send yet: a hatched chip, never an invented number. */
+export function notYet(what = 'not reported yet') {
+  const c = el('span', 'dr-notyet', 'not reported yet');
+  c.title = what;
+  return c;
+}
+
+const int = (n) => (typeof n === 'number' ? n.toLocaleString('en-GB') : DASH);
+
+function fact(k, v) {
+  const p = el('span', 'dr-fact');
+  p.append(el('span', 'dr-k', k));
+  if (v !== null && typeof v === 'object') p.append(v);
+  else p.append(el('span', null, v == null ? DASH : String(v)));
+  return p;
+}
+
+function windowWords(w) {
+  if (!w || w.known === false) return null;
+  return `${Math.round(w.usedPct)}%${typeof w.resetsAt === 'number' ? ` · resets ${dayHm(w.resetsAt)}` : ''}`;
+}
+
+/** The cost table by role or tier: rounds, tokens, cost and its share. */
+function sliceTable(head, slices, counts, total) {
+  const rows = Object.entries(slices ?? {}).sort((a, b) => (b[1]?.usd ?? 0) - (a[1]?.usd ?? 0)).map(([k, v]) => {
+    const share = total > 0 && typeof v?.usd === 'number' ? v.usd / total : 0;
+    const bar = el('span', 'dr-bar');
+    const fill = el('span', 'dr-bar-f');
+    fill.style.width = `${Math.round(share * 100)}%`;
+    bar.append(fill);
+    const cell = el('span', 'dr-share');
+    cell.append(bar, el('span', null, `${Math.round(share * 100)}%`));
+    return [rnClean(k, 24), String(counts.get(k) ?? 0), int(v?.tokens?.in), int(v?.tokens?.out), int(v?.tokens?.cacheRead), int(v?.tokens?.cacheWrite),
+      typeof v?.usd === 'number' ? money(v.usd) : DASH, cell];
+  });
+  return drTable([head, 'rounds', 'in', 'out', 'cache read', 'cache write', 'cost', 'share'], rows, 'dr-usage');
+}
+
+/** Usage: cost, time, rounds, the account windows, by role and by tier. */
+export function usagePanel(run, events, now = Date.now()) {
+  const box = el('section', 'dr-panel');
+  box.dataset.panel = 'tab:usage';
+  box.append(panelHead('Usage', 'API price equivalent'));
+  const rounds = roundsOf(events);
+  const total = typeof run?.usage?.usd === 'number' ? run.usage.usd : null;
+  const live = !['done', 'stopped'].includes(run?.state);
+  const span = typeof run?.startedAt === 'number' ? (live ? now : run.endedAt ?? now) - run.startedAt : null;
+  const busy = rounds.reduce((a, r) => a + (r.open ? now - r.start : r.ms ?? 0), 0);
+  const last = (events ?? []).filter((e) => e.type === 'usage').at(-1);
+  const facts = el('div', 'dr-facts');
+  facts.append(
+    fact('cost', total === null ? DASH : money(total)),
+    fact('time', span === null ? DASH : `${dur(span)} since start, ${dur(busy)} in rounds`),
+    fact('rounds', `${rounds.length}`),
+    fact('round cap', notYet('the recipe budget is not on the run row yet')),
+    fact('5 h window', windowWords(last?.window5h) ?? notYet('no usage event with the 5 h window yet')),
+    fact('7 d window', windowWords(last?.window7d) ?? notYet('no usage event with the 7 d window yet')),
+  );
+  box.append(facts);
+  const byRole = new Map();
+  const byTier = new Map();
+  for (const r of rounds) {
+    byRole.set(r.role, (byRole.get(r.role) ?? 0) + 1);
+    byTier.set(r.tier, (byTier.get(r.tier) ?? 0) + 1);
+  }
+  if (Object.keys(run?.usage?.byRole ?? {}).length) box.append(el('h4', 'dr-h', 'By role'), sliceTable('role', run.usage.byRole, byRole, total ?? 0));
+  if (Object.keys(run?.usage?.byTier ?? {}).length) box.append(el('h4', 'dr-h', 'By tier'), sliceTable('tier', run.usage.byTier, byTier, total ?? 0));
+  if (!run?.usage) box.append(el('p', 'dr-none', 'No usage yet.'));
+  return box;
+}
+
+/** Recipe: kind, revision, file, the pattern and its numbers, the gates, the stop reasons. */
+export function recipePanel(run) {
+  const box = el('section', 'dr-panel');
+  box.dataset.panel = 'tab:recipe';
+  const r = run?.recipe ?? {};
+  box.append(panelHead('Recipe', [rnClean(r.kind, 24), typeof r.revision === 'number' ? `rev ${r.revision}` : null].filter(Boolean).join(' · ') || null));
+  const facts = el('div', 'dr-facts');
+  if (safeHref(r.url)) {
+    const a = el('a', 'dr-a', 'recipe.md ↗');
+    a.href = r.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    facts.append(fact('file', a));
+  }
+  const { pattern, from, why } = patternOf(run);
+  facts.append(fact('pattern', pattern ? `${pattern.id}${from === 'kind' ? ' (by the run kind)' : ''}` : rnClean(why, 120)));
+  facts.append(fact('budget', notYet('recipe.budget is not on the run row yet')), fact('parallel', notYet('recipe.parallel is not on the run row yet')));
+  box.append(facts);
+  if (pattern) {
+    const params = paramsOf(run, pattern);
+    box.append(el('h4', 'dr-h', 'Loop numbers'), drTable(['number', 'value', 'from'], Object.entries(params).map(([k, v]) => [k, String(v.value), v.from === 'recipe' ? 'the recipe' : 'pattern default']), 'dr-params'));
+    box.append(el('h4', 'dr-h', 'How it can end'), drTable(['stop', 'when'], Object.entries(pattern.stops).map(([k, v]) => [k, v.replace(/`/g, '')]), 'dr-stops'));
+  }
+  const kinds = [...new Set((run?.gates ?? []).map((g) => g.kind))];
+  box.append(el('p', 'dr-text', kinds.length ? `Gates in this run: ${kinds.map((k) => rnClean(k, 16)).join(', ')}.` : 'No gates yet.'));
+  return box;
+}
+
+/** Gates: every gate of the run, open or decided, and how long each took. */
+export function gatesPanel(run, now = Date.now()) {
+  const box = el('section', 'dr-panel');
+  box.dataset.panel = 'tab:gates';
+  const gates = Array.isArray(run?.gates) ? run.gates : [];
+  box.append(panelHead('Gates', `${gates.length}`));
+  if (!gates.length) {
+    box.append(el('p', 'dr-none', 'No gates yet.'));
+    return box;
+  }
+  box.append(drTable(['gate', 'kind', 'for', 'node', 'opened', 'decided', 'by', 'via', 'took'], gates.map((g) => [
+    rnClean(g.id, 80), rnClean(g.kind, 16), rnClean(g.for, 24), rnClean(g.node, 48), dayHm(g.openedAt),
+    g.state === 'open' ? 'open' : rnClean(g.decided?.decision, 16), rnClean(g.decided?.by, 32), rnClean(g.decided?.via, 32),
+    typeof g.openedAt === 'number' ? dur((g.decided?.at ?? now) - g.openedAt) + (g.state === 'open' ? ' so far' : '') : DASH,
+  ]), 'dr-gatelist'));
+  return box;
+}
+
+/** One event as a line. */
+export function eventWords(e) {
+  const verdict = typeof e.pass === 'boolean' ? (e.pass ? ' ✓' : ' ✗') : '';
+  const bits = [e.role, e.tier, e.name ? `${e.name}${verdict}` : null, e.state, e.result, e.kind, e.decision, e.by, e.reason ?? e.text]
+    .map((x) => rnClean(x, 300)).filter(Boolean);
+  return bits.join(' · ');
+}
+
+export const EVENTS_PAGE = 100;
+
+/** Events: the raw stream, newest first, a page at a time. */
+export function eventsPanel(page) {
+  const box = el('section', 'dr-panel');
+  box.dataset.panel = 'tab:events';
+  const all = (page?.events ?? []).slice().sort((a, b) => b.seq - a.seq);
+  box.append(panelHead('Events', `${all.length}`));
+  const shown = all.slice(0, page?.eventsShown ?? EVENTS_PAGE);
+  box.append(drTable(['#', 'at', 'type', 'node', ''], shown.map((e) => [String(e.seq), dayHm(e.at), rnClean(e.type, 24), rnClean(e.node, 48) ?? 'run', eventWords(e)]), 'dr-events'));
+  if (all.length > shown.length) {
+    const more = el('button', 'btn btn--s dr-more', `Show ${Math.min(EVENTS_PAGE, all.length - shown.length)} more`);
+    more.type = 'button';
+    more.dataset.drawer = 'more:events';
+    box.append(more);
+  }
+  return box;
+}
+
 /** The tab row under the loop. */
 export function tabsNode(page) {
   const row = el('div', 'dr-tabs');
@@ -301,6 +452,10 @@ export function drawerNode(run, page, { built, now = Date.now() } = {}) {
     return stationPanel(run, events, pattern, page.pos ?? { stations: {} }, d.id, now);
   }
   if (d.id === 'timeline') return timelinePanel(run, events, now);
+  if (d.id === 'usage') return usagePanel(run, events, now);
+  if (d.id === 'recipe') return recipePanel(run);
+  if (d.id === 'gates') return gatesPanel(run, now);
+  if (d.id === 'events') return eventsPanel(page);
   if (d.id === 'built') {
     const box = el('section', 'dr-panel');
     box.dataset.panel = 'tab:built';

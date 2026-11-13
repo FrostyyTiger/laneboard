@@ -256,6 +256,9 @@ function gate(g) {
   };
 }
 
+/** An account window, `{used_pct, resets_at, known?}` -> `{usedPct, resetsAt, known}`, or null. */
+const windowOf = (x) => (isObj(x) && num(x.used_pct) !== null ? { usedPct: x.used_pct, resetsAt: ms(x.resets_at), known: x.known !== false } : null);
+
 const EVENT_SCALARS = ['title', 'state', 'reason', 'role', 'tier', 'round', 'result', 'what', 'ok', 'name', 'pass',
   'output', 'path', 'gate', 'kind', 'for', 'decision', 'by', 'via', 'choice', 'request', 'text', 'url', 'room', 'expires',
   'model', 'host', 'why'];
@@ -282,6 +285,9 @@ function event(e) {
   for (const [k, to] of Object.entries(CAMEL)) if (num(u[k]) !== null) out[to] = u[k];
   if (counts(e.counts)) out.counts = counts(e.counts);
   if (tokens(u.tokens)) out.tokens = tokens(u.tokens);
+  // A usage event carries the account windows as a round saw them.
+  if (windowOf(e.window_5h)) out.window5h = windowOf(e.window_5h);
+  if (windowOf(e.window_7d)) out.window7d = windowOf(e.window_7d);
   return out;
 }
 
@@ -383,7 +389,6 @@ const MAP = {
   },
   health(d, drop) {
     if (!Array.isArray(d.hosts)) bad('health has no hosts');
-    const w = (x) => (isObj(x) && num(x.used_pct) !== null ? { usedPct: x.used_pct, resetsAt: ms(x.resets_at), known: x.known !== false } : null);
     return {
       heartbeatAt: ms(d.heartbeat) ?? bad('health heartbeat missing'),
       hosts: rows(d.hosts, (h) => (isObj(h) && str(h.id)
@@ -391,7 +396,7 @@ const MAP = {
         : bad('bad host')), drop),
       queue: int(d.queue) ?? bad('health queue missing'),
       active: int(d.active),
-      windows: isObj(d.windows) ? { window5h: w(d.windows.window_5h), window7d: w(d.windows.window_7d) } : null,
+      windows: isObj(d.windows) ? { window5h: windowOf(d.windows.window_5h), window7d: windowOf(d.windows.window_7d) } : null,
     };
   },
   products(d, drop) {
