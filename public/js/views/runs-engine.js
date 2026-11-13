@@ -337,7 +337,8 @@ const dayText = (ms) => (typeof ms === 'number' ? new Date(ms).toLocaleDateStrin
 
 /** The run's waiting items under its row: kind, title, revision, and the board's own buttons. */
 export function gatesNode(row, onDone) {
-  const items = Array.isArray(row?.waiting) ? row.waiting : [];
+  // A `needs` item is the block, which has its own card with Resume and Stop.
+  const items = Array.isArray(row?.waiting) ? row.waiting.filter((w) => w?.kind !== 'needs') : [];
   if (!items.length) return null;
   const box = el('div', 'rn-gates');
   for (const it of items) {
@@ -647,8 +648,9 @@ function engineSection(cls, name, count = null) {
  */
 export function isBlocked(run) {
   if (run?.state !== 'at-gate') return false;
-  if (Array.isArray(run.waiting) && run.waiting.length) return false;
-  if (Array.isArray(run.gates) && run.gates.some((g) => g?.state === 'open')) return false;
+  // A `needs` item says the same as this rule: blocked, nothing to decide (docs/waiting.md).
+  if (Array.isArray(run.waiting) && run.waiting.some((w) => w?.kind !== 'needs')) return false;
+  if (Array.isArray(run.gates) && run.gates.some((g) => g?.state === 'open' && g.kind !== 'needs')) return false;
   return true;
 }
 
