@@ -66,7 +66,8 @@ export function networkModel(engines = [], rows = [], now = Date.now()) {
       const from = r.startedAt;
       const to = live ? now : (r.endedAt ?? r.updatedAt ?? now);
       if (typeof from === 'number' && to > now - DAY_MS) h.strip.push({ from: Math.max(from, now - DAY_MS), to, live: live && UP_ROOM.has(room.state) });
-      if (live && UP_ROOM.has(room.state)) {
+      // A live run keeps its slot even when its room ended (a blocked run's room ends): it still waits there.
+      if (live && (UP_ROOM.has(room.state) || !r.rooms.some((x) => UP_ROOM.has(x?.state)))) {
         h.live.push({ key: r.run ?? r.key, name: rowName(r), goalTitle: r.goalTitle ?? null, room: room.name ?? null, roomState: room.state,
           purpose: room.purpose ?? null, state, row: r, blocked: isBlocked({ ...r, state }), usd: r.usage?.usd ?? null, lastSeq: r.lastSeq ?? null });
       } else if (!live && typeof r.endedAt === 'number' && r.endedAt > now - DAY_MS) {
