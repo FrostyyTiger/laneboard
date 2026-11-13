@@ -46,7 +46,7 @@ import { toast } from '../ui/toast.js';
 import { sparkRange } from '../ui/spark.js';
 import { rnClean, safeHref } from '../core/run-text.js';
 import {
-  applyRun, bannersNode, engineBanners, engineNeedsYou, engineRow, healthLines, healthNode, loadEngineRun, loadEngineRuns, newPage, parseRunKey,
+  applyRun, bannersNode, engineBanners, engineNeedsYou, engineRow, chipsNode, defaultFilter, filterRuns, needsBand, statusLine, statusNode, loadEngineRun, loadEngineRuns, newPage, parseRunKey,
   renderEnginePage, sourceLabel, toggleFold,
 } from './runs-engine.js';
 
@@ -512,7 +512,7 @@ function needsNode(row) {
 
 /** One `.rn-row` <li> for a summary row at `now`. */
 export function runRow(row, now = Date.now(), onDone = null) {
-  if (row.engineRow) return engineRow(row, now, onDone);
+  if (row.engineRow) return engineRow(row, now);
   const li = el('li', 'rn-row');
   li.dataset.run = rnClean(row.run, 64) ?? '';
   li.dataset.state = STATE_META[row.state] ? row.state : 'running';
@@ -564,27 +564,63 @@ function emptyNode(st) {
   return box;
 }
 
+/** What the list says when the filter leaves nothing. */
+function noneNode(f, counts) {
+  const box = el('div', 'empty rn-empty');
+  const words = { live: 'No run is on now.', needs: 'Nothing needs you.', history: 'No finished or stopped run.' };
+  box.append(el('p', null, (f.product || f.kind) ? `${words[f.show] ?? words.live} (filter on)` : (words[f.show] ?? words.live)));
+  if (f.show === 'live' && counts.history) box.append(el('p', null, `${counts.history} in History.`));
+  return box;
+}
+
+/** Under the Live list: how many runs are in History, and a way there. */
+function historyLine(n, f, onFilter) {
+  const p = el('p', 'rn-histline');
+  p.append(el('span', 'rn-histline-t', `History · ${n} ${n === 1 ? 'run' : 'runs'} finished or stopped`));
+  const b = el('button', 'btn btn--s', 'Show');
+  b.type = 'button';
+  b.addEventListener('click', () => onFilter({ ...f, show: 'history' }));
+  p.append(b);
+  return p;
+}
+
 /**
- * Paint `runs` (summaries) into `container`, replacing what was there.
- * `st` is {status: 'loading'|'ok'|'unavailable'|'error', message?}. Returns
- * {list, rows}: the list node (or the empty box) and the row nodes.
+ * Paint `runs` (summaries) into `container`, replacing what was there: the
+ * status line, the Needs you band, the chips, then the rows the filter keeps
+ * (docs/runs-home.md). `st` is {status: 'loading'|'ok'|'unavailable'|'error',
+ * message?, engines?, banners?, filter?, onFilter?, onDone?}. Returns {list,
+ * rows}: the list node (or the empty box) and the row nodes.
  */
 export function renderRuns(container, runs, st = { status: 'ok' }, now = Date.now()) {
-  const sorted = st.status === 'ok' || st.status === 'error' ? sortRuns(runs) : [];
-  const rows = sorted.map((r) => runRow(r, now, st.onDone));
+  const all = st.status === 'ok' || st.status === 'error' ? sortRuns(runs) : [];
+  // No filter given (a caller that wants every row): no chips, nothing hidden.
+  const f = st.filter ? { ...defaultFilter(), ...st.filter } : null;
+  const onFilter = st.onFilter ?? (() => {});
+  const shown = f ? filterRuns(all, f) : all;
+  const rows = shown.map((r) => runRow(r, now, st.onDone));
   let out;
   if (rows.length) {
     out = el('ol', 'rn-list');
     out.setAttribute('aria-label', `Runs, ${rows.length} ${rows.length === 1 ? 'run' : 'runs'}`);
     for (const r of rows) out.append(r);
+  } else if (all.length) {
+    out = noneNode(f, { history: all.filter((r) => r.state === 'stopped').length });
   } else {
     out = emptyNode(st);
   }
   if (container) {
     container.textContent = '';
-    if (st.health?.length) container.append(healthNode(st.health));
+    if (st.engines?.length) {
+      const parts = statusLine(st.engines, all, now);
+      if (parts.length > 1) container.append(statusNode(parts));
+    }
     if (st.banners?.length) container.append(bannersNode(st.banners));
+    const band = needsBand(all, st.onDone, now);
+    if (band) container.append(band);
+    if (f && all.length) container.append(chipsNode(all, f, onFilter));
     container.append(out);
+    const hist = all.filter((r) => r.state === 'stopped').length;
+    if (f && f.show === 'live' && rows.length && hist) container.append(historyLine(hist, f, onFilter));
   }
   return { list: out, rows };
 }
@@ -1256,6 +1292,23 @@ const routeRun = (ctx) => {
   return typeof r === 'string' && (RUN_ID_RX.test(r) || parseRunKey(r)) ? r : null;
 };
 
+const FILTER_KEY = 'laneboard.runs.filter';
+
+/** The chip and filters this browser last used (a convenience: anything odd gives the default). */
+export function loadFilter(store = globalThis.localStorage) {
+  try {
+    const v = JSON.parse(store?.getItem(FILTER_KEY) ?? 'null');
+    const f = defaultFilter();
+    if (['live', 'needs', 'history'].includes(v?.show)) f.show = v.show;
+    for (const k of ['product', 'kind']) if (typeof v?.[k] === 'string' && v[k].length <= 64) f[k] = v[k];
+    return f;
+  } catch { return defaultFilter(); }
+}
+
+function saveFilter(f, store = globalThis.localStorage) {
+  try { store?.setItem(FILTER_KEY, JSON.stringify({ show: f.show, product: f.product, kind: f.kind })); } catch { /* private window: not remembered */ }
+}
+
 function rnPaint(st) {
   if (!st.panel) return;
   if (st.page) {
@@ -1274,7 +1327,8 @@ function rnPaint(st) {
   delete st.panel.root.dataset.page;
   setPanel(st.panel.root, { scope: null, n });
   renderRuns(st.panel.body, st.runs, {
-    status: st.status, message: st.message, banners: st.banners, health: st.health, onDone: () => rnRefresh(st),
+    status: st.status, message: st.message, banners: st.banners, engines: st.engines, onDone: () => rnRefresh(st),
+    filter: st.filter, onFilter: (f) => { st.filter = f; saveFilter(f); rnPaint(st); },
   }, Date.now());
 }
 
@@ -1299,7 +1353,7 @@ async function rnRefresh(st) {
   if (STATE_OF.view !== st || seq !== st.seq || id !== st.runId) return; // unmounted, newer load, or moved
   if (eng) {
     st.banners = engineBanners(eng.engines, eng.failed);
-    st.health = healthLines(eng.engines, eng.rows);
+    st.engines = eng.engines;
   }
   if (eng?.rows.length && (res.kind === 'unavailable' || res.kind === 'ok')) {
     st.status = 'ok';
@@ -1370,7 +1424,7 @@ export function mountRuns(host, ctx = {}, { fetchFn = globalThis.fetch, postFn =
   host.textContent = '';
   const st = {
     el: host, ctx, fetchFn, postFn, busy: new Set(), status: 'loading', message: null, runs: [], run: null,
-    runId: routeRun(ctx), seq: 0, timer: null, panel: null, banners: [], page: null,
+    runId: routeRun(ctx), seq: 0, timer: null, panel: null, banners: [], page: null, engines: [], filter: loadFilter(),
   };
   st.page = parseRunKey(st.runId) ? newPage() : null;
   st.panel = panel({ name: 'Runs' });

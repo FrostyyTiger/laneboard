@@ -52,13 +52,49 @@
 .rn-node { grid-column: span 2; overflow: hidden; text-overflow: ellipsis; }
 .rn-src { font-size: var(--fs-11); color: var(--text-3); white-space: nowrap; }
 .rn-row[data-stale] { opacity: 0.6; }
-/* ---- the foreman's health above the list, and what waits under a run's row */
-.rn-health { display: grid; gap: var(--sp-1); margin-block-end: var(--sp-2); }
-.rn-health-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0; padding: var(--sp-1) var(--sp-2); border: var(--bw) solid var(--line-weak); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
-.rn-health-line > b { color: var(--text-1); font-weight: 600; }
-.rn-health-line[data-foreman="down"] { border-inline-start: var(--bw) solid var(--p1); }
-.rn-health-line[data-foreman="stale"] { border-inline-start: var(--bw) solid var(--p2); }
-.rn-health-t { color: var(--text-3); }
+/* ---- the Runs home: one status line, the Needs you band, the chips (docs/runs-home.md) */
+.rn-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-3); padding: var(--sp-1) var(--sp-2); border: var(--bw) solid var(--line-weak); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+.rn-status-x { display: inline-flex; align-items: center; gap: var(--sp-1); white-space: nowrap; }
+.rn-status-x[data-key="needs"] { color: var(--text-1); font-weight: 600; }
+.rn-status-x[data-foreman="down"], .rn-status-x[data-foreman="stale"] { color: var(--text-1); }
+a.rn-status-x { color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
+.rn-status-x[data-key="foreman"] { white-space: normal; }
+
+.rn-band { display: grid; gap: 0; margin-block-end: var(--sp-4); border: var(--bw) solid var(--p1-line); }
+.rn-band-h { margin: 0; padding: var(--sp-1) var(--sp-2); border-bottom: var(--bw) solid var(--line-weak); font-family: var(--font-label); font-size: var(--fs-11); font-weight: 600; letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-1); }
+.rn-card { display: grid; gap: var(--sp-1); padding: var(--sp-2) var(--sp-2) var(--sp-3); border-bottom: var(--bw) solid var(--line-weak); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+.rn-card:last-child { border-bottom: 0; }
+.rn-card p { margin: 0; }
+.rn-card-head { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: baseline; }
+.rn-card-kind { font-family: var(--font-label); font-size: var(--fs-11); font-weight: 600; letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--p2); }
+.rn-card[data-blocked] .rn-card-kind { color: var(--p1); }
+.rn-card-node { color: var(--text-1); }
+.rn-card-ago { margin-inline-start: auto; color: var(--text-3); }
+.rn-card-name { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); align-items: baseline; }
+.rn-card-open { color: var(--text-1); font-weight: 600; font-size: var(--fs-13); }
+.rn-card-goal { color: var(--text-2); }
+.rn-card-why { display: grid; gap: 2px; }
+.rn-card-k { font-family: var(--font-label); font-size: var(--fs-10); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-3); }
+.rn-card-t { color: var(--text-1); overflow-wrap: anywhere; }
+.rn-card-hint { color: var(--text-3); }
+.rn-card-btns { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-block-start: var(--sp-1); }
+.rn-card .rn-gates { padding-inline-start: 0; }
+.btn.rn-go { min-width: 14ch; min-height: 28px; font-weight: 600; }
+.btn.rn-quiet { background: none; border-color: transparent; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
+
+.rn-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); margin-block-end: var(--sp-2); font-family: var(--font-mono); font-size: var(--fs-12); }
+.rn-chip { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 28px; padding: 0 var(--sp-2); border: var(--bw) solid var(--line-weak); background: none; color: var(--text-2); font: inherit; cursor: pointer; }
+.rn-chip[aria-pressed="true"] { border-color: var(--accent); color: var(--text-1); }
+.rn-chip-n { color: var(--text-3); }
+.rn-chip[data-p="1"] .rn-chip-n { color: var(--p1); }
+.rn-chip-more { border-color: transparent; color: var(--text-3); }
+.rn-filter { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding-block: var(--sp-1); }
+.rn-filter-f { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.rn-filter-k { color: var(--text-3); }
+.rn-filter-sel { font: inherit; color: var(--text-1); background: var(--bg-surface); border: var(--bw) solid var(--line-weak); min-height: 28px; }
+.rn-histline { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-2) 0 0; padding: var(--sp-1) var(--sp-2); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-3); }
+.rn-list .rn-row[data-state="stopped"] { color: var(--text-3); }
+.rn-list .rn-row[data-state="stopped"] .rn-goal-t { color: var(--text-2); }
 .rn-gates { grid-column: 1 / -1; display: grid; gap: var(--sp-1); position: relative; z-index: 1; padding-inline-start: 14ch; }
 .rn-gate { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; }
 .rn-gate-kind { color: var(--p2); }
@@ -449,4 +485,9 @@ a.rn-tl-role-a:focus-visible { outline: var(--bw) solid var(--accent); outline-o
   /* a need stacks (T26): mark, kind and text on the full width, then its end on its own line */
   .rn-need { grid-template-columns: 2ch 8ch minmax(0, 1fr); }
   .rn-need-end { grid-column: 1 / -1; }
+}
+
+/* the Runs home on a phone: buttons you can hit with a thumb */
+@media (width < 700px) {
+  .rn-chip, .btn.rn-go, .btn.rn-quiet, .rn-card-btns .btn { min-height: 44px; }
 }

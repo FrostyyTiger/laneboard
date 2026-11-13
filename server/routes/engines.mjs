@@ -2,7 +2,8 @@
 //
 //   GET /api/engines                        -> {accepts, engines: [status + capabilities]}
 //   GET /api/engines/runs                   -> {runs, engines, errors}, every engine but jsonl (the Runs view);
-//                                              each engine with its foreman `health`, each run with its `waiting` items
+//                                              each engine with its foreman `health` and `questions` (items for no
+//                                              run), each run with its `waiting` items, `productTitle` and `name`
 //   GET /api/engines/products               -> {products, engines}, every engine (the Products view)
 //   GET /api/engines/waiting                -> {items, engines}, every engine (the Inbox, Morning)
 //   GET /api/engine/:id/hello               -> {engine, at, stale, age, dropped, data}
@@ -66,15 +67,20 @@ export async function runsBody(list = engines.list()) {
   await Promise.all(contract.filter((e) => e.capabilities.includes('products')).map(async (e) => {
     const a = await e.products();
     if (!a.ok) return;
-    for (const p of a.data.products) for (const g of p.goals) titles.set(`${e.id}/${p.id}/${g.id}`, g.title);
+    for (const p of a.data.products) {
+      if (p.title) titles.set(`${e.id}/${p.id}`, p.title);
+      for (const g of p.goals) titles.set(`${e.id}/${p.id}/${g.id}`, g.title);
+    }
   }));
   const waiting = new Map(); // `<engine>/<run>` -> items
   const health = new Map();
+  const questions = new Map(); // engine -> items that belong to no run
   await Promise.all(contract.map(async (e) => {
     if (e.capabilities.includes('health')) health.set(e.id, foremanOf(await e.health()));
     if (!e.capabilities.includes('waiting')) return;
     const a = await e.waiting({});
     if (!a.ok) return;
+    questions.set(e.id, a.data.items.filter((it) => !it.run).length);
     for (const it of a.data.items) {
       if (!it.run) continue;
       const k = `${e.id}/${it.run}`;
@@ -84,13 +90,63 @@ export async function runsBody(list = engines.list()) {
   }));
   for (const r of runs) {
     r.goalTitle ??= titles.get(`${r.engine}/${r.product}/${r.goal}`) ?? null;
+    r.productTitle = titles.get(`${r.engine}/${r.product}`) ?? null;
     r.waiting = waiting.get(r.key) ?? [];
   }
+  nameRuns(runs);
   const states = contract.map((e) => {
     const s = e.status();
-    return { id: e.id, kind: e.kind, state: s.state, reason: s.reason ?? null, health: health.get(e.id) ?? null };
+    return {
+      id: e.id, kind: e.kind, state: s.state, reason: s.reason ?? null, health: health.get(e.id) ?? null,
+      questions: questions.get(e.id) ?? null,
+    };
   });
   return { runs, engines: states, errors };
+}
+
+/** A run's kind as its name says it: the recipe's kind, else `run`. */
+const kindOf = (r) => (typeof r.recipe?.kind === 'string' && r.recipe.kind ? r.recipe.kind : 'run');
+const startOf = (r) => (typeof r.startedAt === 'number' ? r.startedAt : Infinity);
+
+/**
+ * One plain name per run, in place: `<product title> · <kind> #<n>`, n counting
+ * that product's runs of that kind on that engine, oldest first ("Bauplan ·
+ * build #2" is its second build run). The run id's own number counts runs of a
+ * day, of any kind, so it is not used. Returns `runs`.
+ */
+export function nameRuns(runs) {
+  const groups = new Map();
+  for (const r of runs) {
+    const k = `${r.engine}/${r.product}/${kindOf(r)}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => (startOf(a) - startOf(b)) || String(a.id).localeCompare(String(b.id)));
+    list.forEach((r, i) => { r.name = `${r.productTitle ?? r.product} · ${kindOf(r)} #${i + 1}`; });
+  }
+  return runs;
+}
+
+/**
+ * A run page's answer with the names the list has: `name`, `productTitle` and
+ * `goalTitle`, from the engine's runs and products only (both from the read
+ * memory, so no extra call while the list is polled). A run the list does not know keeps
+ * what it has.
+ */
+export async function namedRun(e, a) {
+  if (!a?.ok || !a.data?.run) return a;
+  const [runs, products] = await Promise.all([e.runs(), e.products()]);
+  if (!runs.ok) return a;
+  const titles = new Map();
+  if (products.ok) for (const p of products.data.products) titles.set(p.id, { title: p.title, goals: new Map(p.goals.map((g) => [g.id, g.title])) });
+  const rows = runs.data.runs.map((r) => ({ ...r, engine: e.id, productTitle: titles.get(r.product)?.title ?? null }));
+  nameRuns(rows);
+  const row = rows.find((r) => r.id === a.data.run.id);
+  if (!row) return a;
+  const run = a.data.run;
+  const named = { ...run, name: row.name, productTitle: row.productTitle, goalTitle: run.goalTitle ?? titles.get(run.product)?.goals.get(run.goal) ?? null };
+  return { ...a, data: { ...a.data, run: named } };
 }
 
 /** The foreman's heartbeat is this old (by the engine's own clock) and still counts as up, or as stale. */
@@ -147,7 +203,7 @@ export const READS = [
   ['/health', (e) => e.health()],
   ['/products', (e) => e.products()],
   ['/runs', (e) => e.runs()],
-  ['/run/:run', (e, req) => e.run(req.params?.run)],
+  ['/run/:run', async (e, req) => namedRun(e, await e.run(req.params?.run))],
   ['/events/:run', (e, req) => e.events(req.params?.run, query(req).get('since') ?? 0)],
   ['/waiting', (e, req) => e.waiting({ for: query(req).get('for') ?? undefined })],
   ['/knowledge/:product', (e, req) => {

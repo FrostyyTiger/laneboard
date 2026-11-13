@@ -18,7 +18,7 @@ import runsView, {
   needsCell, tlColumns, ackedNeedsOf, runCostOf, outcomeText,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
-import { applyRun, newPage, renderEnginePage, toggleFold } from '../public/js/views/runs-engine.js';
+import { applyRun, newPage, renderEnginePage, toggleFold, toListRow } from '../public/js/views/runs-engine.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'public/js/views/runs.js'), 'utf8');
@@ -185,8 +185,13 @@ test('mount fetches GET /api/runs, paints, and unmount clears; a 404 is a note',
   const host = document.createElement('div');
   await mountRuns(host, {}, { fetchFn: ok, poll: false });
   assert.deepEqual(calls, [[LIST_URL, 'GET'], ['/api/engines/runs', 'GET']]);
-  assert.deepEqual(byClass(host, 'rn-row').map((r) => r.dataset.run), ['readiness', 'nightly']);
+  // The view opens on Live: the stopped run waits under History.
+  assert.deepEqual(byClass(host, 'rn-row').map((r) => r.dataset.run), ['nightly']);
+  assert.match(byClass(host, 'rn-histline')[0].textContent, /History · 1 run finished or stopped/);
   unmountRuns();
+  const hist = document.createElement('div');
+  renderRuns(hist, [FIX, LIVE], { status: 'ok', filter: { show: 'history' } });
+  assert.deepEqual(byClass(hist, 'rn-row').map((r) => r.dataset.run), ['readiness']);
   assert.equal(host.children.length, 0);
 
   const missing = async () => ({ ok: false, status: 404, json: async () => ({}) });
@@ -491,7 +496,8 @@ test('mount with route.run fetches GET /api/runs/<id>; a route change switches l
   await updateRuns(null, { route: { ...emptyRoute('runs'), run: null } });
   assert.deepEqual(calls.at(-2), [LIST_URL, 'GET']);
   assert.deepEqual(calls.at(-1), ['/api/engines/runs', 'GET']);
-  assert.equal(byClass(host, 'rn-row').length, 1);
+  assert.equal(byClass(host, 'rn-row').length, 0, 'the one run is stopped: under History, not Live');
+  assert.match(host.textContent, /No run is on now\.1 in History\./);
   assert.equal(frame.dataset.page, undefined, 'the list takes the full width');
   assert.equal(byClass(host, 'rn-tl-row').length, 0);
 
@@ -1339,13 +1345,16 @@ test('the list holds engine runs and run-file runs; product, goal, engine and st
   const host = document.createElement('div');
   await mountRuns(host, {}, { fetchFn: engineFetch(), poll: false });
   const rows = byClass(host, 'rn-row');
-  assert.deepEqual(rows.map((r) => r.dataset.run), [ENGINE_ROW.key, 'readiness']);
+  assert.deepEqual(rows.map((r) => r.dataset.run), [ENGINE_ROW.key], 'Live: the stopped run-file run is under History');
   assert.match(rows[0].textContent, /G1 Guest checkout/);
-  assert.match(rows[0].textContent, /acme-shop · main/);
-  assert.match(rows[0].textContent, /at gate/);
-  assert.match(rows[1].textContent, /jsonl/);
+  assert.match(rows[0].textContent, /blocked/, 'at a gate with nothing to decide: blocked');
   assert.equal(byClass(rows[0], 'rn-open')[0].href, '#/runs?run=main%2FR-20261101-acme-shop-1');
   unmountRuns();
+  const all = document.createElement('div');
+  renderRuns(all, [toListRow(ENGINE_ROW), FIX], { status: 'ok', filter: { show: 'history' } });
+  const hist = byClass(all, 'rn-row');
+  assert.deepEqual(hist.map((r) => r.dataset.run), ['readiness']);
+  assert.match(hist[0].textContent, /jsonl/);
 }));
 
 test('an engine that is down says so above the list', async () => withDomAsync(async () => {
