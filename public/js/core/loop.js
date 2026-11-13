@@ -137,7 +137,7 @@ export function paramsOf(run, pattern) {
 const ROLE_STATION = Object.freeze({ decomposer: 'plan', 'test-writer': 'tests', builder: 'build', fixer: 'fixer', blame: 'blame', reviewer: 'review' });
 /** foundry's own phase words (x.phase on a node, src/build.ts) -> station. */
 const FEATURE_PHASE = Object.freeze({ tests: 'tests', doubt: 'doubt', check: 'featurecheck', blame: 'blame', review: 'review', merge: 'merge' });
-const GOAL_PHASE = Object.freeze({ check: 'goalcheck', ci: 'goalcheck', blame: 'goalblame', review: 'goalcheck' });
+const GOAL_PHASE = Object.freeze({ check: 'goalcheck', ci: 'goalcheck', blame: 'goalblame', review: 'goalcheck', pr: 'pr' });
 /** A recipe step id in a block reason, `blocked at G1.F1 (tests): …` -> station. */
 const STEP_STATION = Object.freeze({ decompose: 'plan', tests: 'tests', build: 'build', fix: 'fixer', blame: 'blame', review: 'review', run_review: 'goalcheck', doubt: 'doubt' });
 const LIVE = new Set(['running', 'at-gate', 'waiting-approval', 'paused', 'queued']);

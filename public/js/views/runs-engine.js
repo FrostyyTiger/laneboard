@@ -302,7 +302,7 @@ export function needsBand(rows, onDone, now = Date.now()) {
       const why = el('p', 'rn-card-why');
       const t = rnClean(row.reason, 300) ?? 'It stopped and waits for you.';
       why.append(el('span', 'rn-card-k', 'What is wrong'), el('span', 'rn-card-t', t));
-      why.title = rnClean(row.reason, 2000) ?? '';
+      why.title = rnClean(row.reason, 4000) ?? '';
       card.append(why, el('p', 'rn-card-hint', 'Nothing to approve. Fix the cause, then Resume: the foreman tries again.'));
       const btns = el('p', 'rn-card-btns');
       const plans = runControls(row.run, { ...row, state: row.engineState }).filter((x) => x.word !== 'pause');
@@ -363,7 +363,7 @@ export function blockedNode(row, onDone) {
   const g = el('div', 'rn-gate');
   g.dataset.blocked = '';
   const t = el('span', 'rn-gate-t', rnClean(row.reason, 300) ?? 'Blocked: it waits for you to fix the cause, then resume.');
-  t.title = rnClean(row.reason, 2000) ?? '';
+  t.title = rnClean(row.reason, 4000) ?? '';
   g.append(el('span', 'rn-gate-kind', 'blocked'), t);
   const btns = el('span', 'rn-gate-btns');
   const plans = runControls(row.run, { ...row, state: row.engineState ?? row.state }).filter((p) => p.word !== 'pause');
