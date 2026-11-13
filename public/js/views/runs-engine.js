@@ -130,7 +130,7 @@ export function statusLine(engines, rows = [], now = Date.now()) {
     if (typeof h.queue === 'number') parts.push(`queue ${h.queue}`);
     const wins = [windowText('5h', h.windows?.window5h), windowText('7d', h.windows?.window7d)].filter(Boolean);
     if (wins.length) parts.push(`usage ${wins.join(' · ')}`);
-    out.push({ key: `foreman:${id}`, text: parts.join(' · '), p: FOREMAN_P[foreman], foreman });
+    out.push({ key: `foreman:${id}`, text: parts.join(' · '), p: FOREMAN_P[foreman], foreman, href: '#/network', title: 'The foreman and its machines, on the Network view' });
   }
   const since = dayStart(now);
   const today = list.filter((r) => r.engineRow && typeof r.startedAt === 'number' && r.startedAt >= since && usdOf(r) !== null);
@@ -705,7 +705,18 @@ function enginePageHead(key, run, page, now) {
   if (typeof run.startedAt === 'number') add('rn-left', `started ${new Date(run.startedAt).toLocaleString('en-GB', DAY_TIME)}`);
   if (usdOf(run) !== null) add('rn-cost', money(usdOf(run)), 'API price equivalent');
   const hosts = [...new Set((run.rooms ?? []).map((r) => rnClean(r.host, 32)).filter(Boolean))];
-  if (hosts.length) add('rn-rooms', `on ${hosts.join(', ')}`);
+  if (hosts.length) {
+    // Each host is a link to it on the Network view (docs/network.md).
+    const f = el('span', 'rn-f rn-rooms', 'on ');
+    hosts.forEach((h, i) => {
+      if (i) f.append(', ');
+      const a = el('a', 'rn-host', h);
+      a.href = `#/network?sel=${encodeURIComponent(`node:${h}`)}`;
+      a.title = `${h} on the Network view`;
+      f.append(a);
+    });
+    facts.append(f);
+  }
   if (typeof run.updatedAt === 'number') add('rn-left', `updated ${engineAge(now - run.updatedAt)}`);
   head.append(back, top, facts);
   if (page.stale) head.append(el('p', 'rn-stale', `The engine is not answering. This is its last good answer, ${engineAge(page.age)}.`));
