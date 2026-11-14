@@ -3,6 +3,7 @@
   "engine": "0.1.0",
   "at": "2026-11-01T10:45:00Z",
   "data": {
+    "host": "steady-1",
     "heartbeat": "2026-11-01T10:44:55Z",
     "hosts": [
       {

@@ -186,6 +186,7 @@ describe('fake: every published example row reaches laneboard', () => {
     assert.equal(events.data.next, fixture('events.json').data.next);
     const health = await e.health();
     assert.equal(health.data.windows.window7d.usedPct, 64);
+    assert.equal(health.data.host, 'steady-1');
   });
 
   test('times become epoch ms, snake_case becomes camelCase', async () => {
