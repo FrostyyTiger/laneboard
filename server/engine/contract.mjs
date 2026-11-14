@@ -398,6 +398,7 @@ const MAP = {
         : bad('bad host')), drop),
       queue: int(d.queue) ?? bad('health queue missing'),
       active: int(d.active),
+      host: str(d.host),
       windows: isObj(d.windows) ? { window5h: windowOf(d.windows.window_5h), window7d: windowOf(d.windows.window_7d) } : null,
     };
   },
@@ -495,7 +496,7 @@ S.gate = { id: 'str', kind: VOCAB.waitingKind, state: VOCAB.gateState, decided: 
 
 export const SHAPES = Object.freeze({
   hello: { contract: 'str?', version: 'str?', oldest: 'str?', served: ['obj'], verbs: ['str'] },
-  health: { heartbeatAt: 'ms', hosts: [{ id: 'str', role: 'str?', state: VOCAB.hostState, updatedAt: 'ms?' }], queue: 'int', active: 'int?', windows: 'obj?' },
+  health: { heartbeatAt: 'ms', hosts: [{ id: 'str', role: 'str?', state: VOCAB.hostState, updatedAt: 'ms?' }], queue: 'int', active: 'int?', host: 'str?', windows: 'obj?' },
   products: { products: [{ id: 'str', title: 'str?', url: 'str?', repo: 'str?', updatedAt: 'ms?',
     goals: [{ id: 'str', title: 'str?', readiness: VOCAB.readiness, requirements: ['str'], runs: ['str'], url: 'str?',
       reasons: [{ kind: VOCAB.readinessKind, ref: 'str?', text: 'str', url: 'str?' }] }] }] },

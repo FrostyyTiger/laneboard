@@ -17,7 +17,7 @@ drawn as **the wire**:
 | you, `■ n runs wait for you`, questions | what needs you (Runs) and the product questions (Inbox) | the Runs read |
 | a host box, `● up`, its role | a host the engine reports | `health.hosts[]` |
 | a dashed box, `○ not reporting` | a host only a run names | `runs[].rooms[].host` |
-| Foreman · up, beat, queue, runs on | the foreman and where it lives | `health`; the host is the steady one until foundry names it (the box says so) |
+| Foreman · up, beat, queue, runs on | the foreman and where it lives | `health`; the host is `health.host`, or the steady one when an older foundry sends none (the box says so) |
 | a room slot | a live room: its name and purpose, the run (a link to its page), goal, loop glyph, what it waits for, cost | `runs[].rooms[]`, the run row and its `loop` |
 | pips, `n ended today` | rooms of runs that ended in the last 24 h (● done, ○ stopped, □ errors) | `runs[].endedAt`, `stop` |
 | the 24 h strip | when that host had rooms up | `runs[].startedAt`, `endedAt` |
